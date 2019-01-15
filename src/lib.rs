@@ -36,20 +36,12 @@ pub struct Consumer<T> {
     rb: Arc<RingBuffer<T>>,
 }
 
-impl<T: Sized + Copy + Default> RingBuffer<T> {
+impl<T: Sized> RingBuffer<T> {
     pub fn new(capacity: usize) -> Self {
+        let mut data = Vec::with_capacity(capacity);
+        unsafe { data.set_len(capacity); }
         Self {
-            data: UnsafeCell::new((0..capacity).map(|_| { T::default() }).collect()),
-            head: AtomicUsize::new(0),
-            tail: AtomicUsize::new(0),
-        }
-    }
-}
-
-impl<T: Sized + Copy> RingBuffer<T> {
-    pub unsafe fn new_uninitialized(capacity: usize) -> Self {
-        Self {
-            data: UnsafeCell::new((0..capacity).map(|_| { mem::uninitialized() }).collect()),
+            data: UnsafeCell::new(data),
             head: AtomicUsize::new(0),
             tail: AtomicUsize::new(0),
         }
@@ -62,16 +54,46 @@ impl<T: Sized + Copy> RingBuffer<T> {
             Consumer { rb: arc },
         )
     }
+
+    pub fn capacity(&self) -> usize {
+        unsafe { self.data.get().as_ref() }.unwrap().len()
+    }
 }
 
-impl<T: Sized + Copy> Producer<T> {
-    pub fn push_access<R, E, F>(&self, f: F) -> Result<Result<(usize, R), E>, PushAccessError>
+impl<T: Sized> Drop for RingBuffer<T> {
+    fn drop(&mut self) {
+        let data = unsafe { self.data.get().as_mut() }.unwrap();
+
+        let head = self.head.load(Ordering::SeqCst);
+        let tail = self.tail.load(Ordering::SeqCst);
+        let len = data.len();
+        
+        if head <= tail {
+            for elem in &mut data[head..tail] {
+                mem::drop(elem);
+            }
+        } else {
+            for elem in &mut data[head..len] {
+                mem::drop(elem);
+            }
+            for elem in &mut data[0..tail] {
+                mem::drop(elem);
+            }
+        }
+        unsafe { data.set_len(0); }
+    }
+}
+
+impl<T: Sized> Producer<T> {
+    /// Unsafe because it gives access to possibly uninitialized memory
+    /// It would be great if Rust had a write-only slices
+    pub unsafe fn push_access<R, E, F>(&self, f: F) -> Result<Result<(usize, R), E>, PushAccessError>
     where R: Sized, E: Sized, F: FnOnce(&mut [T], &mut [T]) -> Result<(usize, R), E> {
         let vptr = self.rb.data.get();
 
         let head = self.rb.head.load(Ordering::SeqCst);
         let tail = self.rb.tail.load(Ordering::SeqCst);
-        let len = unsafe { vptr.as_ref() }.unwrap().len();
+        let len = vptr.as_ref().unwrap().len();
 
         let ranges = if tail >= head {
             if head > 0 {
@@ -92,8 +114,8 @@ impl<T: Sized + Copy> Producer<T> {
         }?;
 
         let slices = (
-            &mut unsafe { vptr.as_mut() }.unwrap()[ranges.0],
-            &mut unsafe { vptr.as_mut() }.unwrap()[ranges.1],
+            &mut vptr.as_mut().unwrap()[ranges.0],
+            &mut vptr.as_mut().unwrap()[ranges.1],
         );
 
         match f(slices.0, slices.1) {
@@ -112,8 +134,29 @@ impl<T: Sized + Copy> Producer<T> {
         }
     }
 
+    pub fn push(&self, elem: T) -> Option<()> {
+        match unsafe { self.push_access(|slice, _| {
+            mem::forget(mem::replace(&mut slice[0], elem));
+            Ok((1, ()))
+        }) } {
+            Ok(res) => match res {
+                Ok((n, ())) => {
+                    debug_assert_eq!(n, 1);
+                    Some(())
+                },
+                Err(()) => unreachable!(),
+            },
+            Err(e) => match e {
+                PushAccessError::Full => None,
+                PushAccessError::BadLen => unreachable!(),
+            }
+        }
+    }
+}
+
+impl<T: Sized + Copy> Producer<T> {
     pub fn push_many(&self, elems: &[T]) -> Result<usize, PushError> {
-        match self.push_access(|left, right| {
+        match unsafe { self.push_access(|left, right| {
             Ok((if elems.len() < left.len() {
                 left[0..elems.len()].copy_from_slice(elems);
                 elems.len()
@@ -128,7 +171,7 @@ impl<T: Sized + Copy> Producer<T> {
                     left.len() + right.len()
                 }
             }, ()))
-        }) {
+        }) } {
             Ok(res) => match res {
                 Ok((n, ())) => {
                     Ok(n)
@@ -141,26 +184,16 @@ impl<T: Sized + Copy> Producer<T> {
             }
         }
     }
-
-    pub fn push(&self, elem: T) -> Option<()> {
-        match self.push_many(&[elem]) {
-            Ok(n) => {
-                debug_assert_eq!(n, 1);
-                Some(())
-            },
-            Err(PushError::Full) => None,
-        }
-    }
 }
 
-impl<T: Sized + Copy> Consumer<T> {
+impl<T: Sized> Consumer<T> {
     pub fn pop_access<R, E, F>(&self, f: F) -> Result<Result<(usize, R), E>, PopAccessError>
-    where R: Sized, E: Sized, F: FnOnce(&[T], &[T]) -> Result<(usize, R), E> {
-        let data = unsafe { self.rb.data.get().as_ref() }.unwrap();
+    where R: Sized, E: Sized, F: FnOnce(&mut [T], &mut [T]) -> Result<(usize, R), E> {
+        let vptr = self.rb.data.get();
 
         let head = self.rb.head.load(Ordering::SeqCst);
         let tail = self.rb.tail.load(Ordering::SeqCst);
-        let len = data.len();
+        let len = unsafe { vptr.as_ref() }.unwrap().len();
 
         let ranges = if head < tail {
             Ok((head..tail, 0..0))
@@ -170,7 +203,10 @@ impl<T: Sized + Copy> Consumer<T> {
             Err(PopAccessError::Empty)
         }?;
 
-        let slices = (&data[ranges.0], &data[ranges.1]);
+        let slices = (
+            &mut unsafe { vptr.as_mut() }.unwrap()[ranges.0],
+            &mut unsafe { vptr.as_mut() }.unwrap()[ranges.1],
+        );
 
         match f(slices.0, slices.1) {
             Ok((n, r)) => {
@@ -188,6 +224,27 @@ impl<T: Sized + Copy> Consumer<T> {
         }
     }
 
+    pub fn pop(&self) -> Option<T> {
+        match self.pop_access(|slice, _| {
+            let elem = mem::replace(&mut slice[0], unsafe { mem::uninitialized() });
+            Ok((1, elem))
+        }) {
+            Ok(res) => match res {
+                Ok((n, elem)) => {
+                    debug_assert_eq!(n, 1);
+                    Some(elem)
+                },
+                Err(()) => unreachable!(),
+            },
+            Err(e) => match e {
+                PopAccessError::Empty => None,
+                PopAccessError::BadLen => unreachable!(),
+            }
+        }
+    }
+}
+
+impl<T: Sized + Copy> Consumer<T> {
     pub fn pop_many(&self, elems: &mut [T]) -> Result<usize, PopError> {
         match self.pop_access(|left, right| {
             let elems_len = elems.len();
@@ -218,18 +275,8 @@ impl<T: Sized + Copy> Consumer<T> {
             }
         }
     }
-
-    pub fn pop(&self) -> Option<T> {
-        let mut arr: [T; 1] = unsafe { mem::uninitialized() };
-        match self.pop_many(&mut arr) {
-            Ok(n) => {
-                debug_assert_eq!(n, 1);
-                Some(arr[0])
-            },
-            Err(PopError::Empty) => None,
-        }
-    }
 }
+
 
 /*
 pub trait WriteAccess {
