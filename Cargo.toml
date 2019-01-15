@@ -13,3 +13,6 @@ categories = ["concurrency", "data-structures"]
 license = "MIT/Apache-2.0"
 
 [dependencies]
+
+[dev-dependencies]
+matches = "0.1"
