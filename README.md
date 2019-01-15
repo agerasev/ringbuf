@@ -25,7 +25,7 @@ Lock-free single-producer single-consumer ring buffer
 
 ## Documentation
 + [`crates.io` version documentation](https://docs.rs/ringbuf)
-+ [`master` branch documentation](https://nthend.github.io/ringbuf/target/doc/mpsc_rb/index.html)
++ [`master` branch documentation](https://nthend.github.io/ringbuf/target/doc/ringbuf/index.html)
 
 ## License
 
