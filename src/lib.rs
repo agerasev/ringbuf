@@ -1,27 +1,39 @@
+#![cfg_attr(rustc_nightly, feature(test))]
+
 use std::mem;
 use std::cell::{UnsafeCell};
 use std::sync::{Arc, atomic::{Ordering, AtomicUsize}};
 //use std::io::{self, Read, Write};
 
+/// `Producer::push_access` error info. 
 #[derive(Debug, PartialEq, Eq)]
 pub enum PushAccessError {
+    /// Cannot push - `RingBuffer` is full.
     Full,
+    /// User function returned invalid length.
     BadLen,
 }
 
+/// `Receiver::pop_access` error info.
 #[derive(Debug, PartialEq, Eq)]
 pub enum PopAccessError {
+    /// Cannot pop - `RingBuffer` is empty.
     Empty,
+    /// User function returned invalid length.
     BadLen,
 }
 
+/// `Producer::push` and `Producer::push_slice` error info. 
 #[derive(Debug, PartialEq, Eq)]
 pub enum PushError {
+    /// Cannot push - `RingBuffer` is full.
     Full,
 }
 
+/// `Receiver::pop` and `Receiver::pop_slice` error info.
 #[derive(Debug, PartialEq, Eq)]
 pub enum PopError {
+    /// Cannot pop - `RingBuffer` is empty.
     Empty,
 }
 
@@ -43,21 +55,25 @@ impl<T: Sized> SharedVec<T> {
     }
 }
 
+/// Ring buffer itself.
 pub struct RingBuffer<T: Sized> {
     data: SharedVec<T>,
     head: AtomicUsize,
     tail: AtomicUsize,
 }
 
+/// Producer part of `RingBuffer`.
 pub struct Producer<T> {
     rb: Arc<RingBuffer<T>>,
 }
 
+/// Consumer part of `RingBuffer`.
 pub struct Consumer<T> {
     rb: Arc<RingBuffer<T>>,
 }
 
 impl<T: Sized> RingBuffer<T> {
+    /// Creates new instance of a ring buffer.
     pub fn new(capacity: usize) -> Self {
         let vec_cap = capacity + 1;
         let mut data = Vec::with_capacity(vec_cap);
@@ -69,6 +85,7 @@ impl<T: Sized> RingBuffer<T> {
         }
     }
 
+    /// Splits ring buffer into producer and consumer.
     pub fn split(self) -> (Producer<T>, Consumer<T>) {
         let arc = Arc::new(self);
         (
@@ -77,6 +94,7 @@ impl<T: Sized> RingBuffer<T> {
         )
     }
 
+    /// Returns capacity of a ring buffer.
     pub fn capacity(&self) -> usize {
         unsafe { self.data.get_ref() }.len() - 1
     }
@@ -111,6 +129,91 @@ impl<T: Sized> Drop for RingBuffer<T> {
 }
 
 impl<T: Sized> Producer<T> {
+    /// Pushes element into `RingBuffer`.
+    ///
+    /// On error returns pair of error and element that wasn't pushed.
+    pub fn push(&mut self, elem: T) -> Result<(), (PushError, T)> {
+        let mut elem_opt = Some(elem);
+        match unsafe { self.push_access(|slice, _| {
+            mem::forget(mem::replace(&mut slice[0], elem_opt.take().unwrap()));
+            Ok((1, ()))
+        }) } {
+            Ok(res) => match res {
+                Ok((n, ())) => {
+                    debug_assert_eq!(n, 1);
+                    Ok(())
+                },
+                Err(()) => unreachable!(),
+            },
+            Err(e) => match e {
+                PushAccessError::Full => Err((PushError::Full, elem_opt.unwrap())),
+                PushAccessError::BadLen => unreachable!(),
+            }
+        }
+    }
+
+    /// Returns capacity of the `RingBuffer`.
+    pub fn capacity(&self) -> usize {
+        self.rb.capacity()
+    }
+
+    /// Checks if the `RingBuffer` is full.
+    pub fn is_full(&self) -> bool {
+        let head = self.rb.head.load(Ordering::SeqCst);
+        let tail = self.rb.tail.load(Ordering::SeqCst);
+        (tail + 1) % (self.capacity() + 1) == head
+    }
+}
+
+impl<T: Sized + Clone> Producer<T> {
+    /// Pushes elements from slice into `RingBuffer`. Elements should be be cloneable.
+    ///
+    /// On success returns count of elements been pushed into `RingBuffer`.
+    pub fn push_slice(&mut self, elems: &[T]) -> Result<usize, PushError> {
+        let push_fn = |left: &mut [T], right: &mut [T]| {
+            Ok((if elems.len() < left.len() {
+                left[0..elems.len()].clone_from_slice(elems);
+                elems.len()
+            } else {
+                left.clone_from_slice(&elems[0..left.len()]);
+                if elems.len() < left.len() + right.len() {
+                    right[0..(elems.len() - left.len())]
+                        .clone_from_slice(&elems[left.len()..elems.len()]);
+                    elems.len()
+                } else {
+                    right.clone_from_slice(&elems[left.len()..(left.len() + right.len())]);
+                    left.len() + right.len()
+                }
+            }, ()))
+        };
+        match unsafe { self.push_access(push_fn) } {
+            Ok(res) => match res {
+                Ok((n, ())) => {
+                    Ok(n)
+                },
+                Err(()) => unreachable!(),
+            },
+            Err(e) => match e {
+                PushAccessError::Full => Err(PushError::Full),
+                PushAccessError::BadLen => unreachable!(),
+            }
+        }
+    }
+}
+
+impl<T: Sized> Producer<T> {
+    /// Allows to write into `RingBuffer` memory directry.
+    ///
+    /// *This function is unsafe beacuse it gives access to possibly uninitialized memory.*
+    ///
+    /// Takes a function `f` as argument.
+    /// `f` takes two slices of `RingBuffer` content (the second one may be empty). First slice contains older elements.
+    ///
+    /// `f` should return:
+    /// + On success: pair of number of elements been written, and some arbitrary data.
+    /// + On failure: some another arbitrary data.
+    ///
+    /// On success returns data returned from `f`.
     pub unsafe fn push_access<R, E, F>(&mut self, f: F) -> Result<Result<(usize, R), E>, PushAccessError>
     where R: Sized, E: Sized, F: FnOnce(&mut [T], &mut [T]) -> Result<(usize, R), E> {
         let head = self.rb.head.load(Ordering::SeqCst);
@@ -155,57 +258,67 @@ impl<T: Sized> Producer<T> {
             }
         }
     }
+}
 
-    pub fn push(&mut self, elem: T) -> Result<(), (PushError, T)> {
-        let mut elem_opt = Some(elem);
-        match unsafe { self.push_access(|slice, _| {
-            mem::forget(mem::replace(&mut slice[0], elem_opt.take().unwrap()));
-            Ok((1, ()))
+impl<T: Sized> Consumer<T> {
+    /// Retrieves element from `RingBuffer`.
+    ///
+    /// On success returns element been retrieved.
+    pub fn pop(&mut self) -> Result<T, PopError> {
+        match unsafe { self.pop_access(|slice, _| {
+            let elem = mem::replace(&mut slice[0], mem::uninitialized());
+            Ok((1, elem))
         }) } {
             Ok(res) => match res {
-                Ok((n, ())) => {
+                Ok((n, elem)) => {
                     debug_assert_eq!(n, 1);
-                    Ok(())
+                    Ok(elem)
                 },
                 Err(()) => unreachable!(),
             },
             Err(e) => match e {
-                PushAccessError::Full => Err((PushError::Full, elem_opt.unwrap())),
-                PushAccessError::BadLen => unreachable!(),
+                PopAccessError::Empty => Err(PopError::Empty),
+                PopAccessError::BadLen => unreachable!(),
             }
         }
     }
 
+    /// Returns capacity of the `RingBuffer`.
     pub fn capacity(&self) -> usize {
         self.rb.capacity()
     }
 
-    pub fn is_full(&self) -> bool {
+    /// Checks if the `RingBuffer` is empty.
+    pub fn is_empty(&self) -> bool {
         let head = self.rb.head.load(Ordering::SeqCst);
         let tail = self.rb.tail.load(Ordering::SeqCst);
-        (tail + 1) % (self.capacity() + 1) == head
+        head == tail
     }
 }
 
-impl<T: Sized + Copy> Producer<T> {
-    pub fn push_slice(&mut self, elems: &[T]) -> Result<usize, PushError> {
-        let push_fn = |left: &mut [T], right: &mut [T]| {
-            Ok((if elems.len() < left.len() {
-                left[0..elems.len()].copy_from_slice(elems);
-                elems.len()
+impl<T: Sized + Clone> Consumer<T> {
+    /// Retrieves elements from `RingBuffer` into slice. Elements should be cloneable.
+    ///
+    /// On success returns count of elements been retrieved from `RingBuffer`.
+    pub fn pop_slice(&mut self, elems: &mut [T]) -> Result<usize, PopError> {
+        let pop_fn = |left: &mut [T], right: &mut [T]| {
+            let elems_len = elems.len();
+            Ok((if elems_len < left.len() {
+                elems.clone_from_slice(&left[0..elems_len]);
+                elems_len
             } else {
-                left.copy_from_slice(&elems[0..left.len()]);
-                if elems.len() < left.len() + right.len() {
-                    right[0..(elems.len() - left.len())]
-                        .copy_from_slice(&elems[left.len()..elems.len()]);
-                    elems.len()
+                elems[0..left.len()].clone_from_slice(left);
+                if elems_len < left.len() + right.len() {
+                    elems[left.len()..elems_len]
+                        .clone_from_slice(&right[0..(elems_len - left.len())]);
+                    elems_len
                 } else {
-                    right.copy_from_slice(&elems[left.len()..(left.len() + right.len())]);
+                    elems[left.len()..(left.len() + right.len())].clone_from_slice(right);
                     left.len() + right.len()
                 }
             }, ()))
         };
-        match unsafe { self.push_access(push_fn) } {
+        match unsafe { self.pop_access(pop_fn) } {
             Ok(res) => match res {
                 Ok((n, ())) => {
                     Ok(n)
@@ -213,15 +326,26 @@ impl<T: Sized + Copy> Producer<T> {
                 Err(()) => unreachable!(),
             },
             Err(e) => match e {
-                PushAccessError::Full => Err(PushError::Full),
-                PushAccessError::BadLen => unreachable!(),
+                PopAccessError::Empty => Err(PopError::Empty),
+                PopAccessError::BadLen => unreachable!(),
             }
         }
     }
 }
 
-
 impl<T: Sized> Consumer<T> {
+    /// Allows to read from `RingBuffer` memory directry.
+    ///
+    /// *This function is unsafe beacuse it gives access to possibly uninitialized memory.*
+    ///
+    /// Takes a function `f` as argument.
+    /// `f` takes two slices of `RingBuffer` content (the second one may be empty). First slice contains older elements.
+    ///
+    /// `f` should return:
+    /// + On success: pair of number of elements been read, and some arbitrary data.
+    /// + On failure: some another arbitrary data.
+    ///
+    /// On success returns data returned from `f`.
     pub unsafe fn pop_access<R, E, F>(&mut self, f: F) -> Result<Result<(usize, R), E>, PopAccessError>
     where R: Sized, E: Sized, F: FnOnce(&mut [T], &mut [T]) -> Result<(usize, R), E> {
         let head = self.rb.head.load(Ordering::SeqCst);
@@ -256,71 +380,7 @@ impl<T: Sized> Consumer<T> {
             }
         }
     }
-
-    pub fn pop(&mut self) -> Result<T, PopError> {
-        match unsafe { self.pop_access(|slice, _| {
-            let elem = mem::replace(&mut slice[0], mem::uninitialized());
-            Ok((1, elem))
-        }) } {
-            Ok(res) => match res {
-                Ok((n, elem)) => {
-                    debug_assert_eq!(n, 1);
-                    Ok(elem)
-                },
-                Err(()) => unreachable!(),
-            },
-            Err(e) => match e {
-                PopAccessError::Empty => Err(PopError::Empty),
-                PopAccessError::BadLen => unreachable!(),
-            }
-        }
-    }
-
-    pub fn capacity(&self) -> usize {
-        self.rb.capacity()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        let head = self.rb.head.load(Ordering::SeqCst);
-        let tail = self.rb.tail.load(Ordering::SeqCst);
-        head == tail
-    }
 }
-
-impl<T: Sized + Copy> Consumer<T> {
-    pub fn pop_slice(&mut self, elems: &mut [T]) -> Result<usize, PopError> {
-        let pop_fn = |left: &mut [T], right: &mut [T]| {
-            let elems_len = elems.len();
-            Ok((if elems_len < left.len() {
-                elems.copy_from_slice(&left[0..elems_len]);
-                elems_len
-            } else {
-                elems[0..left.len()].copy_from_slice(left);
-                if elems_len < left.len() + right.len() {
-                    elems[left.len()..elems_len]
-                        .copy_from_slice(&right[0..(elems_len - left.len())]);
-                    elems_len
-                } else {
-                    elems[left.len()..(left.len() + right.len())].copy_from_slice(right);
-                    left.len() + right.len()
-                }
-            }, ()))
-        };
-        match unsafe { self.pop_access(pop_fn) } {
-            Ok(res) => match res {
-                Ok((n, ())) => {
-                    Ok(n)
-                },
-                Err(()) => unreachable!(),
-            },
-            Err(e) => match e {
-                PopAccessError::Empty => Err(PopError::Empty),
-                PopAccessError::BadLen => unreachable!(),
-            }
-        }
-    }
-}
-
 
 /*
 pub trait WriteAccess {
@@ -1000,5 +1060,26 @@ mod tests {
         let rmsg = cjh.join().unwrap();
 
         assert_eq!(smsg, rmsg);
+    }
+}
+
+#[cfg(rustc_nightly)]
+extern crate test;
+
+#[cfg(rustc_nightly)]
+#[cfg(test)]
+mod benchmarks {
+    use super::*;
+
+    use test::Bencher;
+
+    #[bench]
+    fn push_pop(b: &mut Bencher) {
+        let buf = RingBuffer::<u8>::new(0x100);
+        let (mut prod, mut cons) = buf.split();
+        b.iter(|| {
+            while let Ok(()) = prod.push(0) {}
+            while let Ok(0) = cons.pop() {}
+        });
     }
 }
