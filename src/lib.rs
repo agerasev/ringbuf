@@ -183,7 +183,7 @@ impl<T: Sized> Producer<T> {
     pub fn is_full(&self) -> bool {
         let head = self.rb.head.load(Ordering::SeqCst);
         let tail = self.rb.tail.load(Ordering::SeqCst);
-        (tail + 1) % self.capacity() == head
+        (tail + 1) % (self.capacity() + 1) == head
     }
 }
 
@@ -390,6 +390,16 @@ mod tests {
     }
 
     #[test]
+    fn split_capacity() {
+        let cap = 13;
+        let buf = RingBuffer::<i32>::new(cap);
+        let (prod, cons) = buf.split();
+        
+        assert_eq!(prod.capacity(), cap);
+        assert_eq!(cons.capacity(), cap);
+    }
+
+    #[test]
     fn split_threads() {
         let buf = RingBuffer::<i32>::new(10);
         let (prod, cons) = buf.split();
@@ -504,6 +514,30 @@ mod tests {
         }
     }
 
+    #[test]
+    fn producer_full() {
+        let buf = RingBuffer::<i32>::new(1);
+        let (mut prod, _) = buf.split();
+
+        assert!(!prod.is_full());
+
+        assert_matches!(prod.push(123), Ok(()));
+        assert!(prod.is_full());
+    }
+
+    #[test]
+    fn consumer_empty() {
+        let buf = RingBuffer::<i32>::new(1);
+        let (mut prod, cons) = buf.split();
+
+
+        assert_eq!(head_tail(&cons.rb), (0, 0));
+        assert!(cons.is_empty());
+
+        assert_matches!(prod.push(123), Ok(()));
+        assert!(!cons.is_empty());
+    }
+
     #[derive(Debug)]
     struct Dropper<'a> {
         cnt: &'a Cell<i32>,
@@ -585,7 +619,7 @@ mod tests {
     }
 
     /*
-    /// This test doesn't compiles.
+    /// This test doesn't compile.
     /// And that's good :)
     #[test]
     fn push_access_oref() {
