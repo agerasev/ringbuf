@@ -3,10 +3,6 @@
 #![cfg_attr(rustc_nightly, feature(test))]
 
 #[cfg(test)]
-#[macro_use]
-extern crate matches;
-
-#[cfg(test)]
 #[cfg(rustc_nightly)]
 extern crate test;
 
@@ -21,7 +17,7 @@ mod benchmarks;
 use std::mem;
 use std::cell::{UnsafeCell};
 use std::sync::{Arc, atomic::{Ordering, AtomicUsize}};
-//use std::io::{self, Read, Write};
+use std::io::{self, Read, Write};
 
 
 #[derive(Debug, PartialEq, Eq)]
@@ -399,34 +395,86 @@ impl<T: Sized> Consumer<T> {
     }
 }
 
-/*
-pub trait WriteAccess {
-    fn write_access<F>(n: usize, f: F) -> io::Result<usize>
-    where F: Fn(&mut [u8]) -> io::Result<usize>;
+/// Something that can read from [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) instance.
+pub trait ReadFrom {
+    /// Read from [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) instance.
+    fn read_from(&mut self, reader: &mut dyn Read) -> io::Result<usize>;
 }
 
-pub trait ReadAccess {
-    fn read_access<F>(n: usize, f: F) -> io::Result<usize>
-    where F: Fn(&[u8]) -> io::Result<usize>;
+/// Something that can write into [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) instance.
+pub trait WriteInto {
+    /// Write into [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) instance.
+    fn write_into(&mut self, writer: &mut dyn Write) -> io::Result<usize>;
 }
 
-impl WriteAccess for Producer<u8> {
-    fn write_access<F>(n: usize, f: F) -> io::Result<usize>
-    where F: Fn(&mut [u8]) -> io::Result<usize> {
-        Ok(0)
+impl ReadFrom for Producer<u8> {
+    fn read_from(&mut self, reader: &mut dyn Read) -> io::Result<usize> {
+        let push_fn = |left: &mut [u8], _right: &mut [u8]| -> io::Result<(usize, ())> {
+            reader.read(left).and_then(|n| {
+                if n <= left.len() {
+                    Ok((n, ()))
+                } else {
+                    Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "Read operation returned invalid number",
+                    ))
+                }
+            })
+        };
+        match unsafe { self.push_access(push_fn) } {
+            Ok(res) => match res {
+                Ok((n, ())) => Ok(n),
+                Err(e) => Err(e),
+            },
+            Err(e) => match e {
+                PushAccessError::Full => Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "Ring buffer is full",
+                )),
+                PushAccessError::BadLen => unreachable!(),
+            }
+        }
     }
 }
 
-impl ReadAccess for Consumer<u8> {
-    fn read_access<F>(n: usize, f: F) -> io::Result<usize>
-    where F: Fn(&[u8]) -> io::Result<usize> {
-        Ok(0)
+impl WriteInto for Consumer<u8> {
+    fn write_into(&mut self, writer: &mut dyn Write) -> io::Result<usize> {
+        let pop_fn = |left: &mut [u8], _right: &mut [u8]| -> io::Result<(usize, ())> {
+            writer.write(left).and_then(|n| {
+                if n <= left.len() {
+                    Ok((n, ()))
+                } else {
+                    Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "Write operation returned invalid number",
+                    ))
+                }
+            })
+        };
+        match unsafe { self.pop_access(pop_fn) } {
+            Ok(res) => match res {
+                Ok((n, ())) => Ok(n),
+                Err(e) => Err(e),
+            },
+            Err(e) => match e {
+                PopAccessError::Empty => Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "Ring buffer is empty",
+                )),
+                PopAccessError::BadLen => unreachable!(),
+            }
+        }
     }
 }
 
 impl Write for Producer<u8> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        Ok(0)
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        self.push_slice(buffer).or_else(|e| match e {
+            PushError::Full => Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "Ring buffer is full",
+            ))
+        })
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -435,19 +483,20 @@ impl Write for Producer<u8> {
 }
 
 impl Read for Consumer<u8> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        Ok(0)
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        self.pop_slice(buffer).or_else(|e| match e {
+            PopError::Empty => Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "Ring buffer is empty",
+            ))
+        })
     }
 }
-*/
+
 
 #[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn dummy() {
-        let rb = RingBuffer::<i32>::new(16);
-        rb.split();
-    }
+#[test]
+fn dummy_test() {
+    let rb = RingBuffer::<i32>::new(16);
+    rb.split();
 }

@@ -1,6 +1,6 @@
 [package]
 name = "ringbuf"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Alexey Gerasev <alexey.gerasev@gmail.com>"]
 edition = "2018"
 
@@ -19,9 +19,6 @@ build = "build.rs"
 default = []
 
 [dependencies]
-
-[dev-dependencies]
-matches = "0.1"
 
 [build-dependencies]
 rustc_version = "0.2"
