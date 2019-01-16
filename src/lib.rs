@@ -335,7 +335,7 @@ impl<T: Sized> Producer<T> {
     /// Allows to write into ring buffer memory directry.
     ///
     /// *This function is unsafe beacuse it gives access to possibly uninitialized memory
-    /// and transfers responsibility of manually calling destructors*
+    /// and transfers responsibility of manually calling destructors to user*
     ///
     /// Takes a function `f` as argument.
     /// `f` takes two slices of ring buffer content (the second one may be empty). First slice contains older elements.
@@ -471,7 +471,7 @@ impl<T: Sized> Consumer<T> {
     /// Allows to read from ring buffer memory directry.
     ///
     /// *This function is unsafe beacuse it gives access to possibly uninitialized memory
-    /// and transfers responsibility of manually calling destructors*
+    /// and transfers responsibility of manually calling destructors to user*
     ///
     /// Takes a function `f` as argument.
     /// `f` takes two slices of ring buffer content (the second one may be empty). First slice contains older elements.
