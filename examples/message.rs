@@ -1,51 +1,66 @@
 extern crate ringbuf;
 
+use std::io::{self, Read};
 use std::thread;
 use std::time::{Duration};
 
-use ringbuf::{RingBuffer, PushError, PopError};
+use ringbuf::{RingBuffer, ReadFrom, WriteInto};
 
 
 fn main() {
-    let buf = RingBuffer::<u8>::new(7);
-    let (mut prod, mut cons) = buf.split();
+    let rb = RingBuffer::<u8>::new(10);
+    let (mut prod, mut cons) = rb.split();
 
     let smsg = "The quick brown fox jumps over the lazy dog";
     
     let pjh = thread::spawn(move || {
-        let mut bytes = smsg.as_bytes();
-        while bytes.len() > 0 {
-            match prod.push_slice(bytes) {
-                Ok(n) => bytes = &bytes[n..bytes.len()],
-                Err(PushError::Full) => thread::sleep(Duration::from_millis(1)),
-            }
-        }
+        println!("-> sending message: '{}'", smsg);
+
+        let zero = [0 as u8];
+        let mut bytes = smsg.as_bytes().chain(&zero[..]);
         loop {
-            match prod.push(0) {
-                Ok(()) => break,
-                Err((PushError::Full, _)) => thread::sleep(Duration::from_millis(1)),
+            match prod.read_from(&mut bytes) {
+                Ok(n) => {
+                    if n == 0 {
+                        break;
+                    }
+                    println!("-> {} bytes sent", n);
+                },
+                Err(err) => {
+                    assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
+                    println!("-> buffer is full, waiting");
+                    thread::sleep(Duration::from_millis(1));
+                },
             }
         }
+
+        println!("-> message sent");
     });
 
     let cjh = thread::spawn(move || {
+        println!("<- receiving message");
+
         let mut bytes = Vec::<u8>::new();
-        let mut buffer = [0; 5];
         loop {
-            match cons.pop_slice(&mut buffer) {
-                Ok(n) => bytes.extend_from_slice(&buffer[0..n]),
-                Err(PopError::Empty) => {
+            match cons.write_into(&mut bytes) {
+                Ok(n) => println!("<- {} bytes received", n),
+                Err(err) => {
+                    assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
                     if bytes.ends_with(&[0]) {
                         break;
                     } else {
+                        println!("<- buffer is empty, waiting");
                         thread::sleep(Duration::from_millis(1));
                     }
-                }
+                },
             }
         }
 
         assert_eq!(bytes.pop().unwrap(), 0);
-        String::from_utf8(bytes).unwrap()
+        let msg = String::from_utf8(bytes).unwrap();
+        println!("<- message received: '{}'", msg);
+
+        msg
     });
 
     pjh.join().unwrap();

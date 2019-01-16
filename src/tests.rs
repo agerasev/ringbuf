@@ -511,6 +511,31 @@ fn push_pop_access() {
 }
 
 #[test]
+fn push_pop_slice() {
+    let buf = RingBuffer::<i32>::new(4);
+    let (mut prod, mut cons) = buf.split();
+
+    let mut tmp = [0; 5];
+
+    assert_eq!(prod.push_slice(&[]), Ok(0));
+    assert_eq!(prod.push_slice(&[0, 1, 2]), Ok(3));
+
+    assert_eq!(cons.pop_slice(&mut tmp[0..2]), Ok(2));
+    assert_eq!(tmp[0..2], [0, 1]);
+
+    assert_eq!(prod.push_slice(&[3, 4]), Ok(2));
+    assert_eq!(prod.push_slice(&[5, 6]), Ok(1));
+
+    assert_eq!(cons.pop_slice(&mut tmp[0..3]), Ok(3));
+    assert_eq!(tmp[0..3], [2, 3, 4]);
+
+    assert_eq!(prod.push_slice(&[6, 7, 8, 9]), Ok(3));
+
+    assert_eq!(cons.pop_slice(&mut tmp), Ok(4));
+    assert_eq!(tmp[0..4], [5, 6, 7, 8]);
+}
+
+#[test]
 fn push_pop_access_message() {
     let buf = RingBuffer::<u8>::new(7);
     let (mut prod, mut cons) = buf.split();
@@ -518,28 +543,27 @@ fn push_pop_access_message() {
     let smsg = "The quick brown fox jumps over the lazy dog";
     
     let pjh = thread::spawn(move || {
-        let mut bytes = smsg.as_bytes();
-        while bytes.len() > 0 {
+        let zero = [0 as u8];
+        let mut bytes = smsg.as_bytes().chain(&zero[..]);
+        loop {
             let push_fn = |left: &mut [u8], right: &mut [u8]| -> Result<(usize, ()),()> {
                 let n = bytes.read(left).unwrap();
-                let m = bytes.read(right).unwrap();
+                let m = if n == left.len() {
+                    bytes.read(right).unwrap()
+                } else {
+                    0
+                };
                 Ok((n + m, ()))
             };
             match unsafe { prod.push_access(push_fn) } {
                 Ok(res) => match res {
-                    Ok((_n, ())) => (),
+                    Ok((n, ())) => if n == 0 { break; },
                     Err(()) => unreachable!(),
                 },
                 Err(e) => match e {
                     PushAccessError::Full => thread::sleep(Duration::from_millis(1)),
                     PushAccessError::BadLen => unreachable!(),
                 }
-            }
-        }
-        loop {
-            match prod.push(0) {
-                Ok(()) => break,
-                Err((PushError::Full, _)) => thread::sleep(Duration::from_millis(1)),
             }
         }
     });
@@ -549,7 +573,11 @@ fn push_pop_access_message() {
         loop {
             let pop_fn = |left: &mut [u8], right: &mut [u8]| -> Result<(usize, ()),()> {
                 let n = bytes.write(left).unwrap();
-                let m = bytes.write(right).unwrap();
+                let m = if n == left.len() {
+                    bytes.write(right).unwrap()
+                } else {
+                    0
+                };
                 Ok((n + m, ()))
             };
             match unsafe { cons.pop_access(pop_fn) } {
@@ -637,20 +665,15 @@ fn read_from_write_into_message() {
     let smsg = "The quick brown fox jumps over the lazy dog";
     
     let pjh = thread::spawn(move || {
-        let mut bytes = smsg.as_bytes();
-        while bytes.len() > 0 {
-            match prod.read_from(&mut bytes) {
-                Ok(_n) => (),
-                Err(err) => match err.kind() {
-                    io::ErrorKind::WouldBlock => thread::sleep(Duration::from_millis(1)),
-                    _ => unreachable!(),
-                },
-            }
-        }
+        let zero = [0 as u8];
+        let mut bytes = smsg.as_bytes().chain(&zero[..]);
         loop {
-            match prod.push(0) {
-                Ok(()) => break,
-                Err((PushError::Full, _)) => thread::sleep(Duration::from_millis(1)),
+            match prod.read_from(&mut bytes) {
+                Ok(n) => if n == 0 { break; },
+                Err(err) => {
+                    assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
+                    thread::sleep(Duration::from_millis(1));
+                },
             }
         }
     });
@@ -660,16 +683,14 @@ fn read_from_write_into_message() {
         loop {
             match cons.write_into(&mut bytes) {
                 Ok(_n) => (),
-                Err(err) => match err.kind() {
-                    io::ErrorKind::WouldBlock => {
-                        if bytes.ends_with(&[0]) {
-                            break;
-                        } else {
-                            thread::sleep(Duration::from_millis(1));
-                        }
-                    },
-                    _ => unreachable!(),
-                }
+                Err(err) => {
+                    assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
+                    if bytes.ends_with(&[0]) {
+                        break;
+                    } else {
+                        thread::sleep(Duration::from_millis(1));
+                    }
+                },
             }
         }
 
