@@ -142,27 +142,21 @@ fn push_pop_all() {
 }
 
 #[test]
-fn producer_full() {
-    let buf = RingBuffer::<i32>::new(1);
-    let (mut prod, _) = buf.split();
-
-    assert!(!prod.is_full());
-
-    assert_eq!(prod.push(123), Ok(()));
-    assert!(prod.is_full());
-}
-
-#[test]
-fn consumer_empty() {
+fn empty_full() {
     let buf = RingBuffer::<i32>::new(1);
     let (mut prod, cons) = buf.split();
 
-
-    assert_eq!(head_tail(&cons.rb), (0, 0));
+    assert!(prod.is_empty());
     assert!(cons.is_empty());
+    assert!(!prod.is_full());
+    assert!(!cons.is_full());
 
     assert_eq!(prod.push(123), Ok(()));
+
+    assert!(!prod.is_empty());
     assert!(!cons.is_empty());
+    assert!(prod.is_full());
+    assert!(cons.is_full());
 }
 
 #[derive(Debug)]

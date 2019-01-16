@@ -211,6 +211,20 @@ impl<T: Sized> RingBuffer<T> {
     pub fn capacity(&self) -> usize {
         unsafe { self.data.get_ref() }.len() - 1
     }
+
+    /// Checks if the ring buffer is empty.
+    pub fn is_empty(&self) -> bool {
+        let head = self.head.load(Ordering::SeqCst);
+        let tail = self.tail.load(Ordering::SeqCst);
+        head == tail
+    }
+
+    /// Checks if the ring buffer is full.
+    pub fn is_full(&self) -> bool {
+        let head = self.head.load(Ordering::SeqCst);
+        let tail = self.tail.load(Ordering::SeqCst);
+        (tail + 1) % (self.capacity() + 1) == head
+    }
 }
 
 impl<T: Sized> Drop for RingBuffer<T> {
@@ -242,6 +256,21 @@ impl<T: Sized> Drop for RingBuffer<T> {
 }
 
 impl<T: Sized> Producer<T> {
+    /// Returns capacity of the ring buffer.
+    pub fn capacity(&self) -> usize {
+        self.rb.capacity()
+    }
+
+    /// Checks if the ring buffer is empty.
+    pub fn is_empty(&self) -> bool {
+        self.rb.is_empty()
+    }
+
+    /// Checks if the ring buffer is full.
+    pub fn is_full(&self) -> bool {
+        self.rb.is_full()
+    }
+    
     /// Pushes element into ring buffer.
     ///
     /// On error returns pair of error and element that wasn't pushed.
@@ -263,18 +292,6 @@ impl<T: Sized> Producer<T> {
                 PushAccessError::BadLen => unreachable!(),
             }
         }
-    }
-
-    /// Returns capacity of the ring buffer.
-    pub fn capacity(&self) -> usize {
-        self.rb.capacity()
-    }
-
-    /// Checks if the ring buffer is full.
-    pub fn is_full(&self) -> bool {
-        let head = self.rb.head.load(Ordering::SeqCst);
-        let tail = self.rb.tail.load(Ordering::SeqCst);
-        (tail + 1) % (self.capacity() + 1) == head
     }
 }
 
@@ -375,6 +392,21 @@ impl<T: Sized> Producer<T> {
 }
 
 impl<T: Sized> Consumer<T> {
+    /// Returns capacity of the ring buffer.
+    pub fn capacity(&self) -> usize {
+        self.rb.capacity()
+    }
+
+    /// Checks if the ring buffer is empty.
+    pub fn is_empty(&self) -> bool {
+        self.rb.is_empty()
+    }
+
+    /// Checks if the ring buffer is full.
+    pub fn is_full(&self) -> bool {
+        self.rb.is_full()
+    }
+
     /// Retrieves element from ring buffer.
     ///
     /// On success returns element been retrieved.
@@ -395,18 +427,6 @@ impl<T: Sized> Consumer<T> {
                 PopAccessError::BadLen => unreachable!(),
             }
         }
-    }
-
-    /// Returns capacity of the ring buffer.
-    pub fn capacity(&self) -> usize {
-        self.rb.capacity()
-    }
-
-    /// Checks if the ring buffer is empty.
-    pub fn is_empty(&self) -> bool {
-        let head = self.rb.head.load(Ordering::SeqCst);
-        let tail = self.rb.tail.load(Ordering::SeqCst);
-        head == tail
     }
 }
 
