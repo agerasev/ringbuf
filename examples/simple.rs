@@ -8,7 +8,7 @@ fn main() {
 
     prod.push(0).unwrap();
     prod.push(1).unwrap();
-    assert_eq!(prod.push(2), Err((PushError::Full, 2)));
+    assert_eq!(prod.push(2), Err(PushError::Full(2)));
 
     assert_eq!(cons.pop().unwrap(), 0);
 
