@@ -48,7 +48,7 @@
 //!     let zero = [0 as u8];
 //!     let mut bytes = smsg.as_bytes().chain(&zero[..]);
 //!     loop {
-//!         match prod.read_from(&mut bytes) {
+//!         match prod.read_from(&mut bytes, None) {
 //!             Ok(n) => {
 //!                 if n == 0 {
 //!                     break;
@@ -70,7 +70,7 @@
 //! 
 //!     let mut bytes = Vec::<u8>::new();
 //!     loop {
-//!         match cons.write_into(&mut bytes) {
+//!         match cons.write_into(&mut bytes, None) {
 //!             Ok(n) => println!("<- {} bytes received", n),
 //!             Err(_) => {
 //!                 if bytes.ends_with(&[0]) {
@@ -372,14 +372,30 @@ impl<T: Sized + Copy> Producer<T> {
         }
     }
 
-    /// Removes elements from the `Consumer` of the ring buffer
+    /// Removes at most `count` elements from the `Consumer` of the ring buffer
     /// and appends them to the `Producer` of the another one.
+    /// If `count` is `None` then as much as possible elements will be moved.
     ///
     /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
     ///
     /// On success returns count of elements been moved.
-    pub fn move_slice(&mut self, other: &mut Consumer<T>) -> Result<usize, MoveSliceError> {
-        let move_fn = |left: &mut [T], right: &mut [T]| -> Result<(usize, ()), PopSliceError> {
+    pub fn move_slice(&mut self, other: &mut Consumer<T>, count: Option<usize>)
+    -> Result<usize, MoveSliceError> {
+        let move_fn = |left: &mut [T], right: &mut [T]|
+        -> Result<(usize, ()), PopSliceError> {
+            let (left, right) = match count {
+                Some(c) => {
+                    if c < left.len() {
+                        (&mut left[0..c], &mut right[0..0])
+                    } else if c < left.len() + right.len() {
+                        let l = c - left.len();
+                        (left, &mut right[0..l])
+                    } else {
+                        (left, right)
+                    }
+                },
+                None => (left, right)
+            };
             other.pop_slice(left).and_then(|n| {
                 if n == left.len() {
                     other.pop_slice(right).and_then(|m| {
@@ -411,10 +427,24 @@ impl<T: Sized + Copy> Producer<T> {
 }
 
 impl Producer<u8> {
-    /// Reads bytes from [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) instance
+    /// Reads at most `count` bytes
+    /// from [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) instance
     /// and appends them to the ring buffer.
-    pub fn read_from(&mut self, reader: &mut dyn Read) -> Result<usize, ReadFromError> {
-        let push_fn = |left: &mut [u8], _right: &mut [u8]| -> io::Result<(usize, ())> {
+    /// If `count` is `None` then as much as possible bytes will be read.
+    pub fn read_from(&mut self, reader: &mut dyn Read, count: Option<usize>)
+    -> Result<usize, ReadFromError> {
+        let push_fn = |left: &mut [u8], _right: &mut [u8]|
+        -> Result<(usize, ()), io::Error> {
+            let left = match count {
+                Some(c) => {
+                    if c < left.len() {
+                        &mut left[0..c]
+                    } else {
+                        left
+                    }
+                },
+                None => left,
+            };
             reader.read(left).and_then(|n| {
                 if n <= left.len() {
                     Ok((n, ()))
@@ -588,22 +618,37 @@ impl<T: Sized + Copy> Consumer<T> {
         }
     }
 
-    /// Removes elements from the `Consumer` of the ring buffer
+    /// Removes at most `count` elements from the `Consumer` of the ring buffer
     /// and appends them to the `Producer` of the another one.
+    /// If `count` is `None` then as much as possible elements will be moved.
     ///
     /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
     ///
     /// On success returns count of elements been moved.
-    pub fn move_slice(&mut self, other: &mut Producer<T>) -> Result<usize, MoveSliceError> {
-        other.move_slice(self)
+    pub fn move_slice(&mut self, other: &mut Producer<T>, count: Option<usize>)
+    -> Result<usize, MoveSliceError> {
+        other.move_slice(self, count)
     }
 }
 
 impl Consumer<u8> {
-    /// removes first elements from the ring buffer and 
-    /// writes them into a [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) instance.
-    pub fn write_into(&mut self, writer: &mut dyn Write) -> Result<usize, WriteIntoError> {
-        let pop_fn = |left: &mut [u8], _right: &mut [u8]| -> io::Result<(usize, ())> {
+    /// Removes at most first `count` bytes from the ring buffer and writes them into
+    /// a [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) instance.
+    /// If `count` is `None` then as much as possible bytes will be written.
+    pub fn write_into(&mut self, writer: &mut dyn Write, count: Option<usize>)
+    -> Result<usize, WriteIntoError> {
+        let pop_fn = |left: &mut [u8], _right: &mut [u8]|
+        -> Result<(usize, ()), io::Error> {
+            let left = match count {
+                Some(c) => {
+                    if c < left.len() {
+                        &mut left[0..c]
+                    } else {
+                        left
+                    }
+                },
+                None => left,
+            };
             writer.write(left).and_then(|n| {
                 if n <= left.len() {
                     Ok((n, ()))

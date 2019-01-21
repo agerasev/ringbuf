@@ -19,7 +19,7 @@ fn main() {
         let zero = [0 as u8];
         let mut bytes = smsg.as_bytes().chain(&zero[..]);
         loop {
-            match prod.read_from(&mut bytes) {
+            match prod.read_from(&mut bytes, None) {
                 Ok(n) => {
                     if n == 0 {
                         break;
@@ -41,7 +41,7 @@ fn main() {
 
         let mut bytes = Vec::<u8>::new();
         loop {
-            match cons.write_into(&mut bytes) {
+            match cons.write_into(&mut bytes, None) {
                 Ok(n) => println!("<- {} bytes received", n),
                 Err(_) => {
                     if bytes.ends_with(&[0]) {
