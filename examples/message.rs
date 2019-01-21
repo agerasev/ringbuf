@@ -1,10 +1,10 @@
 extern crate ringbuf;
 
-use std::io::{self, Read};
+use std::io::{Read};
 use std::thread;
 use std::time::{Duration};
 
-use ringbuf::{RingBuffer, ReadFrom, WriteInto};
+use ringbuf::{RingBuffer};
 
 
 fn main() {
@@ -26,8 +26,7 @@ fn main() {
                     }
                     println!("-> {} bytes sent", n);
                 },
-                Err(err) => {
-                    assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
+                Err(_) => {
                     println!("-> buffer is full, waiting");
                     thread::sleep(Duration::from_millis(1));
                 },
@@ -44,8 +43,7 @@ fn main() {
         loop {
             match cons.write_into(&mut bytes) {
                 Ok(n) => println!("<- {} bytes received", n),
-                Err(err) => {
-                    assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
+                Err(_) => {
                     if bytes.ends_with(&[0]) {
                         break;
                     } else {
