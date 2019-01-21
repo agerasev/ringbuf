@@ -1,4 +1,22 @@
-//! Lock-free single-producer single-consumer ring buffer
+//! Lock-free single-producer single-consumer (SPSC) FIFO ring buffer with direct access to inner data.
+//!
+//! # Overview
+//!
+//! [`RingBuffer`] is the initial structure representing ring buffer itself.
+//! Ring buffer can be splitted into pair of [`Producer`] and [`Consumer`].
+//! 
+//! [`Producer`] and [`Consumer`] are used to append/remove elements to/from the ring buffer accordingly. They can be safely transfered between threads.
+//! Operations with [`Producer`] and [`Consumer`] are lock-free - they're succeded or failed immediately without blocking or waiting.
+//! 
+//! Elements can be effectively appended/removed one by one or many at once.
+//! Also data could be loaded/stored directly into/from [`Read`]/[`Write`] instances.
+//! And finally, there are `unsafe` methods allowing thread-safe direct access in place to the inner memory being appended/removed.
+//! 
+//! [`RingBuffer`]: struct.RingBuffer.html
+//! [`Producer`]: struct.Producer.html
+//! [`Consumer`]: struct.Consumer.html
+//! [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
+//! [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
 //!
 //! # Examples
 //!

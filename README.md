@@ -21,7 +21,25 @@
 [codecov]: https://codecov.io/gh/nthend/ringbuf
 [license]: #license
 
-Lock-free single-producer single-consumer ring buffer
+Lock-free single-producer single-consumer (SPSC) FIFO ring buffer with direct access to inner data.
+
+## Overview
+
+[`RingBuffer`] is the initial structure representing ring buffer itself.
+Ring buffer can be splitted into pair of [`Producer`] and [`Consumer`].
+
+[`Producer`] and [`Consumer`] are used to append/remove elements to/from the ring buffer accordingly. They can be safely transfered between threads.
+Operations with [`Producer`] and [`Consumer`] are lock-free - they're succeded or failed immediately without blocking or waiting.
+
+Elements can be effectively appended/removed one by one or many at once.
+Also data could be loaded/stored directly into/from [`Read`]/[`Write`] instances.
+And finally, there are `unsafe` methods allowing thread-safe direct access in place to the inner memory being appended/removed.
+
+[`RingBuffer`]: struct.RingBuffer.html
+[`Producer`]: struct.Producer.html
+[`Consumer`]: struct.Consumer.html
+[`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
+[`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
 
 ## Documentation
 + [`crates.io` version documentation](https://docs.rs/ringbuf)
@@ -39,7 +57,7 @@ let (mut prod, mut cons) = rb.split();
 
 prod.push(0).unwrap();
 prod.push(1).unwrap();
-assert_eq!(prod.push(2), Err((PushError::Full, 2)));
+assert_eq!(prod.push(2), Err(PushError::Full(2)));
 
 assert_eq!(cons.pop().unwrap(), 0);
 
@@ -55,11 +73,11 @@ assert_eq!(cons.pop(), Err(PopError::Empty));
 This is more complicated example of transfering text message between threads.
 
 ```rust
-use std::io::{self, Read};
+use std::io::{Read};
 use std::thread;
 use std::time::{Duration};
 
-use ringbuf::{RingBuffer, ReadFrom, WriteInto};
+use ringbuf::{RingBuffer};
 
 let rb = RingBuffer::<u8>::new(10);
 let (mut prod, mut cons) = rb.split();
@@ -72,15 +90,14 @@ let pjh = thread::spawn(move || {
     let zero = [0 as u8];
     let mut bytes = smsg.as_bytes().chain(&zero[..]);
     loop {
-        match prod.read_from(&mut bytes) {
+        match prod.read_from(&mut bytes, None) {
             Ok(n) => {
                 if n == 0 {
                     break;
                 }
                 println!("-> {} bytes sent", n);
             },
-            Err(err) => {
-                assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
+            Err(_) => {
                 println!("-> buffer is full, waiting");
                 thread::sleep(Duration::from_millis(1));
             },
@@ -95,10 +112,9 @@ let cjh = thread::spawn(move || {
 
     let mut bytes = Vec::<u8>::new();
     loop {
-        match cons.write_into(&mut bytes) {
+        match cons.write_into(&mut bytes, None) {
             Ok(n) => println!("<- {} bytes received", n),
-            Err(err) => {
-                assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
+            Err(_) => {
                 if bytes.ends_with(&[0]) {
                     break;
                 } else {

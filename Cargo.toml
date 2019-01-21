@@ -4,7 +4,7 @@ version = "0.1.3"
 authors = ["Alexey Gerasev <alexey.gerasev@gmail.com>"]
 edition = "2018"
 
-description = "Lock-free single-producer single-consumer ring buffer"
+description = "Lock-free SPSC FIFO ring buffer with direct access to inner data"
 documentation = "https://docs.rs/ringbuf"
 homepage = "https://github.com/nthend/ringbuf"
 repository = "https://github.com/nthend/ringbuf.git"
