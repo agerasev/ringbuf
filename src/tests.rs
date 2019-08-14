@@ -21,7 +21,7 @@ fn split_capacity() {
     let cap = 13;
     let buf = RingBuffer::<i32>::new(cap);
     let (prod, cons) = buf.split();
-    
+
     assert_eq!(prod.capacity(), cap);
     assert_eq!(cons.capacity(), cap);
 }
@@ -30,7 +30,7 @@ fn split_capacity() {
 fn split_threads() {
     let buf = RingBuffer::<i32>::new(10);
     let (prod, cons) = buf.split();
-    
+
     let pjh = thread::spawn(move || {
         let _ = prod;
     });
@@ -48,7 +48,7 @@ fn push() {
     let cap = 2;
     let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, _) = buf.split();
-    
+
 
     assert_eq!(head_tail(&prod.rb), (0, 0));
 
@@ -159,6 +159,45 @@ fn empty_full() {
     assert!(cons.is_full());
 }
 
+#[test]
+fn len_remaining() {
+    let buf = RingBuffer::<i32>::new(2);
+    let (mut prod, mut cons) = buf.split();
+
+    assert_eq!(prod.len(), 0);
+    assert_eq!(cons.len(), 0);
+    assert_eq!(prod.remaining(), 2);
+    assert_eq!(cons.remaining(), 2);
+
+    assert_eq!(prod.push(123), Ok(()));
+
+    assert_eq!(prod.len(), 1);
+    assert_eq!(cons.len(), 1);
+    assert_eq!(prod.remaining(), 1);
+    assert_eq!(cons.remaining(), 1);
+
+    assert_eq!(prod.push(456), Ok(()));
+
+    assert_eq!(prod.len(), 2);
+    assert_eq!(cons.len(), 2);
+    assert_eq!(prod.remaining(), 0);
+    assert_eq!(cons.remaining(), 0);
+
+    assert_eq!(cons.pop(), Ok(123));
+
+    assert_eq!(prod.len(), 1);
+    assert_eq!(cons.len(), 1);
+    assert_eq!(prod.remaining(), 1);
+    assert_eq!(cons.remaining(), 1);
+
+    assert_eq!(cons.pop(), Ok(456));
+
+    assert_eq!(prod.len(), 0);
+    assert_eq!(cons.len(), 0);
+    assert_eq!(prod.remaining(), 2);
+    assert_eq!(cons.remaining(), 2);
+}
+
 #[derive(Debug)]
 struct Dropper<'a> {
     cnt: &'a Cell<i32>,
@@ -198,7 +237,7 @@ fn drop() {
         cons.pop().unwrap();
         assert_eq!((ca.get(), cb.get()), (1, 0));
     }
-    
+
     assert_eq!((ca.get(), cb.get()), (1, 1));
 }
 
@@ -321,11 +360,11 @@ fn pop_access() {
 
 
     let vs_11 = (123, 456);
-    
+
     assert_eq!(prod.push(vs_11.0), Ok(()));
     assert_eq!(prod.push(vs_11.1), Ok(()));
     assert_eq!(prod.push(0), Err(PushError::Full(0)));
-    
+
     let pop_fn_11 = |left: &mut [i32], right: &mut [i32]| -> Result<(usize, ()), ()> {
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 1);
@@ -769,7 +808,7 @@ fn push_pop_access_message() {
     let (mut prod, mut cons) = buf.split();
 
     let smsg = "The quick brown fox jumps over the lazy dog";
-    
+
     let pjh = thread::spawn(move || {
         let zero = [0 as u8];
         let mut bytes = smsg.as_bytes().chain(&zero[..]);
@@ -842,7 +881,7 @@ fn push_pop_slice_message() {
     let (mut prod, mut cons) = buf.split();
 
     let smsg = "The quick brown fox jumps over the lazy dog";
-    
+
     let pjh = thread::spawn(move || {
         let mut bytes = smsg.as_bytes();
         while bytes.len() > 0 {
@@ -891,7 +930,7 @@ fn read_from_write_into_message() {
     let (mut prod, mut cons) = buf.split();
 
     let smsg = "The quick brown fox jumps over the lazy dog";
-    
+
     let pjh = thread::spawn(move || {
         let zero = [0 as u8];
         let mut bytes = smsg.as_bytes().chain(&zero[..]);
@@ -944,7 +983,7 @@ fn read_write_message() {
     let (mut prod, mut cons) = buf.split();
 
     let smsg = "The quick brown fox jumps over the lazy dog";
-    
+
     let pjh = thread::spawn(move || {
         let mut bytes = smsg.as_bytes();
         while bytes.len() > 0 {
