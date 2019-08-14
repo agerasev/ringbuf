@@ -4,14 +4,14 @@
 //!
 //! `RingBuffer` is the initial structure representing ring buffer itself.
 //! Ring buffer can be splitted into pair of `Producer` and `Consumer`.
-//! 
+//!
 //! `Producer` and `Consumer` are used to append/remove elements to/from the ring buffer accordingly. They can be safely transfered between threads.
 //! Operations with `Producer` and `Consumer` are lock-free - they're succeded or failed immediately without blocking or waiting.
-//! 
+//!
 //! Elements can be effectively appended/removed one by one or many at once.
 //! Also data could be loaded/stored directly into/from [`Read`]/[`Write`] instances.
 //! And finally, there are `unsafe` methods allowing thread-safe direct access in place to the inner memory being appended/removed.
-//! 
+//!
 //! [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
 //! [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
 //!
@@ -25,15 +25,15 @@
 //! # fn main() {
 //! let rb = RingBuffer::<i32>::new(2);
 //! let (mut prod, mut cons) = rb.split();
-//! 
+//!
 //! prod.push(0).unwrap();
 //! prod.push(1).unwrap();
 //! assert_eq!(prod.push(2), Err(PushError::Full(2)));
-//! 
+//!
 //! assert_eq!(cons.pop().unwrap(), 0);
-//! 
+//!
 //! prod.push(2).unwrap();
-//! 
+//!
 //! assert_eq!(cons.pop().unwrap(), 1);
 //! assert_eq!(cons.pop().unwrap(), 2);
 //! assert_eq!(cons.pop(), Err(PopError::Empty));
@@ -49,17 +49,17 @@
 //! use std::io::{Read};
 //! use std::thread;
 //! use std::time::{Duration};
-//! 
+//!
 //! use ringbuf::{RingBuffer};
 //! # fn main() {
 //! let rb = RingBuffer::<u8>::new(10);
 //! let (mut prod, mut cons) = rb.split();
-//! 
+//!
 //! let smsg = "The quick brown fox jumps over the lazy dog";
-//! 
+//!
 //! let pjh = thread::spawn(move || {
 //!     println!("-> sending message: '{}'", smsg);
-//! 
+//!
 //!     let zero = [0 as u8];
 //!     let mut bytes = smsg.as_bytes().chain(&zero[..]);
 //!     loop {
@@ -76,13 +76,13 @@
 //!             },
 //!         }
 //!     }
-//! 
+//!
 //!     println!("-> message sent");
 //! });
-//! 
+//!
 //! let cjh = thread::spawn(move || {
 //!     println!("<- receiving message");
-//! 
+//!
 //!     let mut bytes = Vec::<u8>::new();
 //!     loop {
 //!         match cons.write_into(&mut bytes, None) {
@@ -97,17 +97,17 @@
 //!             },
 //!         }
 //!     }
-//! 
+//!
 //!     assert_eq!(bytes.pop().unwrap(), 0);
 //!     let msg = String::from_utf8(bytes).unwrap();
 //!     println!("<- message received: '{}'", msg);
-//! 
+//!
 //!     msg
 //! });
-//! 
+//!
 //! pjh.join().unwrap();
 //! let rmsg = cjh.join().unwrap();
-//! 
+//!
 //! assert_eq!(smsg, rmsg);
 //! # }
 //! ```
@@ -291,7 +291,7 @@ impl<T: Sized> Drop for RingBuffer<T> {
         let head = self.head.load(Ordering::SeqCst);
         let tail = self.tail.load(Ordering::SeqCst);
         let len = data.len();
-        
+
         let slices = if head <= tail {
             (head..tail, 0..0)
         } else {
@@ -327,7 +327,7 @@ impl<T: Sized> Producer<T> {
     pub fn is_full(&self) -> bool {
         self.rb.is_full()
     }
-    
+
     /// Appends an element to the ring buffer.
     /// On failure returns an error containing the element that hasn't beed appended.
     pub fn push(&mut self, elem: T) -> Result<(), PushError<T>> {
