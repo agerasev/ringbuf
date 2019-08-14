@@ -282,6 +282,18 @@ impl<T: Sized> RingBuffer<T> {
         let tail = self.tail.load(Ordering::SeqCst);
         (tail + 1) % (self.capacity() + 1) == head
     }
+
+    /// The length of the data in the buffer.
+    pub fn len(&self) -> usize {
+        let head = self.head.load(Ordering::SeqCst);
+        let tail = self.tail.load(Ordering::SeqCst);
+        (tail + 1 - head + self.capacity()) % (self.capacity() + 1)
+    }
+
+    /// The remaining space in the buffer.
+    pub fn remaining(&self) -> usize {
+        self.capacity() - self.len()
+    }
 }
 
 impl<T: Sized> Drop for RingBuffer<T> {
@@ -326,6 +338,16 @@ impl<T: Sized> Producer<T> {
     /// Checks if the ring buffer is full.
     pub fn is_full(&self) -> bool {
         self.rb.is_full()
+    }
+
+    /// The length of the data in the buffer.
+    pub fn len(&self) -> usize {
+        self.rb.len()
+    }
+
+    /// The remaining space in the buffer.
+    pub fn remaining(&self) -> usize {
+        self.rb.remaining()
     }
 
     /// Appends an element to the ring buffer.
@@ -573,6 +595,16 @@ impl<T: Sized> Consumer<T> {
     /// Checks if the ring buffer is full.
     pub fn is_full(&self) -> bool {
         self.rb.is_full()
+    }
+
+    /// The length of the data in the buffer
+    pub fn len(&self) -> usize {
+        self.rb.len()
+    }
+
+    /// The remaining space in the buffer.
+    pub fn remaining(&self) -> usize {
+        self.rb.remaining()
     }
 
     /// Removes first element from the ring buffer and returns it.

@@ -159,6 +159,45 @@ fn empty_full() {
     assert!(cons.is_full());
 }
 
+#[test]
+fn len_remaining() {
+    let buf = RingBuffer::<i32>::new(2);
+    let (mut prod, mut cons) = buf.split();
+
+    assert_eq!(prod.len(), 0);
+    assert_eq!(cons.len(), 0);
+    assert_eq!(prod.remaining(), 2);
+    assert_eq!(cons.remaining(), 2);
+
+    assert_eq!(prod.push(123), Ok(()));
+
+    assert_eq!(prod.len(), 1);
+    assert_eq!(cons.len(), 1);
+    assert_eq!(prod.remaining(), 1);
+    assert_eq!(cons.remaining(), 1);
+
+    assert_eq!(prod.push(456), Ok(()));
+
+    assert_eq!(prod.len(), 2);
+    assert_eq!(cons.len(), 2);
+    assert_eq!(prod.remaining(), 0);
+    assert_eq!(cons.remaining(), 0);
+
+    assert_eq!(cons.pop(), Ok(123));
+
+    assert_eq!(prod.len(), 1);
+    assert_eq!(cons.len(), 1);
+    assert_eq!(prod.remaining(), 1);
+    assert_eq!(cons.remaining(), 1);
+
+    assert_eq!(cons.pop(), Ok(456));
+
+    assert_eq!(prod.len(), 0);
+    assert_eq!(cons.len(), 0);
+    assert_eq!(prod.remaining(), 2);
+    assert_eq!(cons.remaining(), 2);
+}
+
 #[derive(Debug)]
 struct Dropper<'a> {
     cnt: &'a Cell<i32>,
