@@ -196,6 +196,15 @@ fn len_remaining() {
     assert_eq!(cons.len(), 0);
     assert_eq!(prod.remaining(), 2);
     assert_eq!(cons.remaining(), 2);
+
+    // now head is at 2, so tail will be at 0. This caught an overflow error
+    // when tail+1 < head because of the substraction of usize.
+    assert_eq!(prod.push(789), Ok(()));
+
+    assert_eq!(prod.len(), 1);
+    assert_eq!(cons.len(), 1);
+    assert_eq!(prod.remaining(), 1);
+    assert_eq!(cons.remaining(), 1);
 }
 
 #[derive(Debug)]
