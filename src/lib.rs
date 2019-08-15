@@ -287,7 +287,7 @@ impl<T: Sized> RingBuffer<T> {
     pub fn len(&self) -> usize {
         let head = self.head.load(Ordering::SeqCst);
         let tail = self.tail.load(Ordering::SeqCst);
-        (tail + 1 - head + self.capacity()) % (self.capacity() + 1)
+        (tail + self.capacity() + 1 - head) % (self.capacity() + 1)
     }
 
     /// The remaining space in the buffer.
