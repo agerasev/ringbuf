@@ -271,22 +271,22 @@ impl<T: Sized> RingBuffer<T> {
 
     /// Checks if the ring buffer is empty.
     pub fn is_empty(&self) -> bool {
-        let head = self.head.load(Ordering::SeqCst);
-        let tail = self.tail.load(Ordering::SeqCst);
+        let head = self.head.load(Ordering::Acquire);
+        let tail = self.tail.load(Ordering::Acquire);
         head == tail
     }
 
     /// Checks if the ring buffer is full.
     pub fn is_full(&self) -> bool {
-        let head = self.head.load(Ordering::SeqCst);
-        let tail = self.tail.load(Ordering::SeqCst);
+        let head = self.head.load(Ordering::Acquire);
+        let tail = self.tail.load(Ordering::Acquire);
         (tail + 1) % (self.capacity() + 1) == head
     }
 
     /// The length of the data in the buffer.
     pub fn len(&self) -> usize {
-        let head = self.head.load(Ordering::SeqCst);
-        let tail = self.tail.load(Ordering::SeqCst);
+        let head = self.head.load(Ordering::Acquire);
+        let tail = self.tail.load(Ordering::Acquire);
         (tail + self.capacity() + 1 - head) % (self.capacity() + 1)
     }
 
@@ -300,8 +300,8 @@ impl<T: Sized> Drop for RingBuffer<T> {
     fn drop(&mut self) {
         let data = unsafe { self.data.get_mut() };
 
-        let head = self.head.load(Ordering::SeqCst);
-        let tail = self.tail.load(Ordering::SeqCst);
+        let head = self.head.load(Ordering::Acquire);
+        let tail = self.tail.load(Ordering::Acquire);
         let len = data.len();
 
         let slices = if head <= tail {
@@ -537,8 +537,8 @@ impl<T: Sized> Producer<T> {
     /// On success returns data returned from `f`.
     pub unsafe fn push_access<R, E, F>(&mut self, f: F) -> Result<Result<(usize, R), E>, PushAccessError>
     where R: Sized, E: Sized, F: FnOnce(&mut [T], &mut [T]) -> Result<(usize, R), E> {
-        let head = self.rb.head.load(Ordering::SeqCst);
-        let tail = self.rb.tail.load(Ordering::SeqCst);
+        let head = self.rb.head.load(Ordering::Acquire);
+        let tail = self.rb.tail.load(Ordering::Acquire);
         let len = self.rb.data.get_ref().len();
 
         let ranges = if tail >= head {
@@ -570,7 +570,7 @@ impl<T: Sized> Producer<T> {
                     Err(PushAccessError::BadLen)
                 } else {
                     let new_tail = (tail + n) % len;
-                    self.rb.tail.store(new_tail, Ordering::SeqCst);
+                    self.rb.tail.store(new_tail, Ordering::Release);
                     Ok(Ok((n, r)))
                 }
             },
@@ -747,8 +747,8 @@ impl<T: Sized> Consumer<T> {
     /// On success returns data returned from `f`.
     pub unsafe fn pop_access<R, E, F>(&mut self, f: F) -> Result<Result<(usize, R), E>, PopAccessError>
     where R: Sized, E: Sized, F: FnOnce(&mut [T], &mut [T]) -> Result<(usize, R), E> {
-        let head = self.rb.head.load(Ordering::SeqCst);
-        let tail = self.rb.tail.load(Ordering::SeqCst);
+        let head = self.rb.head.load(Ordering::Acquire);
+        let tail = self.rb.tail.load(Ordering::Acquire);
         let len = self.rb.data.get_ref().len();
 
         let ranges = if head < tail {
@@ -770,7 +770,7 @@ impl<T: Sized> Consumer<T> {
                     Err(PopAccessError::BadLen)
                 } else {
                     let new_head = (head + n) % len;
-                    self.rb.head.store(new_head, Ordering::SeqCst);
+                    self.rb.head.store(new_head, Ordering::Release);
                     Ok(Ok((n, r)))
                 }
             },

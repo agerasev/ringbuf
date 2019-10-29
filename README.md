@@ -9,16 +9,16 @@
 
 [crates_badge]: https://img.shields.io/crates/v/ringbuf.svg
 [docs_badge]: https://docs.rs/ringbuf/badge.svg
-[travis_badge]: https://api.travis-ci.org/nthend/ringbuf.svg
-[appveyor_badge]: https://ci.appveyor.com/api/projects/status/github/nthend/ringbuf?branch=master&svg=true
-[codecov_badge]: https://codecov.io/gh/nthend/ringbuf/graphs/badge.svg
+[travis_badge]: https://api.travis-ci.org/agerasev/ringbuf.svg
+[appveyor_badge]: https://ci.appveyor.com/api/projects/status/github/agerasev/ringbuf?branch=master&svg=true
+[codecov_badge]: https://codecov.io/gh/agerasev/ringbuf/graphs/badge.svg
 [license_badge]: https://img.shields.io/crates/l/ringbuf.svg
 
 [crates]: https://crates.io/crates/ringbuf
 [docs]: https://docs.rs/ringbuf
-[travis]: https://travis-ci.org/nthend/ringbuf
-[appveyor]: https://ci.appveyor.com/project/nthend/ringbuf
-[codecov]: https://codecov.io/gh/nthend/ringbuf
+[travis]: https://travis-ci.org/agerasev/ringbuf
+[appveyor]: https://ci.appveyor.com/project/agerasev/ringbuf
+[codecov]: https://codecov.io/gh/agerasev/ringbuf
 [license]: #license
 
 Lock-free single-producer single-consumer (SPSC) FIFO ring buffer with direct access to inner data.
@@ -38,9 +38,12 @@ And finally, there are `unsafe` methods allowing thread-safe direct access in pl
 [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
 [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
 
+When building with nightly toolchain it is possible to run benchmarks via `cargo bench`.
+
 ## Documentation
+
 + [`crates.io` version documentation](https://docs.rs/ringbuf)
-+ [`master` branch documentation](https://nthend.github.io/ringbuf/target/doc/ringbuf/index.html)
++ [`master` branch documentation](https://agerasev.github.io/ringbuf/target/doc/ringbuf/index.html)
 
 ## Examples
 
