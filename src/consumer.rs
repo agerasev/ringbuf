@@ -1,8 +1,8 @@
 use std::mem::{self, MaybeUninit};
 use std::sync::{Arc, atomic::{Ordering}};
+use std::cmp::{min};
 //use std::io::{self, Read, Write};
 
-use crate::error::*;
 use crate::ring_buffer::*;
 //use crate::producer::Producer;
 
@@ -38,26 +38,108 @@ impl<T: Sized> Consumer<T> {
         self.rb.remaining()
     }
 
+    /// Allows to read from ring buffer memory directry.
+    ///
+    /// *This function is unsafe because it gives access to possibly uninitialized memory*
+    ///
+    /// The method takes a function `f` as argument.
+    /// `f` takes two slices of ring buffer content (the second one of both of them may be empty).
+    /// First slice contains older elements.
+    ///
+    /// `f` should return number of elements been read.
+    /// There is no checks for returned number - it remains on the developer's conscience.
+    ///
+    /// The method *always* calls `f` even if ring buffer is empty.
+    ///
+    /// The method returns number returned from `f`.
+    pub unsafe fn pop_access<F: FnOnce(&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) -> usize>(&mut self, f: F) -> usize {
+        let head = self.rb.head.load(Ordering::Acquire);
+        let tail = self.rb.tail.load(Ordering::Acquire);
+        let len = self.rb.data.get_ref().len();
+
+        let ranges = if head < tail {
+            (head..tail, 0..0)
+        } else if head > tail {
+            (head..len, 0..tail)
+        } else {
+            (0..0, 0..0)
+        };
+
+        let slices = (
+            &mut self.rb.data.get_mut()[ranges.0],
+            &mut self.rb.data.get_mut()[ranges.1],
+        );
+
+        let n = f(slices.0, slices.1);
+
+        if n > 0 {
+            let new_head = (head + n) % len;
+            self.rb.head.store(new_head, Ordering::Release);
+        }
+        n
+    }
+
     /// Removes first element from the ring buffer and returns it.
-    pub fn pop(&mut self) -> Result<T, PopError> {
-        match unsafe { self.pop_access(|slice, _| {
-            let elem = mem::replace(slice.get_unchecked_mut(0), MaybeUninit::uninit()).assume_init();
-            Ok((1, elem))
-        }) } {
-            Ok(res) => match res {
-                Ok((n, elem)) => {
-                    debug_assert_eq!(n, 1);
-                    Ok(elem)
-                },
-                Err(()) => unreachable!(),
-            },
-            Err(e) => match e {
-                PopAccessError::Empty => Err(PopError::Empty),
-                PopAccessError::BadLen => unreachable!(),
+    pub fn pop(&mut self) -> Option<T> {
+        let mut elem_mu = MaybeUninit::uninit();
+        let n = unsafe { self.pop_access(|slice, _| {
+            if slice.len() > 0 {
+                mem::swap(slice.get_unchecked_mut(0), &mut elem_mu);
+                1
+            } else {
+                0
             }
+        }) };
+        match n {
+            0 => None,
+            1 => Some(unsafe { elem_mu.assume_init() }),
+            _ => unreachable!(),
         }
     }
+
+    pub fn pop_fn<F: FnMut(T) -> bool>(&mut self, mut f: F, count: Option<usize>) -> usize {
+        let af = |left: &mut [MaybeUninit<T>], right: &mut [MaybeUninit<T>]| {
+            let lb = match count {
+                Some(n) => min(n, left.len()),
+                None => left.len(),
+            };
+            for (i, dst) in left[0..lb].iter_mut().enumerate() {
+                if !f(unsafe { mem::replace(dst, MaybeUninit::uninit()).assume_init() }) {
+                    return i;
+                }
+            }
+            if lb < left.len() {
+                return lb;
+            }
+
+            let rb = match count {
+                Some(n) => min(n - lb, right.len()),
+                None => right.len(),
+            };
+            for (i, dst) in right[0..rb].iter_mut().enumerate() {
+                if !f(unsafe { mem::replace(dst, MaybeUninit::uninit()).assume_init() }) {
+                    return i + lb;
+                }
+            }
+            left.len() + right.len()
+        };
+        unsafe { self.pop_access(af) }
+    }
 }
+
+/*
+    /// Removes at most `count` elements from the `Consumer` of the ring buffer
+    /// and appends them to the `Producer` of the another one.
+    /// If `count` is `None` then as much as possible elements will be moved.
+    ///
+    /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
+    ///
+    /// On success returns count of elements been moved.
+    pub fn move_slice(&mut self, other: &mut Producer<T>, count: Option<usize>)
+    -> Result<usize, MoveSliceError> {
+        other.move_slice(self, count)
+    }
+*/
 
 /*
 impl<T: Sized + Copy> Consumer<T> {
@@ -164,53 +246,3 @@ impl Read for Consumer<u8> {
     }
 }
 */
-
-impl<T: Sized> Consumer<T> {
-    /// Allows to read from ring buffer memory directry.
-    ///
-    /// *This function is unsafe beacuse it gives access to possibly uninitialized memory
-    /// and transfers to the user the responsibility of manually calling destructors*
-    ///
-    /// Takes a function `f` as argument.
-    /// `f` takes two slices of ring buffer content (the second one may be empty). First slice contains older elements.
-    ///
-    /// `f` should return:
-    /// + On success: pair of number of elements been read, and some arbitrary data.
-    /// + On failure: some another arbitrary data.
-    ///
-    /// On success returns data returned from `f`.
-    pub unsafe fn pop_access<R, E, F>(&mut self, f: F) -> Result<Result<(usize, R), E>, PopAccessError>
-    where R: Sized, E: Sized, F: FnOnce(&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) -> Result<(usize, R), E> {
-        let head = self.rb.head.load(Ordering::Acquire);
-        let tail = self.rb.tail.load(Ordering::Acquire);
-        let len = self.rb.data.get_ref().len();
-
-        let ranges = if head < tail {
-            Ok((head..tail, 0..0))
-        } else if head > tail {
-            Ok((head..len, 0..tail))
-        } else {
-            Err(PopAccessError::Empty)
-        }?;
-
-        let slices = (
-            &mut self.rb.data.get_mut()[ranges.0],
-            &mut self.rb.data.get_mut()[ranges.1],
-        );
-
-        match f(slices.0, slices.1) {
-            Ok((n, r)) => {
-                if n > slices.0.len() + slices.1.len() {
-                    Err(PopAccessError::BadLen)
-                } else {
-                    let new_head = (head + n) % len;
-                    self.rb.head.store(new_head, Ordering::Release);
-                    Ok(Ok((n, r)))
-                }
-            },
-            Err(e) => {
-                Ok(Err(e))
-            }
-        }
-    }
-}

@@ -17,7 +17,6 @@ fn capacity() {
     let buf = RingBuffer::<i32>::new(cap);
     assert_eq!(buf.capacity(), cap);
 }
-
 #[test]
 fn split_capacity() {
     let cap = 13;
@@ -60,7 +59,7 @@ fn push() {
     assert_eq!(prod.push(234), Ok(()));
     assert_eq!(head_tail(&prod.rb), (0, 2));
 
-    assert_eq!(prod.push(345), Err(PushError::Full(345)));
+    assert_eq!(prod.push(345), Err(345));
     assert_eq!(head_tail(&prod.rb), (0, 2));
 }
 
@@ -73,7 +72,7 @@ fn pop_empty() {
 
     assert_eq!(head_tail(&cons.rb), (0, 0));
 
-    assert_eq!(cons.pop(), Err(PopError::Empty));
+    assert_eq!(cons.pop(), None);
     assert_eq!(head_tail(&cons.rb), (0, 0));
 }
 
@@ -91,13 +90,10 @@ fn push_pop_one() {
         assert_eq!(prod.push(*v), Ok(()));
         assert_eq!(head_tail(&cons.rb), (i % vcap, (i + 1) % vcap));
 
-        match cons.pop() {
-            Ok(w) => assert_eq!(w, *v),
-            other => panic!(other),
-        }
+        assert_eq!(cons.pop().unwrap(), *v);
         assert_eq!(head_tail(&cons.rb), ((i + 1) % vcap, (i + 1) % vcap));
 
-        assert_eq!(cons.pop(), Err(PopError::Empty));
+        assert_eq!(cons.pop(), None);
         assert_eq!(head_tail(&cons.rb), ((i + 1) % vcap, (i + 1) % vcap));
     }
 }
@@ -119,26 +115,17 @@ fn push_pop_all() {
         assert_eq!(prod.push(v.1), Ok(()));
         assert_eq!(head_tail(&cons.rb), (cap*i % vcap, (cap*i + 2) % vcap));
 
-        match prod.push(v.2) {
-            Err(PushError::Full(w)) => assert_eq!(w, v.2),
-            other => panic!(other),
-        }
+        assert_eq!(prod.push(v.2).unwrap_err(), v.2);
         assert_eq!(head_tail(&cons.rb), (cap*i % vcap, (cap*i + 2) % vcap));
 
 
-        match cons.pop() {
-            Ok(w) => assert_eq!(w, v.0),
-            other => panic!(other),
-        }
+        assert_eq!(cons.pop().unwrap(), v.0);
         assert_eq!(head_tail(&cons.rb), ((cap*i + 1) % vcap, (cap*i + 2) % vcap));
 
-        match cons.pop() {
-            Ok(w) => assert_eq!(w, v.1),
-            other => panic!(other),
-        }
+        assert_eq!(cons.pop().unwrap(), v.1);
         assert_eq!(head_tail(&cons.rb), ((cap*i + 2) % vcap, (cap*i + 2) % vcap));
 
-        assert_eq!(cons.pop(), Err(PopError::Empty));
+        assert_eq!(cons.pop(), None);
         assert_eq!(head_tail(&cons.rb), ((cap*i + 2) % vcap, (cap*i + 2) % vcap));
     }
 }
@@ -185,14 +172,14 @@ fn len_remaining() {
     assert_eq!(prod.remaining(), 0);
     assert_eq!(cons.remaining(), 0);
 
-    assert_eq!(cons.pop(), Ok(123));
+    assert_eq!(cons.pop(), Some(123));
 
     assert_eq!(prod.len(), 1);
     assert_eq!(cons.len(), 1);
     assert_eq!(prod.remaining(), 1);
     assert_eq!(cons.remaining(), 1);
 
-    assert_eq!(cons.pop(), Ok(456));
+    assert_eq!(cons.pop(), Some(456));
 
     assert_eq!(prod.len(), 0);
     assert_eq!(cons.len(), 0);
@@ -259,34 +246,34 @@ fn push_access() {
     let (mut prod, mut cons) = buf.split();
 
     let vs_20 = (123, 456);
-    let push_fn_20 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> {
+    let push_fn_20 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize {
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
         left[0] = MaybeUninit::new(vs_20.0);
         left[1] = MaybeUninit::new(vs_20.1);
-        Ok((2, ()))
+        2
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_20) }.unwrap().unwrap(), (2, ()));
+    assert_eq!(unsafe { prod.push_access(push_fn_20) }, 2);
 
     assert_eq!(cons.pop().unwrap(), vs_20.0);
     assert_eq!(cons.pop().unwrap(), vs_20.1);
-    assert_eq!(cons.pop(), Err(PopError::Empty));
+    assert_eq!(cons.pop(), None);
 
     let vs_11 = (123, 456);
-    let push_fn_11 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> {
+    let push_fn_11 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize {
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 1);
         left[0] = MaybeUninit::new(vs_11.0);
         right[0] = MaybeUninit::new(vs_11.1);
-        Ok((2, ()))
+        2
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_11) }.unwrap().unwrap(), (2, ()));
+    assert_eq!(unsafe { prod.push_access(push_fn_11) }, 2);
 
     assert_eq!(cons.pop().unwrap(), vs_11.0);
     assert_eq!(cons.pop().unwrap(), vs_11.1);
-    assert_eq!(cons.pop(), Err(PopError::Empty));
+    assert_eq!(cons.pop(), None);
 }
 
 /*
@@ -320,14 +307,10 @@ fn pop_access_full() {
     let buf = RingBuffer::<i32>::new(cap);
     let (_, mut cons) = buf.split();
 
-    let dummy_fn = |_l: &mut [MaybeUninit<i32>], _r: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> {
-        if true {
-            Ok((0, ()))
-        } else {
-            Err(())
-        }
+    let dummy_fn = |_l: &mut [MaybeUninit<i32>], _r: &mut [MaybeUninit<i32>]| -> usize {
+        0
     };
-    assert_eq!(unsafe { cons.pop_access(dummy_fn) }, Err(PopAccessError::Empty));
+    assert_eq!(unsafe { cons.pop_access(dummy_fn) }, 0);
 }
 
 #[test]
@@ -336,14 +319,10 @@ fn pop_access_empty() {
     let buf = RingBuffer::<i32>::new(cap);
     let (_, mut cons) = buf.split();
 
-    let dummy_fn = |_l: &mut [MaybeUninit<i32>], _r: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> {
-        if true {
-            Ok((0, ()))
-        } else {
-            Err(())
-        }
+    let dummy_fn = |_l: &mut [MaybeUninit<i32>], _r: &mut [MaybeUninit<i32>]| -> usize {
+        0
     };
-    assert_eq!(unsafe { cons.pop_access(dummy_fn) }, Err(PopAccessError::Empty));
+    assert_eq!(unsafe { cons.pop_access(dummy_fn) }, 0);
 }
 
 #[test]
@@ -357,34 +336,34 @@ fn pop_access() {
 
     assert_eq!(prod.push(vs_20.0), Ok(()));
     assert_eq!(prod.push(vs_20.1), Ok(()));
-    assert_eq!(prod.push(0), Err(PushError::Full(0)));
+    assert_eq!(prod.push(0), Err(0));
 
-    let pop_fn_20 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> { unsafe {
+    let pop_fn_20 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize { unsafe {
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
         assert_eq!(left[0].assume_init(), vs_20.0);
         assert_eq!(left[1].assume_init(), vs_20.1);
-        Ok((2, ()))
+        2
     }};
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_20) }.unwrap().unwrap(), (2, ()));
+    assert_eq!(unsafe { cons.pop_access(pop_fn_20) }, 2);
 
 
     let vs_11 = (123, 456);
 
     assert_eq!(prod.push(vs_11.0), Ok(()));
     assert_eq!(prod.push(vs_11.1), Ok(()));
-    assert_eq!(prod.push(0), Err(PushError::Full(0)));
+    assert_eq!(prod.push(0), Err(0));
 
-    let pop_fn_11 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> { unsafe {
+    let pop_fn_11 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize { unsafe {
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 1);
         assert_eq!(left[0].assume_init(), vs_11.0);
         assert_eq!(right[0].assume_init(), vs_11.1);
-        Ok((2, ()))
+        2
     }};
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_11) }.unwrap().unwrap(), (2, ()));
+    assert_eq!(unsafe { cons.pop_access(pop_fn_11) }, 2);
 
 }
 
@@ -394,56 +373,35 @@ fn push_access_return() {
     let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
 
-    let push_fn_3 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> {
+    let push_fn_0 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize {
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
-        Ok((3, ()))
+        0
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_3) }, Err(PushAccessError::BadLen)
-    );
+    assert_eq!(unsafe { prod.push_access(push_fn_0) }, 0);
 
-    let push_fn_err = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), i32> {
-        assert_eq!(left.len(), 2);
-        assert_eq!(right.len(), 0);
-        Err(123)
-    };
-
-    assert_eq!(unsafe { prod.push_access(push_fn_err) }, Ok(Err(123))
-    );
-
-    let push_fn_0 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> {
-        assert_eq!(left.len(), 2);
-        assert_eq!(right.len(), 0);
-        Ok((0, ()))
-    };
-
-    assert_eq!(unsafe { prod.push_access(push_fn_0) }, Ok(Ok((0, ())))
-    );
-
-    let push_fn_1 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> {
+    let push_fn_1 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize {
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
         left[0] = MaybeUninit::new(12);
-        Ok((1, ()))
+        1
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_1) }, Ok(Ok((1, ())))
-    );
+    assert_eq!(unsafe { prod.push_access(push_fn_1) }, 1);
 
-    let push_fn_2 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> {
+    let push_fn_2 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize {
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 0);
         left[0] = MaybeUninit::new(34);
-        Ok((1, ()))
+        1
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_2) }, Ok(Ok((1, ())))
-    );
+    assert_eq!(unsafe { prod.push_access(push_fn_2) }, 1);
 
     assert_eq!(cons.pop().unwrap(), 12);
     assert_eq!(cons.pop().unwrap(), 34);
-    assert_eq!(cons.pop(), Err(PopError::Empty));
+    assert_eq!(cons.pop(), None);
 }
 
 #[test]
@@ -454,54 +412,33 @@ fn pop_access_return() {
 
     assert_eq!(prod.push(12), Ok(()));
     assert_eq!(prod.push(34), Ok(()));
-    assert_eq!(prod.push(0), Err(PushError::Full(0)));
+    assert_eq!(prod.push(0), Err(0));
 
-    let pop_fn_3 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> {
+    let pop_fn_0 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize {
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
-        Ok((3, ()))
+        0
     };
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_3) }, Err(PopAccessError::BadLen)
-    );
+    assert_eq!(unsafe { cons.pop_access(pop_fn_0) }, 0);
 
-    let pop_fn_err = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), i32> {
-        assert_eq!(left.len(), 2);
-        assert_eq!(right.len(), 0);
-        Err(123)
-    };
-
-    assert_eq!(unsafe { cons.pop_access(pop_fn_err) }, Ok(Err(123))
-    );
-
-    let pop_fn_0 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> {
-        assert_eq!(left.len(), 2);
-        assert_eq!(right.len(), 0);
-        Ok((0, ()))
-    };
-
-    assert_eq!(unsafe { cons.pop_access(pop_fn_0) }, Ok(Ok((0, ())))
-    );
-
-    let pop_fn_1 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> { unsafe {
+    let pop_fn_1 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize { unsafe {
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
         assert_eq!(left[0].assume_init(), 12);
-        Ok((1, ()))
+        1
     }};
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_1) }, Ok(Ok((1, ())))
-    );
+    assert_eq!(unsafe { cons.pop_access(pop_fn_1) }, 1);
 
-    let pop_fn_2 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> { unsafe {
+    let pop_fn_2 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize { unsafe {
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 0);
         assert_eq!(left[0].assume_init(), 34);
-        Ok((1, ()))
+        1
     }};
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_2) }, Ok(Ok((1, ())))
-    );
+    assert_eq!(unsafe { cons.pop_access(pop_fn_2) }, 1);
 }
 
 #[test]
@@ -511,47 +448,47 @@ fn push_pop_access() {
     let (mut prod, mut cons) = buf.split();
 
     let vs_20 = (123, 456);
-    let push_fn_20 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> {
+    let push_fn_20 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize {
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
         left[0] = MaybeUninit::new(vs_20.0);
         left[1] = MaybeUninit::new(vs_20.1);
-        Ok((2, ()))
+        2
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_20) }.unwrap().unwrap(), (2, ()));
+    assert_eq!(unsafe { prod.push_access(push_fn_20) }, 2);
 
-    let pop_fn_20 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> { unsafe {
+    let pop_fn_20 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize { unsafe {
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
         assert_eq!(left[0].assume_init(), vs_20.0);
         assert_eq!(left[1].assume_init(), vs_20.1);
-        Ok((2, ()))
+        2
     }};
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_20) }.unwrap().unwrap(), (2, ()));
+    assert_eq!(unsafe { cons.pop_access(pop_fn_20) }, 2);
 
 
     let vs_11 = (123, 456);
-    let push_fn_11 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> {
+    let push_fn_11 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize {
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 1);
         left[0] = MaybeUninit::new(vs_11.0);
         right[0] = MaybeUninit::new(vs_11.1);
-        Ok((2, ()))
+        2
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_11) }.unwrap().unwrap(), (2, ()));
+    assert_eq!(unsafe { prod.push_access(push_fn_11) }, 2);
 
-    let pop_fn_11 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> Result<(usize, ()), ()> { unsafe {
+    let pop_fn_11 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize { unsafe {
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 1);
         assert_eq!(left[0].assume_init(), vs_11.0);
         assert_eq!(right[0].assume_init(), vs_11.1);
-        Ok((2, ()))
+        2
     }};
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_11) }.unwrap().unwrap(), (2, ()));
+    assert_eq!(unsafe { cons.pop_access(pop_fn_11) }, 2);
 }
 
 /*

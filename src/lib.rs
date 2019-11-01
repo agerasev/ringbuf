@@ -21,14 +21,14 @@
 //!
 //! ```rust
 //! # extern crate ringbuf;
-//! use ringbuf::{RingBuffer, PushError, PopError};
+//! use ringbuf::RingBuffer;
 //! # fn main() {
 //! let rb = RingBuffer::<i32>::new(2);
 //! let (mut prod, mut cons) = rb.split();
 //!
 //! prod.push(0).unwrap();
 //! prod.push(1).unwrap();
-//! assert_eq!(prod.push(2), Err(PushError::Full(2)));
+//! assert_eq!(prod.push(2), Err(2));
 //!
 //! assert_eq!(cons.pop().unwrap(), 0);
 //!
@@ -36,7 +36,7 @@
 //!
 //! assert_eq!(cons.pop().unwrap(), 1);
 //! assert_eq!(cons.pop().unwrap(), 2);
-//! assert_eq!(cons.pop(), Err(PopError::Empty));
+//! assert_eq!(cons.pop(), None);
 //! # }
 //! ```
 //!
@@ -126,12 +126,10 @@ mod tests;
 //#[cfg(rustc_nightly)]
 //mod benchmarks;
 
-mod error;
 mod ring_buffer;
 mod producer;
 mod consumer;
 
-pub use error::*;
 pub use ring_buffer::{RingBuffer};
 pub use producer::{Producer};
 pub use consumer::{Consumer};
