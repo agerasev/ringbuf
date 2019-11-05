@@ -1,10 +1,15 @@
-use std::mem::{self, MaybeUninit};
-use std::sync::{Arc, atomic::{Ordering}};
-use std::cmp::{min};
-//use std::io::{self, Read, Write};
+use std::{
+    mem::{self, transmute, MaybeUninit},
+    ptr::{copy_nonoverlapping},
+    sync::{Arc, atomic::{Ordering}},
+    cmp::{min},
+    io::{self, Read, Write}
+};
 
-use crate::ring_buffer::*;
-//use crate::producer::Producer;
+use crate::{
+    ring_buffer::*,
+    producer::Producer,
+};
 
 
 /// Consumer part of ring buffer.
@@ -79,6 +84,40 @@ impl<T: Sized> Consumer<T> {
         n
     }
 
+    pub unsafe fn pop_copy(&mut self, elems: &mut [MaybeUninit<T>]) -> usize {
+        self.pop_access(|left, right| {
+            if elems.len() < left.len() {
+                copy_nonoverlapping(
+                    left.as_ptr(),
+                    elems.as_mut_ptr(),
+                    elems.len(),
+                );
+                elems.len()
+            } else {
+                copy_nonoverlapping(
+                    left.as_ptr(),
+                    elems.as_mut_ptr(),
+                    left.len(),
+                );
+                if elems.len() < left.len() + right.len() {
+                    copy_nonoverlapping(
+                        right.as_ptr(),
+                        elems.as_mut_ptr().offset(left.len() as isize),
+                        elems.len() - left.len(),
+                    );
+                    elems.len()
+                } else {
+                    copy_nonoverlapping(
+                        right.as_ptr(),
+                        elems.as_mut_ptr().offset(left.len() as isize),
+                        right.len(),
+                    );
+                    left.len() + right.len()
+                }
+            }
+        })
+    }
+
     /// Removes first element from the ring buffer and returns it.
     pub fn pop(&mut self) -> Option<T> {
         let mut elem_mu = MaybeUninit::uninit();
@@ -98,84 +137,32 @@ impl<T: Sized> Consumer<T> {
     }
 
     pub fn pop_fn<F: FnMut(T) -> bool>(&mut self, mut f: F, count: Option<usize>) -> usize {
-        let af = |left: &mut [MaybeUninit<T>], right: &mut [MaybeUninit<T>]| {
-            let lb = match count {
-                Some(n) => min(n, left.len()),
-                None => left.len(),
-            };
-            for (i, dst) in left[0..lb].iter_mut().enumerate() {
-                if !f(unsafe { mem::replace(dst, MaybeUninit::uninit()).assume_init() }) {
-                    return i;
+        unsafe {
+            self.pop_access(|left, right| {
+                let lb = match count {
+                    Some(n) => min(n, left.len()),
+                    None => left.len(),
+                };
+                for (i, dst) in left[0..lb].iter_mut().enumerate() {
+                    if !f(mem::replace(dst, MaybeUninit::uninit()).assume_init()) {
+                        return i;
+                    }
                 }
-            }
-            if lb < left.len() {
-                return lb;
-            }
-
-            let rb = match count {
-                Some(n) => min(n - lb, right.len()),
-                None => right.len(),
-            };
-            for (i, dst) in right[0..rb].iter_mut().enumerate() {
-                if !f(unsafe { mem::replace(dst, MaybeUninit::uninit()).assume_init() }) {
-                    return i + lb;
+                if lb < left.len() {
+                    return lb;
                 }
-            }
-            left.len() + right.len()
-        };
-        unsafe { self.pop_access(af) }
-    }
-}
 
-/*
-    /// Removes at most `count` elements from the `Consumer` of the ring buffer
-    /// and appends them to the `Producer` of the another one.
-    /// If `count` is `None` then as much as possible elements will be moved.
-    ///
-    /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
-    ///
-    /// On success returns count of elements been moved.
-    pub fn move_slice(&mut self, other: &mut Producer<T>, count: Option<usize>)
-    -> Result<usize, MoveSliceError> {
-        other.move_slice(self, count)
-    }
-*/
-
-/*
-impl<T: Sized + Copy> Consumer<T> {
-    /// Removes first elements from the ring buffer and writes them into a slice.
-    /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
-    ///
-    /// On success returns count of elements been removed from the ring buffer.
-    pub fn pop_slice(&mut self, elems: &mut [T]) -> Result<usize, PopSliceError> {
-        let pop_fn = |left: &mut [T], right: &mut [T]| {
-            let elems_len = elems.len();
-            Ok((if elems_len < left.len() {
-                elems.copy_from_slice(&left[0..elems_len]);
-                elems_len
-            } else {
-                elems[0..left.len()].copy_from_slice(left);
-                if elems_len < left.len() + right.len() {
-                    elems[left.len()..elems_len]
-                        .copy_from_slice(&right[0..(elems_len - left.len())]);
-                    elems_len
-                } else {
-                    elems[left.len()..(left.len() + right.len())].copy_from_slice(right);
-                    left.len() + right.len()
+                let rb = match count {
+                    Some(n) => min(n - lb, right.len()),
+                    None => right.len(),
+                };
+                for (i, dst) in right[0..rb].iter_mut().enumerate() {
+                    if !f(mem::replace(dst, MaybeUninit::uninit()).assume_init()) {
+                        return i + lb;
+                    }
                 }
-            }, ()))
-        };
-        match unsafe { self.pop_access(pop_fn) } {
-            Ok(res) => match res {
-                Ok((n, ())) => {
-                    Ok(n)
-                },
-                Err(()) => unreachable!(),
-            },
-            Err(e) => match e {
-                PopAccessError::Empty => Err(PopSliceError::Empty),
-                PopAccessError::BadLen => unreachable!(),
-            }
+                left.len() + right.len()
+            })
         }
     }
 
@@ -186,63 +173,77 @@ impl<T: Sized + Copy> Consumer<T> {
     /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
     ///
     /// On success returns count of elements been moved.
-    pub fn move_slice(&mut self, other: &mut Producer<T>, count: Option<usize>)
-    -> Result<usize, MoveSliceError> {
-        other.move_slice(self, count)
+    pub fn move_to(&mut self, other: &mut Producer<T>, count: Option<usize>) -> usize {
+        move_items(self, other, count)
     }
 }
-*/
-/*
+
+
+impl<T: Sized + Copy> Consumer<T> {
+    /// Removes first elements from the ring buffer and writes them into a slice.
+    /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
+    ///
+    /// On success returns count of elements been removed from the ring buffer.
+    pub fn pop_slice(&mut self, elems: &mut [T]) -> usize {
+        unsafe { self.pop_copy(transmute::<&mut [T], &mut [MaybeUninit::<T>]>(elems)) }
+    }
+}
+
 impl Consumer<u8> {
     /// Removes at most first `count` bytes from the ring buffer and writes them into
     /// a [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) instance.
     /// If `count` is `None` then as much as possible bytes will be written.
-    pub fn write_into(&mut self, writer: &mut dyn Write, count: Option<usize>)
-    -> Result<usize, WriteIntoError> {
-        let pop_fn = |left: &mut [u8], _right: &mut [u8]|
-        -> Result<(usize, ()), io::Error> {
-            let left = match count {
-                Some(c) => {
-                    if c < left.len() {
-                        &mut left[0..c]
+    pub fn write_into(&mut self, writer: &mut dyn Write, count: Option<usize>) -> io::Result<usize> {
+        let mut err = None;
+        let n = unsafe {
+            self.pop_access(|left, _| -> usize {
+                let left = match count {
+                    Some(c) => {
+                        if c < left.len() {
+                            &mut left[0..c]
+                        } else {
+                            left
+                        }
+                    },
+                    None => left,
+                };
+                match writer.write(
+                    transmute::<&mut [MaybeUninit::<u8>], &mut [u8]>(left)
+                ).and_then(|n| {
+                    if n <= left.len() {
+                        Ok(n)
                     } else {
-                        left
+                        Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "Write operation returned invalid number",
+                        ))
                     }
-                },
-                None => left,
-            };
-            writer.write(left).and_then(|n| {
-                if n <= left.len() {
-                    Ok((n, ()))
-                } else {
-                    Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "Write operation returned invalid number",
-                    ))
+                }) {
+                    Ok(n) => n,
+                    Err(e) => {
+                        err = Some(e);
+                        0
+                    }
                 }
             })
         };
-        match unsafe { self.pop_access(pop_fn) } {
-            Ok(res) => match res {
-                Ok((n, ())) => Ok(n),
-                Err(e) => Err(WriteIntoError::Write(e)),
-            },
-            Err(e) => match e {
-                PopAccessError::Empty => Err(WriteIntoError::RbEmpty),
-                PopAccessError::BadLen => unreachable!(),
-            }
+        match err {
+            Some(e) => Err(e),
+            None => Ok(n),
         }
     }
 }
 
 impl Read for Consumer<u8> {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-        self.pop_slice(buffer).or_else(|e| match e {
-            PopSliceError::Empty => Err(io::Error::new(
+        let n = self.pop_slice(buffer);
+        if n == 0 && buffer.len() != 0 {
+            Err(io::Error::new(
                 io::ErrorKind::WouldBlock,
                 "Ring buffer is empty",
             ))
-        })
+        } else {
+            Ok(n)
+        }
     }
 }
-*/

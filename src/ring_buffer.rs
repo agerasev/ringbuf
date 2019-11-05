@@ -1,9 +1,15 @@
-use std::mem::{self, MaybeUninit};
-use std::cell::{UnsafeCell};
-use std::sync::{Arc, atomic::{Ordering, AtomicUsize}};
+use std::{
+    mem::{self, MaybeUninit},
+    ptr::{self, copy},
+    cell::{UnsafeCell},
+    sync::{Arc, atomic::{Ordering, AtomicUsize}},
+    cmp::min,
+};
 
-use crate::consumer::Consumer;
-use crate::producer::Producer;
+use crate::{
+    consumer::Consumer,
+    producer::Producer,
+};
 
 
 pub(crate) struct SharedVec<T: Sized> {
@@ -108,5 +114,64 @@ impl<T: Sized> Drop for RingBuffer<T> {
         for elem in data[slices.1].iter_mut() {
             drop(elem);
         }
+    }
+}
+
+struct SlicePtr<T: Sized> {
+    pub ptr: *mut T,
+    pub len: usize,
+}
+
+impl<T> SlicePtr<T> {
+    fn null() -> Self {
+        Self { ptr: ptr::null_mut(), len: 0 }
+    }
+    fn new(slice: &mut [T]) -> Self {
+        Self { ptr: slice.as_mut_ptr(), len: slice.len() }
+    }
+    unsafe fn shift(&mut self, count: usize) {
+        self.ptr = self.ptr.offset(count as isize);
+        self.len -= count;
+    }
+}
+
+pub fn move_items<T>(src: &mut Consumer<T>, dst: &mut Producer<T>, count: Option<usize>) -> usize {
+    unsafe {
+        src.pop_access(|src_left, src_right| -> usize {
+            dst.push_access(|dst_left, dst_right| -> usize {
+                let n = count.unwrap_or(min(
+                    src_left.len() + src_right.len(),
+                    dst_left.len() + dst_right.len(),
+                ));
+                let mut m = 0;
+                let mut src = (SlicePtr::new(src_left), SlicePtr::new(src_right));
+                let mut dst = (SlicePtr::new(dst_left), SlicePtr::new(dst_right));
+
+                loop {
+                    let k = min(n - m, min(src.0.len, dst.0.len));
+                    if k == 0 { break; }
+                    copy(
+                        src.0.ptr,
+                        dst.0.ptr,
+                        k
+                    );
+                    if src.0.len == k {
+                        src.0 = src.1;
+                        src.1 = SlicePtr::null();
+                    } else {
+                        src.0.shift(k);
+                    }
+                    if dst.0.len == k {
+                        dst.0 = dst.1;
+                        dst.1 = SlicePtr::null();
+                    } else {
+                        dst.0.shift(k);
+                    }
+                    m += k
+                }
+
+                m
+            })
+        })
     }
 }

@@ -8,6 +8,6 @@ fn push_pop(b: &mut Bencher) {
     let (mut prod, mut cons) = buf.split();
     b.iter(|| {
         while let Ok(()) = prod.push(0) {}
-        while let Ok(0) = cons.pop() {}
+        while let Some(0) = cons.pop() {}
     });
 }
