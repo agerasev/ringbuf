@@ -118,7 +118,7 @@
 //extern crate test;
 
 #[cfg(test)]
-mod tests;
+mod test;
 
 //#[cfg(test)]
 //#[cfg(rustc_nightly)]
