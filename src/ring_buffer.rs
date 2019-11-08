@@ -24,10 +24,10 @@ impl<T: Sized> SharedVec<T> {
         }
     }
     pub unsafe fn get_ref(&self) -> &Vec<T> {
-        self.cell.get().as_ref().unwrap()
+        &*self.cell.get()
     }
     pub unsafe fn get_mut(&self) -> &mut Vec<T> {
-        self.cell.get().as_mut().unwrap()
+        &mut *self.cell.get()
     }
 }
 

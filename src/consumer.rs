@@ -2,6 +2,7 @@ use std::{
     cmp::min,
     io::{self, Read, Write},
     mem::{self, transmute, MaybeUninit},
+    ops::Range,
     ptr::copy_nonoverlapping,
     sync::{atomic::Ordering, Arc},
 };
@@ -47,6 +48,62 @@ impl<T: Sized> Consumer<T> {
     /// Actual remaining space may be equal to or less than the returning value.
     pub fn remaining(&self) -> usize {
         self.rb.remaining()
+    }
+
+    fn get_ranges(&self) -> (Range<usize>, Range<usize>) {
+        let head = self.rb.head.load(Ordering::Acquire);
+        let tail = self.rb.tail.load(Ordering::Acquire);
+        let len = unsafe { self.rb.data.get_ref().len() };
+
+        if head < tail {
+            (head..tail, 0..0)
+        } else if head > tail {
+            (head..len, 0..tail)
+        } else {
+            (0..0, 0..0)
+        }
+    }
+
+    /// Gives immutable access to the elements contained by the ring buffer without removing them.
+    ///
+    /// The method takes a function `f` as argument.
+    /// `f` takes two slices of ring buffer content (the second one of both of them may be empty).
+    /// First slice contains older elements.
+    ///
+    /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*
+    pub fn access<F: FnOnce(&[T], &[T])>(&self, f: F) {
+        let ranges = self.get_ranges();
+
+        unsafe {
+            let left = &self.rb.data.get_ref()[ranges.0];
+            let right = &self.rb.data.get_ref()[ranges.1];
+
+            f(
+                transmute::<&[MaybeUninit<T>], &[T]>(left),
+                transmute::<&[MaybeUninit<T>], &[T]>(right),
+            );
+        }
+    }
+
+    /// Gives mutable access to the elements contained by the ring buffer without removing them.
+    ///
+    /// The method takes a function `f` as argument.
+    /// `f` takes two slices of ring buffer content (the second one of both of them may be empty).
+    /// First slice contains older elements.
+    ///
+    /// *The iteration may not include elements pushed to the buffer by concurring producer after the method call.*
+    pub fn access_mut<F: FnOnce(&mut [T], &mut [T])>(&mut self, f: F) {
+        let ranges = self.get_ranges();
+
+        unsafe {
+            let left = &mut self.rb.data.get_mut()[ranges.0];
+            let right = &mut self.rb.data.get_mut()[ranges.1];
+
+            f(
+                transmute::<&mut [MaybeUninit<T>], &mut [T]>(left),
+                transmute::<&mut [MaybeUninit<T>], &mut [T]>(right),
+            );
+        }
     }
 
     /// Allows to read from ring buffer memory directry.
@@ -186,46 +243,28 @@ impl<T: Sized> Consumer<T> {
     ///
     /// *The iteration may not include elements pushed to the buffer by concurring producer after the method call.*
     pub fn for_each<F: FnMut(&T)>(&self, mut f: F) {
-        unsafe {
-            let head = self.rb.head.load(Ordering::Acquire);
-            let tail = self.rb.tail.load(Ordering::Acquire);
-            let len = self.rb.data.get_ref().len();
-
-            let ranges = if head < tail {
-                (head..tail, 0..0)
-            } else if head > tail {
-                (head..len, 0..tail)
-            } else {
-                (0..0, 0..0)
-            };
-
-            let left = &self.rb.data.get_ref()[ranges.0];
-            let right = &self.rb.data.get_ref()[ranges.1];
-
+        self.access(|left, right| {
             for c in left.iter() {
-                f(c.as_ptr().as_ref().unwrap());
+                f(c);
             }
             for c in right.iter() {
-                f(c.as_ptr().as_ref().unwrap());
+                f(c);
             }
-        }
+        });
     }
 
     /// Iterate mutably over the elements contained by the ring buffer without removing them.
     ///
     /// *The iteration may not include elements pushed to the buffer by concurring producer after the method call.*
     pub fn for_each_mut<F: FnMut(&mut T)>(&mut self, mut f: F) {
-        unsafe {
-            self.pop_access(|left, right| {
-                for c in left.iter_mut() {
-                    f(c.as_mut_ptr().as_mut().unwrap());
-                }
-                for c in right.iter_mut() {
-                    f(c.as_mut_ptr().as_mut().unwrap());
-                }
-                0
-            });
-        }
+        self.access_mut(|left, right| {
+            for c in left.iter_mut() {
+                f(c);
+            }
+            for c in right.iter_mut() {
+                f(c);
+            }
+        });
     }
 
     /// Removes at most `count` elements from the consumer and appends them to the producer.
