@@ -609,21 +609,41 @@ impl<T: Sized> Consumer<T> {
 
     /// Removes first element from the ring buffer and returns it.
     pub fn pop(&mut self) -> Result<T, PopError> {
-        match unsafe { self.pop_access(|slice, _| {
-            let elem = mem::replace(&mut slice[0], mem::uninitialized());
-            Ok((1, elem))
-        }) } {
+        match unsafe {
+            self.pop_access(|slice, _| {
+                let elem = mem::replace(&mut slice[0], mem::uninitialized());
+                Ok((1, elem))
+            })
+        } {
             Ok(res) => match res {
                 Ok((n, elem)) => {
                     debug_assert_eq!(n, 1);
                     Ok(elem)
-                },
+                }
                 Err(()) => unreachable!(),
             },
             Err(e) => match e {
                 PopAccessError::Empty => Err(PopError::Empty),
                 PopAccessError::BadLen => unreachable!(),
-            }
+            },
+        }
+    }
+
+    /// Iterate mutably over the elements contained by this buffer.
+    pub fn for_each_mut<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&mut T),
+    {
+        unsafe {
+            let _ = self.pop_access::<_, (), _>(|slice1, slice2| {
+                for c in slice1.iter_mut() {
+                    f(c);
+                }
+                for c in slice2.iter_mut() {
+                    f(c);
+                }
+                Ok((0, ()))
+            });
         }
     }
 }

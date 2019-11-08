@@ -341,7 +341,34 @@ fn pop_access_empty() {
             Err(())
         }
     };
-    assert_eq!(unsafe { cons.pop_access(dummy_fn) }, Err(PopAccessError::Empty));
+    assert_eq!(
+        unsafe { cons.pop_access(dummy_fn) },
+        Err(PopAccessError::Empty)
+    );
+}
+
+#[test]
+fn for_each_mut() {
+    let cap = 2;
+    let buf = RingBuffer::<i32>::new(cap);
+    let (mut prod, mut cons) = buf.split();
+
+    prod.push(10).unwrap();
+    prod.push(20).unwrap();
+
+    cons.for_each_mut(|v| {
+        *v *= 2;
+    });
+
+    let mut sum_1 = 0;
+    cons.for_each_mut(|v| {
+        sum_1 += *v;
+    });
+
+    let first = cons.pop().expect("First element not available");
+    let second = cons.pop().expect("Second element not available");
+
+    assert_eq!(sum_1, first + second);
 }
 
 #[test]
@@ -349,7 +376,6 @@ fn pop_access() {
     let cap = 2;
     let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
-
 
     let vs_20 = (123, 456);
 
