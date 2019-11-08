@@ -1,12 +1,15 @@
 use super::*;
 
-use std::cell::{Cell};
-use std::thread;
+use std::cell::Cell;
 use std::io::{Read, Write};
-use std::time::{Duration};
+use std::thread;
+use std::time::Duration;
 
 fn head_tail<T>(rb: &RingBuffer<T>) -> (usize, usize) {
-    (rb.head.load(Ordering::SeqCst), rb.tail.load(Ordering::SeqCst))
+    (
+        rb.head.load(Ordering::SeqCst),
+        rb.tail.load(Ordering::SeqCst),
+    )
 }
 
 #[test]
@@ -49,7 +52,6 @@ fn push() {
     let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, _) = buf.split();
 
-
     assert_eq!(head_tail(&prod.rb), (0, 0));
 
     assert_eq!(prod.push(123), Ok(()));
@@ -67,7 +69,6 @@ fn pop_empty() {
     let cap = 2;
     let buf = RingBuffer::<i32>::new(cap);
     let (_, mut cons) = buf.split();
-
 
     assert_eq!(head_tail(&cons.rb), (0, 0));
 
@@ -112,32 +113,40 @@ fn push_pop_all() {
 
     for (i, v) in values.iter().enumerate() {
         assert_eq!(prod.push(v.0), Ok(()));
-        assert_eq!(head_tail(&cons.rb), (cap*i % vcap, (cap*i + 1) % vcap));
+        assert_eq!(head_tail(&cons.rb), (cap * i % vcap, (cap * i + 1) % vcap));
 
         assert_eq!(prod.push(v.1), Ok(()));
-        assert_eq!(head_tail(&cons.rb), (cap*i % vcap, (cap*i + 2) % vcap));
+        assert_eq!(head_tail(&cons.rb), (cap * i % vcap, (cap * i + 2) % vcap));
 
         match prod.push(v.2) {
             Err(PushError::Full(w)) => assert_eq!(w, v.2),
             other => panic!(other),
         }
-        assert_eq!(head_tail(&cons.rb), (cap*i % vcap, (cap*i + 2) % vcap));
-
+        assert_eq!(head_tail(&cons.rb), (cap * i % vcap, (cap * i + 2) % vcap));
 
         match cons.pop() {
             Ok(w) => assert_eq!(w, v.0),
             other => panic!(other),
         }
-        assert_eq!(head_tail(&cons.rb), ((cap*i + 1) % vcap, (cap*i + 2) % vcap));
+        assert_eq!(
+            head_tail(&cons.rb),
+            ((cap * i + 1) % vcap, (cap * i + 2) % vcap)
+        );
 
         match cons.pop() {
             Ok(w) => assert_eq!(w, v.1),
             other => panic!(other),
         }
-        assert_eq!(head_tail(&cons.rb), ((cap*i + 2) % vcap, (cap*i + 2) % vcap));
+        assert_eq!(
+            head_tail(&cons.rb),
+            ((cap * i + 2) % vcap, (cap * i + 2) % vcap)
+        );
 
         assert_eq!(cons.pop(), Err(PopError::Empty));
-        assert_eq!(head_tail(&cons.rb), ((cap*i + 2) % vcap, (cap*i + 2) % vcap));
+        assert_eq!(
+            head_tail(&cons.rb),
+            ((cap * i + 2) % vcap, (cap * i + 2) % vcap)
+        );
     }
 }
 
@@ -265,7 +274,10 @@ fn push_access() {
         Ok((2, ()))
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_20) }.unwrap().unwrap(), (2, ()));
+    assert_eq!(
+        unsafe { prod.push_access(push_fn_20) }.unwrap().unwrap(),
+        (2, ())
+    );
 
     assert_eq!(cons.pop().unwrap(), vs_20.0);
     assert_eq!(cons.pop().unwrap(), vs_20.1);
@@ -280,7 +292,10 @@ fn push_access() {
         Ok((2, ()))
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_11) }.unwrap().unwrap(), (2, ()));
+    assert_eq!(
+        unsafe { prod.push_access(push_fn_11) }.unwrap().unwrap(),
+        (2, ())
+    );
 
     assert_eq!(cons.pop().unwrap(), vs_11.0);
     assert_eq!(cons.pop().unwrap(), vs_11.1);
@@ -325,7 +340,10 @@ fn pop_access_full() {
             Err(())
         }
     };
-    assert_eq!(unsafe { cons.pop_access(dummy_fn) }, Err(PopAccessError::Empty));
+    assert_eq!(
+        unsafe { cons.pop_access(dummy_fn) },
+        Err(PopAccessError::Empty)
+    );
 }
 
 #[test]
@@ -341,7 +359,34 @@ fn pop_access_empty() {
             Err(())
         }
     };
-    assert_eq!(unsafe { cons.pop_access(dummy_fn) }, Err(PopAccessError::Empty));
+    assert_eq!(
+        unsafe { cons.pop_access(dummy_fn) },
+        Err(PopAccessError::Empty)
+    );
+}
+
+#[test]
+fn for_each_mut() {
+    let cap = 2;
+    let buf = RingBuffer::<i32>::new(cap);
+    let (mut prod, mut cons) = buf.split();
+
+    prod.push(10).unwrap();
+    prod.push(20).unwrap();
+
+    cons.for_each_mut(|v| {
+        *v *= 2;
+    });
+
+    let mut sum_1 = 0;
+    cons.for_each_mut(|v| {
+        sum_1 += *v;
+    });
+
+    let first = cons.pop().expect("First element not available");
+    let second = cons.pop().expect("Second element not available");
+
+    assert_eq!(sum_1, first + second);
 }
 
 #[test]
@@ -349,7 +394,6 @@ fn pop_access() {
     let cap = 2;
     let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
-
 
     let vs_20 = (123, 456);
 
@@ -365,8 +409,10 @@ fn pop_access() {
         Ok((2, ()))
     };
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_20) }.unwrap().unwrap(), (2, ()));
-
+    assert_eq!(
+        unsafe { cons.pop_access(pop_fn_20) }.unwrap().unwrap(),
+        (2, ())
+    );
 
     let vs_11 = (123, 456);
 
@@ -382,8 +428,10 @@ fn pop_access() {
         Ok((2, ()))
     };
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_11) }.unwrap().unwrap(), (2, ()));
-
+    assert_eq!(
+        unsafe { cons.pop_access(pop_fn_11) }.unwrap().unwrap(),
+        (2, ())
+    );
 }
 
 #[test]
@@ -398,7 +446,9 @@ fn push_access_return() {
         Ok((3, ()))
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_3) }, Err(PushAccessError::BadLen)
+    assert_eq!(
+        unsafe { prod.push_access(push_fn_3) },
+        Err(PushAccessError::BadLen)
     );
 
     let push_fn_err = |left: &mut [i32], right: &mut [i32]| -> Result<(usize, ()), i32> {
@@ -407,8 +457,7 @@ fn push_access_return() {
         Err(123)
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_err) }, Ok(Err(123))
-    );
+    assert_eq!(unsafe { prod.push_access(push_fn_err) }, Ok(Err(123)));
 
     let push_fn_0 = |left: &mut [i32], right: &mut [i32]| -> Result<(usize, ()), ()> {
         assert_eq!(left.len(), 2);
@@ -416,8 +465,7 @@ fn push_access_return() {
         Ok((0, ()))
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_0) }, Ok(Ok((0, ())))
-    );
+    assert_eq!(unsafe { prod.push_access(push_fn_0) }, Ok(Ok((0, ()))));
 
     let push_fn_1 = |left: &mut [i32], right: &mut [i32]| -> Result<(usize, ()), ()> {
         assert_eq!(left.len(), 2);
@@ -426,8 +474,7 @@ fn push_access_return() {
         Ok((1, ()))
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_1) }, Ok(Ok((1, ())))
-    );
+    assert_eq!(unsafe { prod.push_access(push_fn_1) }, Ok(Ok((1, ()))));
 
     let push_fn_2 = |left: &mut [i32], right: &mut [i32]| -> Result<(usize, ()), ()> {
         assert_eq!(left.len(), 1);
@@ -436,8 +483,7 @@ fn push_access_return() {
         Ok((1, ()))
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_2) }, Ok(Ok((1, ())))
-    );
+    assert_eq!(unsafe { prod.push_access(push_fn_2) }, Ok(Ok((1, ()))));
 
     assert_eq!(cons.pop().unwrap(), 12);
     assert_eq!(cons.pop().unwrap(), 34);
@@ -460,7 +506,9 @@ fn pop_access_return() {
         Ok((3, ()))
     };
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_3) }, Err(PopAccessError::BadLen)
+    assert_eq!(
+        unsafe { cons.pop_access(pop_fn_3) },
+        Err(PopAccessError::BadLen)
     );
 
     let pop_fn_err = |left: &mut [i32], right: &mut [i32]| -> Result<(usize, ()), i32> {
@@ -469,8 +517,7 @@ fn pop_access_return() {
         Err(123)
     };
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_err) }, Ok(Err(123))
-    );
+    assert_eq!(unsafe { cons.pop_access(pop_fn_err) }, Ok(Err(123)));
 
     let pop_fn_0 = |left: &mut [i32], right: &mut [i32]| -> Result<(usize, ()), ()> {
         assert_eq!(left.len(), 2);
@@ -478,8 +525,7 @@ fn pop_access_return() {
         Ok((0, ()))
     };
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_0) }, Ok(Ok((0, ())))
-    );
+    assert_eq!(unsafe { cons.pop_access(pop_fn_0) }, Ok(Ok((0, ()))));
 
     let pop_fn_1 = |left: &mut [i32], right: &mut [i32]| -> Result<(usize, ()), ()> {
         assert_eq!(left.len(), 2);
@@ -488,8 +534,7 @@ fn pop_access_return() {
         Ok((1, ()))
     };
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_1) }, Ok(Ok((1, ())))
-    );
+    assert_eq!(unsafe { cons.pop_access(pop_fn_1) }, Ok(Ok((1, ()))));
 
     let pop_fn_2 = |left: &mut [i32], right: &mut [i32]| -> Result<(usize, ()), ()> {
         assert_eq!(left.len(), 1);
@@ -498,8 +543,7 @@ fn pop_access_return() {
         Ok((1, ()))
     };
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_2) }, Ok(Ok((1, ())))
-    );
+    assert_eq!(unsafe { cons.pop_access(pop_fn_2) }, Ok(Ok((1, ()))));
 }
 
 #[test]
@@ -517,7 +561,10 @@ fn push_pop_access() {
         Ok((2, ()))
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_20) }.unwrap().unwrap(), (2, ()));
+    assert_eq!(
+        unsafe { prod.push_access(push_fn_20) }.unwrap().unwrap(),
+        (2, ())
+    );
 
     let pop_fn_20 = |left: &mut [i32], right: &mut [i32]| -> Result<(usize, ()), ()> {
         assert_eq!(left.len(), 2);
@@ -527,8 +574,10 @@ fn push_pop_access() {
         Ok((2, ()))
     };
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_20) }.unwrap().unwrap(), (2, ()));
-
+    assert_eq!(
+        unsafe { cons.pop_access(pop_fn_20) }.unwrap().unwrap(),
+        (2, ())
+    );
 
     let vs_11 = (123, 456);
     let push_fn_11 = |left: &mut [i32], right: &mut [i32]| -> Result<(usize, ()), ()> {
@@ -539,7 +588,10 @@ fn push_pop_access() {
         Ok((2, ()))
     };
 
-    assert_eq!(unsafe { prod.push_access(push_fn_11) }.unwrap().unwrap(), (2, ()));
+    assert_eq!(
+        unsafe { prod.push_access(push_fn_11) }.unwrap().unwrap(),
+        (2, ())
+    );
 
     let pop_fn_11 = |left: &mut [i32], right: &mut [i32]| -> Result<(usize, ()), ()> {
         assert_eq!(left.len(), 1);
@@ -549,7 +601,10 @@ fn push_pop_access() {
         Ok((2, ()))
     };
 
-    assert_eq!(unsafe { cons.pop_access(pop_fn_11) }.unwrap().unwrap(), (2, ()));
+    assert_eq!(
+        unsafe { cons.pop_access(pop_fn_11) }.unwrap().unwrap(),
+        (2, ())
+    );
 }
 
 #[test]
@@ -589,11 +644,13 @@ fn move_slice() {
     assert_eq!(prod0.push_slice(&[0, 1, 2]), Ok(3));
 
     assert_eq!(prod1.move_slice(&mut cons0, None), Ok(3));
-    assert_eq!(prod1.move_slice(&mut cons0, None), Err(MoveSliceError::Empty));
+    assert_eq!(
+        prod1.move_slice(&mut cons0, None),
+        Err(MoveSliceError::Empty)
+    );
 
     assert_eq!(cons1.pop_slice(&mut tmp), Ok(3));
     assert_eq!(tmp[0..3], [0, 1, 2]);
-
 
     assert_eq!(prod0.push_slice(&[3, 4, 5]), Ok(3));
 
@@ -602,12 +659,14 @@ fn move_slice() {
     assert_eq!(cons1.pop_slice(&mut tmp), Ok(3));
     assert_eq!(tmp[0..3], [3, 4, 5]);
 
-
     assert_eq!(prod1.push_slice(&[6, 7, 8]), Ok(3));
     assert_eq!(prod0.push_slice(&[9, 10]), Ok(2));
 
     assert_eq!(prod1.move_slice(&mut cons0, None), Ok(1));
-    assert_eq!(prod1.move_slice(&mut cons0, None), Err(MoveSliceError::Full));
+    assert_eq!(
+        prod1.move_slice(&mut cons0, None),
+        Err(MoveSliceError::Full)
+    );
 
     assert_eq!(cons1.pop_slice(&mut tmp), Ok(4));
     assert_eq!(tmp[0..4], [6, 7, 8, 9]);
@@ -633,7 +692,6 @@ fn move_slice_count() {
 
     assert_eq!(cons1.pop_slice(&mut tmp), Ok(1));
     assert_eq!(tmp[0..1], [2]);
-
 
     assert_eq!(prod0.push_slice(&[3, 4, 5, 6]), Ok(4));
 
@@ -668,13 +726,12 @@ fn read_from() {
     match prod1.read_from(&mut cons0, None) {
         Err(ReadFromError::Read(e)) => {
             assert_eq!(e.kind(), io::ErrorKind::WouldBlock);
-        },
+        }
         other => panic!("{:?}", other),
     }
 
     assert_eq!(cons1.pop_slice(&mut tmp), Ok(3));
     assert_eq!(tmp[0..3], [0, 1, 2]);
-
 
     assert_eq!(prod0.push_slice(&[3, 4, 5]), Ok(3));
 
@@ -691,7 +748,6 @@ fn read_from() {
     }
     assert_eq!(cons1.pop_slice(&mut tmp), Ok(1));
     assert_eq!(tmp[0..1], [5]);
-
 
     assert_eq!(prod1.push_slice(&[6, 7, 8]), Ok(3));
     assert_eq!(prod0.push_slice(&[9, 10]), Ok(2));
@@ -732,7 +788,6 @@ fn write_into() {
     assert_eq!(cons1.pop_slice(&mut tmp), Ok(3));
     assert_eq!(tmp[0..3], [0, 1, 2]);
 
-
     assert_eq!(prod0.push_slice(&[3, 4, 5]), Ok(3));
 
     match cons0.write_into(&mut prod1, None) {
@@ -749,7 +804,6 @@ fn write_into() {
     assert_eq!(cons1.pop_slice(&mut tmp), Ok(1));
     assert_eq!(tmp[0..1], [5]);
 
-
     assert_eq!(prod1.push_slice(&[6, 7, 8]), Ok(3));
     assert_eq!(prod0.push_slice(&[9, 10]), Ok(2));
 
@@ -760,7 +814,7 @@ fn write_into() {
     match cons0.write_into(&mut prod1, None) {
         Err(WriteIntoError::Write(e)) => {
             assert_eq!(e.kind(), io::ErrorKind::WouldBlock);
-        },
+        }
         other => panic!("{:?}", other),
     }
 
@@ -790,7 +844,6 @@ fn read_from_write_into_count() {
 
     assert_eq!(cons1.pop_slice(&mut tmp), Ok(4));
     assert_eq!(tmp[0..4], [0, 1, 2, 3]);
-
 
     assert_eq!(prod0.push_slice(&[4, 5, 6, 7]), Ok(4));
 
@@ -822,7 +875,7 @@ fn push_pop_access_message() {
         let zero = [0 as u8];
         let mut bytes = smsg.as_bytes().chain(&zero[..]);
         loop {
-            let push_fn = |left: &mut [u8], right: &mut [u8]| -> Result<(usize, ()),()> {
+            let push_fn = |left: &mut [u8], right: &mut [u8]| -> Result<(usize, ()), ()> {
                 let n = bytes.read(left).unwrap();
                 let m = if n == left.len() {
                     bytes.read(right).unwrap()
@@ -833,13 +886,17 @@ fn push_pop_access_message() {
             };
             match unsafe { prod.push_access(push_fn) } {
                 Ok(res) => match res {
-                    Ok((n, ())) => if n == 0 { break; },
+                    Ok((n, ())) => {
+                        if n == 0 {
+                            break;
+                        }
+                    }
                     Err(()) => unreachable!(),
                 },
                 Err(e) => match e {
                     PushAccessError::Full => thread::sleep(Duration::from_millis(1)),
                     PushAccessError::BadLen => unreachable!(),
-                }
+                },
             }
         }
     });
@@ -847,7 +904,7 @@ fn push_pop_access_message() {
     let cjh = thread::spawn(move || {
         let mut bytes = Vec::<u8>::new();
         loop {
-            let pop_fn = |left: &mut [u8], right: &mut [u8]| -> Result<(usize, ()),()> {
+            let pop_fn = |left: &mut [u8], right: &mut [u8]| -> Result<(usize, ()), ()> {
                 let n = bytes.write(left).unwrap();
                 let m = if n == left.len() {
                     bytes.write(right).unwrap()
@@ -868,9 +925,9 @@ fn push_pop_access_message() {
                         } else {
                             thread::sleep(Duration::from_millis(1));
                         }
-                    },
+                    }
                     PopAccessError::BadLen => unreachable!(),
-                }
+                },
             }
         }
 
@@ -945,14 +1002,18 @@ fn read_from_write_into_message() {
         let mut bytes = smsg.as_bytes().chain(&zero[..]);
         loop {
             match prod.read_from(&mut bytes, None) {
-                Ok(n) => if n == 0 { break; },
+                Ok(n) => {
+                    if n == 0 {
+                        break;
+                    }
+                }
                 Err(err) => {
                     if let ReadFromError::RbFull = err {
                         thread::sleep(Duration::from_millis(1));
                     } else {
                         unreachable!();
                     }
-                },
+                }
             }
         }
     });
@@ -972,7 +1033,7 @@ fn read_from_write_into_message() {
                     } else {
                         unreachable!();
                     }
-                },
+                }
             }
         }
 
@@ -1001,7 +1062,7 @@ fn read_write_message() {
                 Err(err) => {
                     assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
                     thread::sleep(Duration::from_millis(1));
-                },
+                }
             }
         }
         loop {
@@ -1025,7 +1086,7 @@ fn read_write_message() {
                     } else {
                         thread::sleep(Duration::from_millis(1));
                     }
-                },
+                }
             }
         }
 
