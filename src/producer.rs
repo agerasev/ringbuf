@@ -14,26 +14,36 @@ pub struct Producer<T> {
 
 impl<T: Sized> Producer<T> {
     /// Returns capacity of the ring buffer.
+    ///
+    /// The capacity of the buffer is constant.
     pub fn capacity(&self) -> usize {
         self.rb.capacity()
     }
 
     /// Checks if the ring buffer is empty.
+    ///
+    /// The result is relevant until you push items to the producer.
     pub fn is_empty(&self) -> bool {
         self.rb.is_empty()
     }
 
     /// Checks if the ring buffer is full.
+    ///
+    /// *The result may become irrelevant at any time because of concurring activity of the consumer.*
     pub fn is_full(&self) -> bool {
         self.rb.is_full()
     }
 
-    /// The length of the data in the buffer.
+    /// The length of the data stored in the buffer.
+    ///
+    /// Actual length may be equal to or less than the returned value.
     pub fn len(&self) -> usize {
         self.rb.len()
     }
 
     /// The remaining space in the buffer.
+    ///
+    /// Actual remaining space may be equal to or greater than the returning value.
     pub fn remaining(&self) -> usize {
         self.rb.remaining()
     }
@@ -47,9 +57,9 @@ impl<T: Sized> Producer<T> {
     /// First slice contains older elements.
     ///
     /// `f` should return number of elements been written.
-    /// There is no checks for returned number - it remains on the developer's conscience.
+    /// *There is no checks for returned number - it remains on the developer's conscience.*
     ///
-    /// The method *always* calls `f` even if ring buffer is full.
+    /// The method **always** calls `f` even if ring buffer is full.
     ///
     /// The method returns number returned from `f`.
     pub unsafe fn push_access<F>(&mut self, f: F) -> usize
@@ -92,6 +102,12 @@ impl<T: Sized> Producer<T> {
         n
     }
 
+    /// Copies data from the slice to the ring buffer in byte-to-byte manner.
+    ///
+    /// The `elems` slice should contain **initialized** data before the method call.
+    /// After the call the copied part of data in `elems` should be interpreted as **un-initialized**.
+    ///
+    /// Returns the number of items been copied.
     pub unsafe fn push_copy(&mut self, elems: &[MaybeUninit<T>]) -> usize {
         self.push_access(|left, right| -> usize {
             if elems.len() < left.len() {
@@ -139,6 +155,11 @@ impl<T: Sized> Producer<T> {
         }
     }
 
+    /// Repeatedly calls the closure `f` and pushes elements returned from it to the ring buffer.
+    ///
+    /// The closure is called until it returns `None` or the ring buffer is full.
+    ///
+    /// The method returns number of elements been put into the buffer.
     pub fn push_each<F: FnMut() -> Option<T>>(&mut self, mut f: F) -> usize {
         unsafe {
             self.push_access(|left, right| {
@@ -167,9 +188,9 @@ impl<T: Sized> Producer<T> {
         self.push_each(|| elems.next())
     }
 
-    /// Removes at most `count` elements from the `Consumer` of the ring buffer
-    /// and appends them to the `Producer` of the another one.
+    /// Removes at most `count` elements from the consumer and appends them to the producer.
     /// If `count` is `None` then as much as possible elements will be moved.
+    /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns number of elements been moved.
     pub fn move_from(&mut self, other: &mut Consumer<T>, count: Option<usize>) -> usize {
@@ -192,6 +213,11 @@ impl Producer<u8> {
     /// from [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) instance
     /// and appends them to the ring buffer.
     /// If `count` is `None` then as much as possible bytes will be read.
+    ///
+    /// Returns `Ok(n)` if `read` is succeded. `n` is number of bytes been read.
+    /// `n == 0` means that either `read` returned zero or ring buffer is full.
+    ///
+    /// If `read` is failed then error is returned.
     pub fn read_from(&mut self, reader: &mut dyn Read, count: Option<usize>) -> io::Result<usize> {
         let mut err = None;
         let n = unsafe {

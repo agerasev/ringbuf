@@ -138,6 +138,12 @@ impl<T> SlicePtr<T> {
     }
 }
 
+/// Moves at most `count` items from the `src` consumer to the `dst` producer.
+/// Consumer and producer may be of different buffers as well as of the same one.
+///
+/// `count` is the number of items being moved, if `None` - as much as possible items will be moved.
+///
+/// Returns number of items been moved.
 pub fn move_items<T>(src: &mut Consumer<T>, dst: &mut Producer<T>, count: Option<usize>) -> usize {
     unsafe {
         src.pop_access(|src_left, src_right| -> usize {

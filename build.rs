@@ -1,6 +1,9 @@
+#[cfg(feature = "benchmark")]
 extern crate rustc_version;
+#[cfg(feature = "benchmark")]
 use rustc_version::{version, version_meta, Channel};
 
+#[cfg(feature = "benchmark")]
 fn main() {
     // Assert we haven't travelled back in time
     assert!(version().unwrap().major >= 1);
@@ -21,3 +24,6 @@ fn main() {
         }
     }
 }
+
+#[cfg(not(feature = "benchmark"))]
+fn main() {}

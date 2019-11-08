@@ -17,8 +17,9 @@ build = "build.rs"
 
 [features]
 default = []
+benchmark = ["rustc_version"]
 
 [dependencies]
 
 [build-dependencies]
-rustc_version = "0.2"
+rustc_version = { version = "0.2", optional = true }

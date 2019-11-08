@@ -46,11 +46,12 @@
 //!
 //! ```rust
 //! # extern crate ringbuf;
-//! use std::io::{Read};
+//! use std::io::Read;
 //! use std::thread;
-//! use std::time::{Duration};
+//! use std::time::Duration;
 //!
-//! use ringbuf::{RingBuffer};
+//! use ringbuf::RingBuffer;
+//!
 //! # fn main() {
 //! let buf = RingBuffer::<u8>::new(10);
 //! let (mut prod, mut cons) = buf.split();
@@ -111,18 +112,16 @@
 //! ```
 //!
 
-//#![cfg_attr(rustc_nightly, feature(test))]
+#![cfg_attr(all(benchmark, rustc_nightly), feature(test))]
 
-//#[cfg(test)]
-//#[cfg(rustc_nightly)]
-//extern crate test;
+#[cfg(all(test, benchmark, rustc_nightly))]
+extern crate test;
+
+#[cfg(all(test, benchmark, rustc_nightly))]
+mod benchmark;
 
 #[cfg(test)]
 mod test;
-
-//#[cfg(test)]
-//#[cfg(rustc_nightly)]
-//mod benchmarks;
 
 mod consumer;
 mod producer;

@@ -15,26 +15,36 @@ pub struct Consumer<T> {
 
 impl<T: Sized> Consumer<T> {
     /// Returns capacity of the ring buffer.
+    ///
+    /// The capacity of the buffer is constant.
     pub fn capacity(&self) -> usize {
         self.rb.capacity()
     }
 
     /// Checks if the ring buffer is empty.
+    ///
+    /// *The result may become irrelevant at any time because of concurring activity of the producer.*
     pub fn is_empty(&self) -> bool {
         self.rb.is_empty()
     }
 
     /// Checks if the ring buffer is full.
+    ///
+    /// The result is relevant until you remove items from the consumer.
     pub fn is_full(&self) -> bool {
         self.rb.is_full()
     }
 
-    /// The length of the data in the buffer
+    /// The length of the data stored in the buffer
+    ///
+    /// Actual length may be equal to or greater than the returned value.
     pub fn len(&self) -> usize {
         self.rb.len()
     }
 
     /// The remaining space in the buffer.
+    ///
+    /// Actual remaining space may be equal to or less than the returning value.
     pub fn remaining(&self) -> usize {
         self.rb.remaining()
     }
@@ -48,9 +58,9 @@ impl<T: Sized> Consumer<T> {
     /// First slice contains older elements.
     ///
     /// `f` should return number of elements been read.
-    /// There is no checks for returned number - it remains on the developer's conscience.
+    /// *There is no checks for returned number - it remains on the developer's conscience.*
     ///
-    /// The method *always* calls `f` even if ring buffer is empty.
+    /// The method **always** calls `f` even if ring buffer is empty.
     ///
     /// The method returns number returned from `f`.
     pub unsafe fn pop_access<F>(&mut self, f: F) -> usize
@@ -83,6 +93,13 @@ impl<T: Sized> Consumer<T> {
         n
     }
 
+    /// Copies data from the ring buffer to the slice in byte-to-byte manner.
+    ///
+    /// The `elems` slice should contain **un-initialized** data before the method call.
+    /// After the call the copied part of data in `elems` should be interpreted as **initialized**.
+    /// The remaining part is still **un-iniitilized**.
+    ///
+    /// Returns the number of items been copied.
     pub unsafe fn pop_copy(&mut self, elems: &mut [MaybeUninit<T>]) -> usize {
         self.pop_access(|left, right| {
             if elems.len() < left.len() {
@@ -109,7 +126,8 @@ impl<T: Sized> Consumer<T> {
         })
     }
 
-    /// Removes first element from the ring buffer and returns it.
+    /// Removes latest element from the ring buffer and returns it.
+    /// Returns `None` if the ring buffer is empty.
     pub fn pop(&mut self) -> Option<T> {
         let mut elem_mu = MaybeUninit::uninit();
         let n = unsafe {
@@ -129,6 +147,11 @@ impl<T: Sized> Consumer<T> {
         }
     }
 
+    /// Repeatedly calls the closure `f` passing elements removed from the ring buffer to it.
+    ///
+    /// The closure is called until it returns `false` or the ring buffer is empty.
+    ///
+    /// The method returns number of elements been removed from the buffer.
     pub fn pop_each<F: FnMut(T) -> bool>(&mut self, mut f: F, count: Option<usize>) -> usize {
         unsafe {
             self.pop_access(|left, right| {
@@ -159,7 +182,9 @@ impl<T: Sized> Consumer<T> {
         }
     }
 
-    /// Iterate immutably over the elements contained by the ring buffer without popping them.
+    /// Iterate immutably over the elements contained by the ring buffer without removing them.
+    ///
+    /// *The iteration may not include elements pushed to the buffer by concurring producer after the method call.*
     pub fn for_each<F: FnMut(&T)>(&self, mut f: F) {
         unsafe {
             let head = self.rb.head.load(Ordering::Acquire);
@@ -186,7 +211,9 @@ impl<T: Sized> Consumer<T> {
         }
     }
 
-    /// Iterate mutably over the elements contained by the ring buffer without popping them.
+    /// Iterate mutably over the elements contained by the ring buffer without removing them.
+    ///
+    /// *The iteration may not include elements pushed to the buffer by concurring producer after the method call.*
     pub fn for_each_mut<F: FnMut(&mut T)>(&mut self, mut f: F) {
         unsafe {
             self.pop_access(|left, right| {
@@ -201,11 +228,9 @@ impl<T: Sized> Consumer<T> {
         }
     }
 
-    /// Removes at most `count` elements from the `Consumer` of the ring buffer
-    /// and appends them to the `Producer` of the another one.
+    /// Removes at most `count` elements from the consumer and appends them to the producer.
     /// If `count` is `None` then as much as possible elements will be moved.
-    ///
-    /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
+    /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns count of elements been moved.
     pub fn move_to(&mut self, other: &mut Producer<T>, count: Option<usize>) -> usize {
@@ -227,6 +252,11 @@ impl Consumer<u8> {
     /// Removes at most first `count` bytes from the ring buffer and writes them into
     /// a [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) instance.
     /// If `count` is `None` then as much as possible bytes will be written.
+    ///
+    /// Returns `Ok(n)` if `write` is succeded. `n` is number of bytes been written.
+    /// `n == 0` means that either `write` returned zero or ring buffer is empty.
+    ///
+    /// If `write` is failed then error is returned.
     pub fn write_into(
         &mut self,
         writer: &mut dyn Write,
