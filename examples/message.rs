@@ -1,18 +1,17 @@
 extern crate ringbuf;
 
-use std::io::{Read};
+use std::io::Read;
 use std::thread;
-use std::time::{Duration};
+use std::time::Duration;
 
-use ringbuf::{RingBuffer};
-
+use ringbuf::RingBuffer;
 
 fn main() {
     let rb = RingBuffer::<u8>::new(10);
     let (mut prod, mut cons) = rb.split();
 
     let smsg = "The quick brown fox jumps over the lazy dog";
-    
+
     let pjh = thread::spawn(move || {
         println!("-> sending message: '{}'", smsg);
 
@@ -25,11 +24,11 @@ fn main() {
                         break;
                     }
                     println!("-> {} bytes sent", n);
-                },
+                }
                 Err(_) => {
                     println!("-> buffer is full, waiting");
                     thread::sleep(Duration::from_millis(1));
-                },
+                }
             }
         }
 
@@ -50,7 +49,7 @@ fn main() {
                         println!("<- buffer is empty, waiting");
                         thread::sleep(Duration::from_millis(1));
                     }
-                },
+                }
             }
         }
 
