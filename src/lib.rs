@@ -222,6 +222,8 @@ impl<T: Sized> SharedVec<T> {
     unsafe fn get_ref(&self) -> &Vec<T> {
         self.cell.get().as_ref().unwrap()
     }
+
+    #[allow(clippy::mut_from_ref)]
     unsafe fn get_mut(&self) -> &mut Vec<T> {
         self.cell.get().as_mut().unwrap()
     }
