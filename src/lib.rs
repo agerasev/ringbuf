@@ -113,7 +113,6 @@
 //! ```
 //!
 
-
 #![cfg_attr(rustc_nightly, feature(test))]
 
 #[cfg(test)]
@@ -127,12 +126,13 @@ mod tests;
 #[cfg(rustc_nightly)]
 mod benchmarks;
 
-
-use std::mem;
-use std::cell::{UnsafeCell};
-use std::sync::{Arc, atomic::{Ordering, AtomicUsize}};
+use std::cell::UnsafeCell;
 use std::io::{self, Read, Write};
-
+use std::mem;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 
 #[derive(Debug, PartialEq, Eq)]
 /// `Producer::push` error.
@@ -215,7 +215,9 @@ unsafe impl<T: Sized> Sync for SharedVec<T> {}
 
 impl<T: Sized> SharedVec<T> {
     fn new(data: Vec<T>) -> Self {
-        Self { cell: UnsafeCell::new(data) }
+        Self {
+            cell: UnsafeCell::new(data),
+        }
     }
     unsafe fn get_ref(&self) -> &Vec<T> {
         self.cell.get().as_ref().unwrap()
@@ -247,7 +249,9 @@ impl<T: Sized> RingBuffer<T> {
     pub fn new(capacity: usize) -> Self {
         let vec_cap = capacity + 1;
         let mut data = Vec::with_capacity(vec_cap);
-        unsafe { data.set_len(vec_cap); }
+        unsafe {
+            data.set_len(vec_cap);
+        }
         Self {
             data: SharedVec::new(data),
             head: AtomicUsize::new(0),
@@ -258,10 +262,7 @@ impl<T: Sized> RingBuffer<T> {
     /// Splits ring buffer into producer and consumer.
     pub fn split(self) -> (Producer<T>, Consumer<T>) {
         let arc = Arc::new(self);
-        (
-            Producer { rb: arc.clone() },
-            Consumer { rb: arc },
-        )
+        (Producer { rb: arc.clone() }, Consumer { rb: arc })
     }
 
     /// Returns capacity of the ring buffer.
@@ -320,7 +321,9 @@ impl<T: Sized> Drop for RingBuffer<T> {
             drop(elem);
         }
 
-        unsafe { data.set_len(0); }
+        unsafe {
+            data.set_len(0);
+        }
     }
 }
 
@@ -354,21 +357,23 @@ impl<T: Sized> Producer<T> {
     /// On failure returns an error containing the element that hasn't beed appended.
     pub fn push(&mut self, elem: T) -> Result<(), PushError<T>> {
         let mut elem_opt = Some(elem);
-        match unsafe { self.push_access(|slice, _| {
-            mem::forget(mem::replace(&mut slice[0], elem_opt.take().unwrap()));
-            Ok((1, ()))
-        }) } {
+        match unsafe {
+            self.push_access(|slice, _| {
+                mem::forget(mem::replace(&mut slice[0], elem_opt.take().unwrap()));
+                Ok((1, ()))
+            })
+        } {
             Ok(res) => match res {
                 Ok((n, ())) => {
                     debug_assert_eq!(n, 1);
                     Ok(())
-                },
+                }
                 Err(()) => unreachable!(),
             },
             Err(e) => match e {
                 PushAccessError::Full => Err(PushError::Full(elem_opt.unwrap())),
                 PushAccessError::BadLen => unreachable!(),
-            }
+            },
         }
     }
 }
@@ -380,32 +385,33 @@ impl<T: Sized + Copy> Producer<T> {
     /// On success returns count of elements been appended to the ring buffer.
     pub fn push_slice(&mut self, elems: &[T]) -> Result<usize, PushSliceError> {
         let push_fn = |left: &mut [T], right: &mut [T]| {
-            Ok((if elems.len() < left.len() {
-                left[0..elems.len()].copy_from_slice(elems);
-                elems.len()
-            } else {
-                left.copy_from_slice(&elems[0..left.len()]);
-                if elems.len() < left.len() + right.len() {
-                    right[0..(elems.len() - left.len())]
-                        .copy_from_slice(&elems[left.len()..elems.len()]);
+            Ok((
+                if elems.len() < left.len() {
+                    left[0..elems.len()].copy_from_slice(elems);
                     elems.len()
                 } else {
-                    right.copy_from_slice(&elems[left.len()..(left.len() + right.len())]);
-                    left.len() + right.len()
-                }
-            }, ()))
+                    left.copy_from_slice(&elems[0..left.len()]);
+                    if elems.len() < left.len() + right.len() {
+                        right[0..(elems.len() - left.len())]
+                            .copy_from_slice(&elems[left.len()..elems.len()]);
+                        elems.len()
+                    } else {
+                        right.copy_from_slice(&elems[left.len()..(left.len() + right.len())]);
+                        left.len() + right.len()
+                    }
+                },
+                (),
+            ))
         };
         match unsafe { self.push_access(push_fn) } {
             Ok(res) => match res {
-                Ok((n, ())) => {
-                    Ok(n)
-                },
+                Ok((n, ())) => Ok(n),
                 Err(()) => unreachable!(),
             },
             Err(e) => match e {
                 PushAccessError::Full => Err(PushSliceError::Full),
                 PushAccessError::BadLen => unreachable!(),
-            }
+            },
         }
     }
 
@@ -416,10 +422,12 @@ impl<T: Sized + Copy> Producer<T> {
     /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
     ///
     /// On success returns count of elements been moved.
-    pub fn move_slice(&mut self, other: &mut Consumer<T>, count: Option<usize>)
-    -> Result<usize, MoveSliceError> {
-        let move_fn = |left: &mut [T], right: &mut [T]|
-        -> Result<(usize, ()), PopSliceError> {
+    pub fn move_slice(
+        &mut self,
+        other: &mut Consumer<T>,
+        count: Option<usize>,
+    ) -> Result<usize, MoveSliceError> {
+        let move_fn = |left: &mut [T], right: &mut [T]| -> Result<(usize, ()), PopSliceError> {
             let (left, right) = match count {
                 Some(c) => {
                     if c < left.len() {
@@ -430,18 +438,17 @@ impl<T: Sized + Copy> Producer<T> {
                     } else {
                         (left, right)
                     }
-                },
-                None => (left, right)
+                }
+                None => (left, right),
             };
             other.pop_slice(left).and_then(|n| {
                 if n == left.len() {
-                    other.pop_slice(right).and_then(|m| {
-                        Ok((n + m, ()))
-                    }).or_else(|e| {
-                        match e {
+                    other
+                        .pop_slice(right)
+                        .and_then(|m| Ok((n + m, ())))
+                        .or_else(|e| match e {
                             PopSliceError::Empty => Ok((n, ())),
-                        }
-                    })
+                        })
                 } else {
                     debug_assert!(n < left.len());
                     Ok((n, ()))
@@ -458,7 +465,7 @@ impl<T: Sized + Copy> Producer<T> {
             Err(e) => match e {
                 PushAccessError::Full => Err(MoveSliceError::Full),
                 PushAccessError::BadLen => unreachable!(),
-            }
+            },
         }
     }
 }
@@ -468,10 +475,12 @@ impl Producer<u8> {
     /// from [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) instance
     /// and appends them to the ring buffer.
     /// If `count` is `None` then as much as possible bytes will be read.
-    pub fn read_from(&mut self, reader: &mut dyn Read, count: Option<usize>)
-    -> Result<usize, ReadFromError> {
-        let push_fn = |left: &mut [u8], _right: &mut [u8]|
-        -> Result<(usize, ()), io::Error> {
+    pub fn read_from(
+        &mut self,
+        reader: &mut dyn Read,
+        count: Option<usize>,
+    ) -> Result<usize, ReadFromError> {
+        let push_fn = |left: &mut [u8], _right: &mut [u8]| -> Result<(usize, ()), io::Error> {
             let left = match count {
                 Some(c) => {
                     if c < left.len() {
@@ -479,7 +488,7 @@ impl Producer<u8> {
                     } else {
                         left
                     }
-                },
+                }
                 None => left,
             };
             reader.read(left).and_then(|n| {
@@ -501,7 +510,7 @@ impl Producer<u8> {
             Err(e) => match e {
                 PushAccessError::Full => Err(ReadFromError::RbFull),
                 PushAccessError::BadLen => unreachable!(),
-            }
+            },
         }
     }
 }
@@ -512,7 +521,7 @@ impl Write for Producer<u8> {
             PushSliceError::Full => Err(io::Error::new(
                 io::ErrorKind::WouldBlock,
                 "Ring buffer is full",
-            ))
+            )),
         })
     }
 
@@ -535,8 +544,15 @@ impl<T: Sized> Producer<T> {
     /// + On failure: some another arbitrary data.
     ///
     /// On success returns data returned from `f`.
-    pub unsafe fn push_access<R, E, F>(&mut self, f: F) -> Result<Result<(usize, R), E>, PushAccessError>
-    where R: Sized, E: Sized, F: FnOnce(&mut [T], &mut [T]) -> Result<(usize, R), E> {
+    pub unsafe fn push_access<R, E, F>(
+        &mut self,
+        f: F,
+    ) -> Result<Result<(usize, R), E>, PushAccessError>
+    where
+        R: Sized,
+        E: Sized,
+        F: FnOnce(&mut [T], &mut [T]) -> Result<(usize, R), E>,
+    {
         let head = self.rb.head.load(Ordering::Acquire);
         let tail = self.rb.tail.load(Ordering::Acquire);
         let len = self.rb.data.get_ref().len();
@@ -573,10 +589,8 @@ impl<T: Sized> Producer<T> {
                     self.rb.tail.store(new_tail, Ordering::Release);
                     Ok(Ok((n, r)))
                 }
-            },
-            Err(e) => {
-                Ok(Err(e))
             }
+            Err(e) => Ok(Err(e)),
         }
     }
 }
@@ -656,32 +670,33 @@ impl<T: Sized + Copy> Consumer<T> {
     pub fn pop_slice(&mut self, elems: &mut [T]) -> Result<usize, PopSliceError> {
         let pop_fn = |left: &mut [T], right: &mut [T]| {
             let elems_len = elems.len();
-            Ok((if elems_len < left.len() {
-                elems.copy_from_slice(&left[0..elems_len]);
-                elems_len
-            } else {
-                elems[0..left.len()].copy_from_slice(left);
-                if elems_len < left.len() + right.len() {
-                    elems[left.len()..elems_len]
-                        .copy_from_slice(&right[0..(elems_len - left.len())]);
+            Ok((
+                if elems_len < left.len() {
+                    elems.copy_from_slice(&left[0..elems_len]);
                     elems_len
                 } else {
-                    elems[left.len()..(left.len() + right.len())].copy_from_slice(right);
-                    left.len() + right.len()
-                }
-            }, ()))
+                    elems[0..left.len()].copy_from_slice(left);
+                    if elems_len < left.len() + right.len() {
+                        elems[left.len()..elems_len]
+                            .copy_from_slice(&right[0..(elems_len - left.len())]);
+                        elems_len
+                    } else {
+                        elems[left.len()..(left.len() + right.len())].copy_from_slice(right);
+                        left.len() + right.len()
+                    }
+                },
+                (),
+            ))
         };
         match unsafe { self.pop_access(pop_fn) } {
             Ok(res) => match res {
-                Ok((n, ())) => {
-                    Ok(n)
-                },
+                Ok((n, ())) => Ok(n),
                 Err(()) => unreachable!(),
             },
             Err(e) => match e {
                 PopAccessError::Empty => Err(PopSliceError::Empty),
                 PopAccessError::BadLen => unreachable!(),
-            }
+            },
         }
     }
 
@@ -692,8 +707,11 @@ impl<T: Sized + Copy> Consumer<T> {
     /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
     ///
     /// On success returns count of elements been moved.
-    pub fn move_slice(&mut self, other: &mut Producer<T>, count: Option<usize>)
-    -> Result<usize, MoveSliceError> {
+    pub fn move_slice(
+        &mut self,
+        other: &mut Producer<T>,
+        count: Option<usize>,
+    ) -> Result<usize, MoveSliceError> {
         other.move_slice(self, count)
     }
 }
@@ -702,10 +720,12 @@ impl Consumer<u8> {
     /// Removes at most first `count` bytes from the ring buffer and writes them into
     /// a [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) instance.
     /// If `count` is `None` then as much as possible bytes will be written.
-    pub fn write_into(&mut self, writer: &mut dyn Write, count: Option<usize>)
-    -> Result<usize, WriteIntoError> {
-        let pop_fn = |left: &mut [u8], _right: &mut [u8]|
-        -> Result<(usize, ()), io::Error> {
+    pub fn write_into(
+        &mut self,
+        writer: &mut dyn Write,
+        count: Option<usize>,
+    ) -> Result<usize, WriteIntoError> {
+        let pop_fn = |left: &mut [u8], _right: &mut [u8]| -> Result<(usize, ()), io::Error> {
             let left = match count {
                 Some(c) => {
                     if c < left.len() {
@@ -713,7 +733,7 @@ impl Consumer<u8> {
                     } else {
                         left
                     }
-                },
+                }
                 None => left,
             };
             writer.write(left).and_then(|n| {
@@ -735,7 +755,7 @@ impl Consumer<u8> {
             Err(e) => match e {
                 PopAccessError::Empty => Err(WriteIntoError::RbEmpty),
                 PopAccessError::BadLen => unreachable!(),
-            }
+            },
         }
     }
 }
@@ -746,7 +766,7 @@ impl Read for Consumer<u8> {
             PopSliceError::Empty => Err(io::Error::new(
                 io::ErrorKind::WouldBlock,
                 "Ring buffer is empty",
-            ))
+            )),
         })
     }
 }
@@ -765,8 +785,15 @@ impl<T: Sized> Consumer<T> {
     /// + On failure: some another arbitrary data.
     ///
     /// On success returns data returned from `f`.
-    pub unsafe fn pop_access<R, E, F>(&mut self, f: F) -> Result<Result<(usize, R), E>, PopAccessError>
-    where R: Sized, E: Sized, F: FnOnce(&mut [T], &mut [T]) -> Result<(usize, R), E> {
+    pub unsafe fn pop_access<R, E, F>(
+        &mut self,
+        f: F,
+    ) -> Result<Result<(usize, R), E>, PopAccessError>
+    where
+        R: Sized,
+        E: Sized,
+        F: FnOnce(&mut [T], &mut [T]) -> Result<(usize, R), E>,
+    {
         let head = self.rb.head.load(Ordering::Acquire);
         let tail = self.rb.tail.load(Ordering::Acquire);
         let len = self.rb.data.get_ref().len();
@@ -793,10 +820,8 @@ impl<T: Sized> Consumer<T> {
                     self.rb.head.store(new_head, Ordering::Release);
                     Ok(Ok((n, r)))
                 }
-            },
-            Err(e) => {
-                Ok(Err(e))
             }
+            Err(e) => Ok(Err(e)),
         }
     }
 }

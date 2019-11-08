@@ -1,7 +1,6 @@
 extern crate rustc_version;
 use rustc_version::{version, version_meta, Channel};
 
-
 fn main() {
     // Assert we haven't travelled back in time
     assert!(version().unwrap().major >= 1);

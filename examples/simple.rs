@@ -1,6 +1,6 @@
 extern crate ringbuf;
 
-use ringbuf::{RingBuffer, PushError, PopError};
+use ringbuf::{PopError, PushError, RingBuffer};
 
 fn main() {
     let rb = RingBuffer::<i32>::new(2);
