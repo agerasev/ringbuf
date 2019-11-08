@@ -1,5 +1,4 @@
-use crate::{RingBuffer};
-
+use crate::RingBuffer;
 
 #[test]
 fn push_pop_slice() {
@@ -43,14 +42,12 @@ fn move_slice() {
     assert_eq!(cons1.pop_slice(&mut tmp), 3);
     assert_eq!(tmp[0..3], [0, 1, 2]);
 
-
     assert_eq!(prod0.push_slice(&[3, 4, 5]), 3);
 
     assert_eq!(prod1.move_from(&mut cons0, None), 3);
 
     assert_eq!(cons1.pop_slice(&mut tmp), 3);
     assert_eq!(tmp[0..3], [3, 4, 5]);
-
 
     assert_eq!(prod1.push_slice(&[6, 7, 8]), 3);
     assert_eq!(prod0.push_slice(&[9, 10]), 2);
@@ -82,7 +79,6 @@ fn move_slice_count() {
 
     assert_eq!(cons1.pop_slice(&mut tmp), 1);
     assert_eq!(tmp[0..1], [2]);
-
 
     assert_eq!(prod0.push_slice(&[3, 4, 5, 6]), 4);
 

@@ -1,16 +1,15 @@
 use std::{
+    cell::UnsafeCell,
+    cmp::min,
     mem::{self, MaybeUninit},
     ptr::{self, copy},
-    cell::{UnsafeCell},
-    sync::{Arc, atomic::{Ordering, AtomicUsize}},
-    cmp::min,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
 };
 
-use crate::{
-    consumer::Consumer,
-    producer::Producer,
-};
-
+use crate::{consumer::Consumer, producer::Producer};
 
 pub(crate) struct SharedVec<T: Sized> {
     cell: UnsafeCell<Vec<T>>,
@@ -20,7 +19,9 @@ unsafe impl<T: Sized> Sync for SharedVec<T> {}
 
 impl<T: Sized> SharedVec<T> {
     pub fn new(data: Vec<T>) -> Self {
-        Self { cell: UnsafeCell::new(data) }
+        Self {
+            cell: UnsafeCell::new(data),
+        }
     }
     pub unsafe fn get_ref(&self) -> &Vec<T> {
         self.cell.get().as_ref().unwrap()
@@ -37,7 +38,6 @@ pub struct RingBuffer<T: Sized> {
     pub(crate) tail: AtomicUsize,
 }
 
-
 impl<T: Sized> RingBuffer<T> {
     /// Creates a new instance of a ring buffer.
     pub fn new(capacity: usize) -> Self {
@@ -53,10 +53,7 @@ impl<T: Sized> RingBuffer<T> {
     /// Splits ring buffer into producer and consumer.
     pub fn split(self) -> (Producer<T>, Consumer<T>) {
         let arc = Arc::new(self);
-        (
-            Producer { rb: arc.clone() },
-            Consumer { rb: arc },
-        )
+        (Producer { rb: arc.clone() }, Consumer { rb: arc })
     }
 
     /// Returns capacity of the ring buffer.
@@ -105,8 +102,8 @@ impl<T: Sized> Drop for RingBuffer<T> {
             (head..len, 0..tail)
         };
 
-        let drop = |elem_ref: &mut MaybeUninit<T>| {
-            unsafe { mem::replace(elem_ref, MaybeUninit::uninit()).assume_init(); }
+        let drop = |elem_ref: &mut MaybeUninit<T>| unsafe {
+            mem::replace(elem_ref, MaybeUninit::uninit()).assume_init();
         };
         for elem in data[slices.0].iter_mut() {
             drop(elem);
@@ -124,10 +121,16 @@ struct SlicePtr<T: Sized> {
 
 impl<T> SlicePtr<T> {
     fn null() -> Self {
-        Self { ptr: ptr::null_mut(), len: 0 }
+        Self {
+            ptr: ptr::null_mut(),
+            len: 0,
+        }
     }
     fn new(slice: &mut [T]) -> Self {
-        Self { ptr: slice.as_mut_ptr(), len: slice.len() }
+        Self {
+            ptr: slice.as_mut_ptr(),
+            len: slice.len(),
+        }
     }
     unsafe fn shift(&mut self, count: usize) {
         self.ptr = self.ptr.offset(count as isize);
@@ -149,12 +152,10 @@ pub fn move_items<T>(src: &mut Consumer<T>, dst: &mut Producer<T>, count: Option
 
                 loop {
                     let k = min(n - m, min(src.0.len, dst.0.len));
-                    if k == 0 { break; }
-                    copy(
-                        src.0.ptr,
-                        dst.0.ptr,
-                        k
-                    );
+                    if k == 0 {
+                        break;
+                    }
+                    copy(src.0.ptr, dst.0.ptr, k);
                     if src.0.len == k {
                         src.0 = src.1;
                         src.1 = SlicePtr::null();

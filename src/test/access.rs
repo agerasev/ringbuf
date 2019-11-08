@@ -1,9 +1,6 @@
-use std::{
-    mem::MaybeUninit,
-};
+use std::mem::MaybeUninit;
 
-use crate::{RingBuffer};
-
+use crate::RingBuffer;
 
 #[test]
 fn push() {
@@ -48,9 +45,7 @@ fn pop_full() {
     let buf = RingBuffer::<i32>::new(cap);
     let (_, mut cons) = buf.split();
 
-    let dummy_fn = |_l: &mut [MaybeUninit<i32>], _r: &mut [MaybeUninit<i32>]| -> usize {
-        0
-    };
+    let dummy_fn = |_l: &mut [MaybeUninit<i32>], _r: &mut [MaybeUninit<i32>]| -> usize { 0 };
     assert_eq!(unsafe { cons.pop_access(dummy_fn) }, 0);
 }
 
@@ -60,9 +55,7 @@ fn pop_empty() {
     let buf = RingBuffer::<i32>::new(cap);
     let (_, mut cons) = buf.split();
 
-    let dummy_fn = |_l: &mut [MaybeUninit<i32>], _r: &mut [MaybeUninit<i32>]| -> usize {
-        0
-    };
+    let dummy_fn = |_l: &mut [MaybeUninit<i32>], _r: &mut [MaybeUninit<i32>]| -> usize { 0 };
     assert_eq!(unsafe { cons.pop_access(dummy_fn) }, 0);
 }
 
@@ -72,23 +65,23 @@ fn pop() {
     let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
 
-
     let vs_20 = (123, 456);
 
     assert_eq!(prod.push(vs_20.0), Ok(()));
     assert_eq!(prod.push(vs_20.1), Ok(()));
     assert_eq!(prod.push(0), Err(0));
 
-    let pop_fn_20 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize { unsafe {
-        assert_eq!(left.len(), 2);
-        assert_eq!(right.len(), 0);
-        assert_eq!(left[0].assume_init(), vs_20.0);
-        assert_eq!(left[1].assume_init(), vs_20.1);
-        2
-    }};
+    let pop_fn_20 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize {
+        unsafe {
+            assert_eq!(left.len(), 2);
+            assert_eq!(right.len(), 0);
+            assert_eq!(left[0].assume_init(), vs_20.0);
+            assert_eq!(left[1].assume_init(), vs_20.1);
+            2
+        }
+    };
 
     assert_eq!(unsafe { cons.pop_access(pop_fn_20) }, 2);
-
 
     let vs_11 = (123, 456);
 
@@ -96,16 +89,17 @@ fn pop() {
     assert_eq!(prod.push(vs_11.1), Ok(()));
     assert_eq!(prod.push(0), Err(0));
 
-    let pop_fn_11 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize { unsafe {
-        assert_eq!(left.len(), 1);
-        assert_eq!(right.len(), 1);
-        assert_eq!(left[0].assume_init(), vs_11.0);
-        assert_eq!(right[0].assume_init(), vs_11.1);
-        2
-    }};
+    let pop_fn_11 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize {
+        unsafe {
+            assert_eq!(left.len(), 1);
+            assert_eq!(right.len(), 1);
+            assert_eq!(left[0].assume_init(), vs_11.0);
+            assert_eq!(right[0].assume_init(), vs_11.1);
+            2
+        }
+    };
 
     assert_eq!(unsafe { cons.pop_access(pop_fn_11) }, 2);
-
 }
 
 #[test]
@@ -163,21 +157,25 @@ fn pop_return() {
 
     assert_eq!(unsafe { cons.pop_access(pop_fn_0) }, 0);
 
-    let pop_fn_1 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize { unsafe {
-        assert_eq!(left.len(), 2);
-        assert_eq!(right.len(), 0);
-        assert_eq!(left[0].assume_init(), 12);
-        1
-    }};
+    let pop_fn_1 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize {
+        unsafe {
+            assert_eq!(left.len(), 2);
+            assert_eq!(right.len(), 0);
+            assert_eq!(left[0].assume_init(), 12);
+            1
+        }
+    };
 
     assert_eq!(unsafe { cons.pop_access(pop_fn_1) }, 1);
 
-    let pop_fn_2 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize { unsafe {
-        assert_eq!(left.len(), 1);
-        assert_eq!(right.len(), 0);
-        assert_eq!(left[0].assume_init(), 34);
-        1
-    }};
+    let pop_fn_2 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize {
+        unsafe {
+            assert_eq!(left.len(), 1);
+            assert_eq!(right.len(), 0);
+            assert_eq!(left[0].assume_init(), 34);
+            1
+        }
+    };
 
     assert_eq!(unsafe { cons.pop_access(pop_fn_2) }, 1);
 }
@@ -199,16 +197,17 @@ fn push_pop() {
 
     assert_eq!(unsafe { prod.push_access(push_fn_20) }, 2);
 
-    let pop_fn_20 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize { unsafe {
-        assert_eq!(left.len(), 2);
-        assert_eq!(right.len(), 0);
-        assert_eq!(left[0].assume_init(), vs_20.0);
-        assert_eq!(left[1].assume_init(), vs_20.1);
-        2
-    }};
+    let pop_fn_20 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize {
+        unsafe {
+            assert_eq!(left.len(), 2);
+            assert_eq!(right.len(), 0);
+            assert_eq!(left[0].assume_init(), vs_20.0);
+            assert_eq!(left[1].assume_init(), vs_20.1);
+            2
+        }
+    };
 
     assert_eq!(unsafe { cons.pop_access(pop_fn_20) }, 2);
-
 
     let vs_11 = (123, 456);
     let push_fn_11 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize {
@@ -221,13 +220,15 @@ fn push_pop() {
 
     assert_eq!(unsafe { prod.push_access(push_fn_11) }, 2);
 
-    let pop_fn_11 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize { unsafe {
-        assert_eq!(left.len(), 1);
-        assert_eq!(right.len(), 1);
-        assert_eq!(left[0].assume_init(), vs_11.0);
-        assert_eq!(right[0].assume_init(), vs_11.1);
-        2
-    }};
+    let pop_fn_11 = |left: &mut [MaybeUninit<i32>], right: &mut [MaybeUninit<i32>]| -> usize {
+        unsafe {
+            assert_eq!(left.len(), 1);
+            assert_eq!(right.len(), 1);
+            assert_eq!(left[0].assume_init(), vs_11.0);
+            assert_eq!(right[0].assume_init(), vs_11.1);
+            2
+        }
+    };
 
     assert_eq!(unsafe { cons.pop_access(pop_fn_11) }, 2);
 }

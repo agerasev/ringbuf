@@ -1,16 +1,12 @@
 use std::{
+    cmp::min,
+    io::{self, Read, Write},
     mem::{self, transmute, MaybeUninit},
-    ptr::{copy_nonoverlapping},
-    sync::{Arc, atomic::{Ordering}},
-    cmp::{min},
-    io::{self, Read, Write}
+    ptr::copy_nonoverlapping,
+    sync::{atomic::Ordering, Arc},
 };
 
-use crate::{
-    ring_buffer::*,
-    producer::Producer,
-};
-
+use crate::{producer::Producer, ring_buffer::*};
 
 /// Consumer part of ring buffer.
 pub struct Consumer<T> {
@@ -57,7 +53,10 @@ impl<T: Sized> Consumer<T> {
     /// The method *always* calls `f` even if ring buffer is empty.
     ///
     /// The method returns number returned from `f`.
-    pub unsafe fn pop_access<F: FnOnce(&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) -> usize>(&mut self, f: F) -> usize {
+    pub unsafe fn pop_access<F>(&mut self, f: F) -> usize
+    where
+        F: FnOnce(&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) -> usize,
+    {
         let head = self.rb.head.load(Ordering::Acquire);
         let tail = self.rb.tail.load(Ordering::Acquire);
         let len = self.rb.data.get_ref().len();
@@ -87,18 +86,10 @@ impl<T: Sized> Consumer<T> {
     pub unsafe fn pop_copy(&mut self, elems: &mut [MaybeUninit<T>]) -> usize {
         self.pop_access(|left, right| {
             if elems.len() < left.len() {
-                copy_nonoverlapping(
-                    left.as_ptr(),
-                    elems.as_mut_ptr(),
-                    elems.len(),
-                );
+                copy_nonoverlapping(left.as_ptr(), elems.as_mut_ptr(), elems.len());
                 elems.len()
             } else {
-                copy_nonoverlapping(
-                    left.as_ptr(),
-                    elems.as_mut_ptr(),
-                    left.len(),
-                );
+                copy_nonoverlapping(left.as_ptr(), elems.as_mut_ptr(), left.len());
                 if elems.len() < left.len() + right.len() {
                     copy_nonoverlapping(
                         right.as_ptr(),
@@ -121,14 +112,16 @@ impl<T: Sized> Consumer<T> {
     /// Removes first element from the ring buffer and returns it.
     pub fn pop(&mut self) -> Option<T> {
         let mut elem_mu = MaybeUninit::uninit();
-        let n = unsafe { self.pop_access(|slice, _| {
-            if slice.len() > 0 {
-                mem::swap(slice.get_unchecked_mut(0), &mut elem_mu);
-                1
-            } else {
-                0
-            }
-        }) };
+        let n = unsafe {
+            self.pop_access(|slice, _| {
+                if slice.len() > 0 {
+                    mem::swap(slice.get_unchecked_mut(0), &mut elem_mu);
+                    1
+                } else {
+                    0
+                }
+            })
+        };
         match n {
             0 => None,
             1 => Some(unsafe { elem_mu.assume_init() }),
@@ -178,14 +171,13 @@ impl<T: Sized> Consumer<T> {
     }
 }
 
-
 impl<T: Sized + Copy> Consumer<T> {
     /// Removes first elements from the ring buffer and writes them into a slice.
     /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
     ///
     /// On success returns count of elements been removed from the ring buffer.
     pub fn pop_slice(&mut self, elems: &mut [T]) -> usize {
-        unsafe { self.pop_copy(transmute::<&mut [T], &mut [MaybeUninit::<T>]>(elems)) }
+        unsafe { self.pop_copy(transmute::<&mut [T], &mut [MaybeUninit<T>]>(elems)) }
     }
 }
 
@@ -193,7 +185,11 @@ impl Consumer<u8> {
     /// Removes at most first `count` bytes from the ring buffer and writes them into
     /// a [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) instance.
     /// If `count` is `None` then as much as possible bytes will be written.
-    pub fn write_into(&mut self, writer: &mut dyn Write, count: Option<usize>) -> io::Result<usize> {
+    pub fn write_into(
+        &mut self,
+        writer: &mut dyn Write,
+        count: Option<usize>,
+    ) -> io::Result<usize> {
         let mut err = None;
         let n = unsafe {
             self.pop_access(|left, _| -> usize {
@@ -204,21 +200,21 @@ impl Consumer<u8> {
                         } else {
                             left
                         }
-                    },
+                    }
                     None => left,
                 };
-                match writer.write(
-                    transmute::<&mut [MaybeUninit::<u8>], &mut [u8]>(left)
-                ).and_then(|n| {
-                    if n <= left.len() {
-                        Ok(n)
-                    } else {
-                        Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            "Write operation returned invalid number",
-                        ))
-                    }
-                }) {
+                match writer
+                    .write(transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(left))
+                    .and_then(|n| {
+                        if n <= left.len() {
+                            Ok(n)
+                        } else {
+                            Err(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "Write operation returned invalid number",
+                            ))
+                        }
+                    }) {
                     Ok(n) => n,
                     Err(e) => {
                         err = Some(e);

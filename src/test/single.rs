@@ -1,13 +1,12 @@
-use std::{
-    thread,
-    sync::atomic::Ordering,
-};
+use std::{sync::atomic::Ordering, thread};
 
-use crate::{RingBuffer};
-
+use crate::RingBuffer;
 
 fn head_tail<T>(rb: &RingBuffer<T>) -> (usize, usize) {
-    (rb.head.load(Ordering::Acquire), rb.tail.load(Ordering::Acquire))
+    (
+        rb.head.load(Ordering::Acquire),
+        rb.tail.load(Ordering::Acquire),
+    )
 }
 
 #[test]
@@ -49,7 +48,6 @@ fn push() {
     let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, _) = buf.split();
 
-
     assert_eq!(head_tail(&prod.rb), (0, 0));
 
     assert_eq!(prod.push(123), Ok(()));
@@ -67,7 +65,6 @@ fn pop_empty() {
     let cap = 2;
     let buf = RingBuffer::<i32>::new(cap);
     let (_, mut cons) = buf.split();
-
 
     assert_eq!(head_tail(&cons.rb), (0, 0));
 
@@ -109,23 +106,31 @@ fn push_pop_all() {
 
     for (i, v) in values.iter().enumerate() {
         assert_eq!(prod.push(v.0), Ok(()));
-        assert_eq!(head_tail(&cons.rb), (cap*i % vcap, (cap*i + 1) % vcap));
+        assert_eq!(head_tail(&cons.rb), (cap * i % vcap, (cap * i + 1) % vcap));
 
         assert_eq!(prod.push(v.1), Ok(()));
-        assert_eq!(head_tail(&cons.rb), (cap*i % vcap, (cap*i + 2) % vcap));
+        assert_eq!(head_tail(&cons.rb), (cap * i % vcap, (cap * i + 2) % vcap));
 
         assert_eq!(prod.push(v.2).unwrap_err(), v.2);
-        assert_eq!(head_tail(&cons.rb), (cap*i % vcap, (cap*i + 2) % vcap));
-
+        assert_eq!(head_tail(&cons.rb), (cap * i % vcap, (cap * i + 2) % vcap));
 
         assert_eq!(cons.pop().unwrap(), v.0);
-        assert_eq!(head_tail(&cons.rb), ((cap*i + 1) % vcap, (cap*i + 2) % vcap));
+        assert_eq!(
+            head_tail(&cons.rb),
+            ((cap * i + 1) % vcap, (cap * i + 2) % vcap)
+        );
 
         assert_eq!(cons.pop().unwrap(), v.1);
-        assert_eq!(head_tail(&cons.rb), ((cap*i + 2) % vcap, (cap*i + 2) % vcap));
+        assert_eq!(
+            head_tail(&cons.rb),
+            ((cap * i + 2) % vcap, (cap * i + 2) % vcap)
+        );
 
         assert_eq!(cons.pop(), None);
-        assert_eq!(head_tail(&cons.rb), ((cap*i + 2) % vcap, (cap*i + 2) % vcap));
+        assert_eq!(
+            head_tail(&cons.rb),
+            ((cap * i + 2) % vcap, (cap * i + 2) % vcap)
+        );
     }
 }
 

@@ -1,9 +1,6 @@
-use std::{
-    io::{self},
-};
+use std::io::{self};
 
-use crate::{RingBuffer};
-
+use crate::RingBuffer;
 
 #[test]
 fn from() {
@@ -23,13 +20,12 @@ fn from() {
     match prod1.read_from(&mut cons0, None) {
         Err(e) => {
             assert_eq!(e.kind(), io::ErrorKind::WouldBlock);
-        },
+        }
         other => panic!("{:?}", other),
     }
 
     assert_eq!(cons1.pop_slice(&mut tmp), 3);
     assert_eq!(tmp[0..3], [0, 1, 2]);
-
 
     assert_eq!(prod0.push_slice(&[3, 4, 5]), 3);
 
@@ -46,7 +42,6 @@ fn from() {
     }
     assert_eq!(cons1.pop_slice(&mut tmp), 1);
     assert_eq!(tmp[0..1], [5]);
-
 
     assert_eq!(prod1.push_slice(&[6, 7, 8]), 3);
     assert_eq!(prod0.push_slice(&[9, 10]), 2);
@@ -87,7 +82,6 @@ fn into() {
     assert_eq!(cons1.pop_slice(&mut tmp), 3);
     assert_eq!(tmp[0..3], [0, 1, 2]);
 
-
     assert_eq!(prod0.push_slice(&[3, 4, 5]), 3);
 
     match cons0.write_into(&mut prod1, None) {
@@ -104,7 +98,6 @@ fn into() {
     assert_eq!(cons1.pop_slice(&mut tmp), 1);
     assert_eq!(tmp[0..1], [5]);
 
-
     assert_eq!(prod1.push_slice(&[6, 7, 8]), 3);
     assert_eq!(prod0.push_slice(&[9, 10]), 2);
 
@@ -115,7 +108,7 @@ fn into() {
     match cons0.write_into(&mut prod1, None) {
         Err(e) => {
             assert_eq!(e.kind(), io::ErrorKind::WouldBlock);
-        },
+        }
         other => panic!("{:?}", other),
     }
 
@@ -145,7 +138,6 @@ fn count() {
 
     assert_eq!(cons1.pop_slice(&mut tmp), 4);
     assert_eq!(tmp[0..4], [0, 1, 2, 3]);
-
 
     assert_eq!(prod0.push_slice(&[4, 5, 6, 7]), 4);
 

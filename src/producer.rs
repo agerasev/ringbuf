@@ -1,21 +1,16 @@
 use std::{
-    mem::{self, transmute, MaybeUninit},
-    ptr::{copy_nonoverlapping},
-    sync::{Arc, atomic::{Ordering}},
     io::{self, Read, Write},
+    mem::{self, transmute, MaybeUninit},
+    ptr::copy_nonoverlapping,
+    sync::{atomic::Ordering, Arc},
 };
 
-use crate::{
-    ring_buffer::*,
-    consumer::Consumer,
-};
-
+use crate::{consumer::Consumer, ring_buffer::*};
 
 /// Producer part of ring buffer.
 pub struct Producer<T> {
     pub(crate) rb: Arc<RingBuffer<T>>,
 }
-
 
 impl<T: Sized> Producer<T> {
     /// Returns capacity of the ring buffer.
@@ -57,7 +52,10 @@ impl<T: Sized> Producer<T> {
     /// The method *always* calls `f` even if ring buffer is full.
     ///
     /// The method returns number returned from `f`.
-    pub unsafe fn push_access<F: FnOnce(&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) -> usize>(&mut self, f: F) -> usize {
+    pub unsafe fn push_access<F>(&mut self, f: F) -> usize
+    where
+        F: FnOnce(&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) -> usize,
+    {
         let head = self.rb.head.load(Ordering::Acquire);
         let tail = self.rb.tail.load(Ordering::Acquire);
         let len = self.rb.data.get_ref().len();
@@ -97,18 +95,10 @@ impl<T: Sized> Producer<T> {
     pub unsafe fn push_copy(&mut self, elems: &[MaybeUninit<T>]) -> usize {
         self.push_access(|left, right| -> usize {
             if elems.len() < left.len() {
-                copy_nonoverlapping(
-                    elems.as_ptr(),
-                    left.as_mut_ptr(),
-                    elems.len(),
-                );
+                copy_nonoverlapping(elems.as_ptr(), left.as_mut_ptr(), elems.len());
                 elems.len()
             } else {
-                copy_nonoverlapping(
-                    elems.as_ptr(),
-                    left.as_mut_ptr(),
-                    left.len(),
-                );
+                copy_nonoverlapping(elems.as_ptr(), left.as_mut_ptr(), left.len());
                 if elems.len() < left.len() + right.len() {
                     copy_nonoverlapping(
                         elems.as_ptr().offset(left.len() as isize),
@@ -132,14 +122,16 @@ impl<T: Sized> Producer<T> {
     /// On failure returns an error containing the element that hasn't beed appended.
     pub fn push(&mut self, elem: T) -> Result<(), T> {
         let mut elem_mu = MaybeUninit::new(elem);
-        let n = unsafe { self.push_access(|slice, _| {
-            if slice.len() > 0 {
-                mem::swap(slice.get_unchecked_mut(0), &mut elem_mu);
-                1
-            } else {
-                0
-            }
-        }) };
+        let n = unsafe {
+            self.push_access(|slice, _| {
+                if slice.len() > 0 {
+                    mem::swap(slice.get_unchecked_mut(0), &mut elem_mu);
+                    1
+                } else {
+                    0
+                }
+            })
+        };
         match n {
             0 => Err(unsafe { elem_mu.assume_init() }),
             1 => Ok(()),
@@ -171,7 +163,7 @@ impl<T: Sized> Producer<T> {
     /// Elements that haven't been added to the ring buffer remain in the iterator.
     ///
     /// Returns count of elements been appended to the ring buffer.
-    pub fn push_iter<I: Iterator<Item=T>>(&mut self, elems: &mut I) -> usize {
+    pub fn push_iter<I: Iterator<Item = T>>(&mut self, elems: &mut I) -> usize {
         self.push_fn(|| elems.next())
     }
 
@@ -191,7 +183,7 @@ impl<T: Sized + Copy> Producer<T> {
     ///
     /// Returns count of elements been appended to the ring buffer.
     pub fn push_slice(&mut self, elems: &[T]) -> usize {
-        unsafe { self.push_copy(transmute::<&[T], &[MaybeUninit::<T>]>(elems)) }
+        unsafe { self.push_copy(transmute::<&[T], &[MaybeUninit<T>]>(elems)) }
     }
 }
 
@@ -211,21 +203,21 @@ impl Producer<u8> {
                         } else {
                             left
                         }
-                    },
+                    }
                     None => left,
                 };
-                match reader.read(
-                    transmute::<&mut [MaybeUninit::<u8>], &mut [u8]>(left)
-                ).and_then(|n| {
-                    if n <= left.len() {
-                        Ok(n)
-                    } else {
-                        Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            "Read operation returned invalid number",
-                        ))
-                    }
-                }) {
+                match reader
+                    .read(transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(left))
+                    .and_then(|n| {
+                        if n <= left.len() {
+                            Ok(n)
+                        } else {
+                            Err(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "Read operation returned invalid number",
+                            ))
+                        }
+                    }) {
                     Ok(n) => n,
                     Err(e) => {
                         err = Some(e);

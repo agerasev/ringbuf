@@ -1,10 +1,6 @@
-use std::{
-    cell::{RefCell},
-    collections::{HashSet},
-};
+use std::{cell::RefCell, collections::HashSet};
 
-use crate::{RingBuffer};
-
+use crate::RingBuffer;
 
 #[derive(Debug)]
 struct Dropper<'a> {
@@ -74,45 +70,66 @@ fn multiple_fn() {
         let mut id = 0;
         let mut cnt = 0;
 
-        assert_eq!(prod.push_fn(|| {
-            if cnt < 4 {
-                id += 1;
-                cnt += 1;
-                Some(Dropper::new(&set, id))
-            } else {
-                None
-            }
-        }), 4);
+        assert_eq!(
+            prod.push_fn(|| {
+                if cnt < 4 {
+                    id += 1;
+                    cnt += 1;
+                    Some(Dropper::new(&set, id))
+                } else {
+                    None
+                }
+            }),
+            4
+        );
         assert_eq!(cnt, 4);
         assert_eq!(cnt, set.borrow().len());
 
-        assert_eq!(cons.pop_fn(|_| {
-            cnt -= 1;
-            true
-        }, Some(2)), 2);
+        assert_eq!(
+            cons.pop_fn(
+                |_| {
+                    cnt -= 1;
+                    true
+                },
+                Some(2)
+            ),
+            2
+        );
         assert_eq!(cnt, 2);
         assert_eq!(cnt, set.borrow().len());
 
-        assert_eq!(prod.push_fn(|| {
-            id += 1;
-            cnt += 1;
-            Some(Dropper::new(&set, id))
-        }), 3);
+        assert_eq!(
+            prod.push_fn(|| {
+                id += 1;
+                cnt += 1;
+                Some(Dropper::new(&set, id))
+            }),
+            3
+        );
         assert_eq!(cnt, 5);
         assert_eq!(cnt, set.borrow().len());
 
-        assert_eq!(cons.pop_fn(|_| {
-            cnt -= 1;
-            true
-        }, None), 5);
+        assert_eq!(
+            cons.pop_fn(
+                |_| {
+                    cnt -= 1;
+                    true
+                },
+                None
+            ),
+            5
+        );
         assert_eq!(cnt, 0);
         assert_eq!(cnt, set.borrow().len());
 
-        assert_eq!(prod.push_fn(|| {
-            id += 1;
-            cnt += 1;
-            Some(Dropper::new(&set, id))
-        }), 5);
+        assert_eq!(
+            prod.push_fn(|| {
+                id += 1;
+                cnt += 1;
+                Some(Dropper::new(&set, id))
+            }),
+            5
+        );
         assert_eq!(cnt, 5);
         assert_eq!(cnt, set.borrow().len());
     }

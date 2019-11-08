@@ -1,11 +1,10 @@
 extern crate ringbuf;
 
-use std::io::{Read};
+use std::io::Read;
 use std::thread;
-use std::time::{Duration};
+use std::time::Duration;
 
-use ringbuf::{RingBuffer};
-
+use ringbuf::RingBuffer;
 
 fn main() {
     let buf = RingBuffer::<u8>::new(10);

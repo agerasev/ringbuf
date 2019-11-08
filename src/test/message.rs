@@ -1,11 +1,10 @@
 use std::{
-    thread,
     io::{self, Read, Write},
-    time::{Duration},
+    thread,
+    time::Duration,
 };
 
-use crate::{RingBuffer};
-
+use crate::RingBuffer;
 
 const THE_BOOK_FOREWORD: &'static str = "
 It wasn’t always so clear, but the Rust programming language is fundamentally about empowerment: no matter what kind of code you are writing now, Rust empowers you to reach farther, to program with confidence in a wider variety of domains than you did before.
@@ -129,7 +128,7 @@ fn read_write() {
                 Err(err) => {
                     assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
                     thread::sleep(Duration::from_millis(1));
-                },
+                }
             }
         }
         loop {
@@ -153,7 +152,7 @@ fn read_write() {
                     } else {
                         thread::sleep(Duration::from_millis(1));
                     }
-                },
+                }
             }
         }
 
