@@ -665,7 +665,7 @@ impl<T: Sized> Consumer<T> {
     }
 
     /// Iterate immutably over the elements contained by this buffer.
-    pub fn for_each<F>(&mut self, mut f: F)
+    pub fn for_each<F>(&self, mut f: F)
     where
         F: FnMut(&T),
     {
