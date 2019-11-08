@@ -129,6 +129,7 @@ mod benchmarks;
 use std::cell::UnsafeCell;
 use std::io::{self, Read, Write};
 use std::mem;
+use std::ops::Range;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
@@ -178,6 +179,13 @@ pub enum PushAccessError {
     Full,
     /// User function returned invalid length.
     BadLen,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+/// `Consumer::access*` error.
+pub enum AccessError {
+    /// Cannot access data: ring buffer is empty.
+    Empty,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -646,17 +654,29 @@ impl<T: Sized> Consumer<T> {
     where
         F: FnMut(&mut T),
     {
-        unsafe {
-            let _ = self.pop_access::<_, (), _>(|slice1, slice2| {
-                for c in slice1.iter_mut() {
-                    f(c);
-                }
-                for c in slice2.iter_mut() {
-                    f(c);
-                }
-                Ok((0, ()))
-            });
-        }
+        let _ = self.access_mut(|slice1, slice2| {
+            for c in slice1.iter_mut() {
+                f(c);
+            }
+            for c in slice2.iter_mut() {
+                f(c);
+            }
+        });
+    }
+
+    /// Iterate immutably over the elements contained by this buffer.
+    pub fn for_each<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&T),
+    {
+        let _ = self.access(|slice1, slice2| {
+            for c in slice1.iter() {
+                f(c);
+            }
+            for c in slice2.iter() {
+                f(c);
+            }
+        });
     }
 }
 
@@ -770,6 +790,60 @@ impl Read for Consumer<u8> {
 }
 
 impl<T: Sized> Consumer<T> {
+    fn get_ranges(&self) -> Result<(Range<usize>, Range<usize>), AccessError> {
+        let head = self.rb.head.load(Ordering::Acquire);
+        let tail = self.rb.tail.load(Ordering::Acquire);
+        let len = unsafe { self.rb.data.get_ref().len() };
+
+        if head < tail {
+            Ok((head..tail, 0..0))
+        } else if head > tail {
+            Ok((head..len, 0..tail))
+        } else {
+            Err(AccessError::Empty)
+        }
+    }
+
+    /// Gives immutable access to the elements contained by the ring buffer without removing them.
+    ///
+    /// The method takes a function `f` as argument.
+    /// `f` takes two slices of ring buffer content (the second one them may be empty).
+    /// First slice contains older elements.
+    ///
+    /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*
+    pub fn access<F: FnOnce(&[T], &[T])>(&self, f: F) -> Result<(), AccessError> {
+        let ranges = self.get_ranges()?;
+
+        unsafe {
+            let left = &self.rb.data.get_ref()[ranges.0];
+            let right = &self.rb.data.get_ref()[ranges.1];
+
+            f(left, right);
+        }
+
+        Ok(())
+    }
+
+    /// Gives mutable access to the elements contained by the ring buffer without removing them.
+    ///
+    /// The method takes a function `f` as argument.
+    /// `f` takes two slices of ring buffer content (the second one may be empty).
+    /// First slice contains older elements.
+    ///
+    /// *The iteration may not include elements pushed to the buffer by concurring producer after the method call.*
+    pub fn access_mut<F: FnOnce(&mut [T], &mut [T])>(&mut self, f: F) -> Result<(), AccessError> {
+        let ranges = self.get_ranges()?;
+
+        unsafe {
+            let left = &mut self.rb.data.get_mut()[ranges.0];
+            let right = &mut self.rb.data.get_mut()[ranges.1];
+
+            f(left, right);
+        }
+
+        Ok(())
+    }
+
     /// Allows to read from ring buffer memory directry.
     ///
     /// *This function is unsafe beacuse it gives access to possibly uninitialized memory
