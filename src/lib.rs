@@ -560,19 +560,15 @@ impl<T: Sized> Producer<T> {
         let ranges = if tail >= head {
             if head > 0 {
                 Ok((tail..len, 0..(head - 1)))
-            } else {
-                if tail < len - 1 {
-                    Ok((tail..(len - 1), 0..0))
-                } else {
-                    Err(PushAccessError::Full)
-                }
-            }
-        } else {
-            if tail < head - 1 {
-                Ok((tail..(head - 1), 0..0))
+            } else if tail < len - 1 {
+                Ok((tail..(len - 1), 0..0))
             } else {
                 Err(PushAccessError::Full)
             }
+        } else if tail < head - 1 {
+            Ok((tail..(head - 1), 0..0))
+        } else {
+            Err(PushAccessError::Full)
         }?;
 
         let slices = (
