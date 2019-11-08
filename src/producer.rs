@@ -139,7 +139,7 @@ impl<T: Sized> Producer<T> {
         }
     }
 
-    pub fn push_fn<F: FnMut() -> Option<T>>(&mut self, mut f: F) -> usize {
+    pub fn push_each<F: FnMut() -> Option<T>>(&mut self, mut f: F) -> usize {
         unsafe {
             self.push_access(|left, right| {
                 for (i, dst) in left.iter_mut().enumerate() {
@@ -164,7 +164,7 @@ impl<T: Sized> Producer<T> {
     ///
     /// Returns count of elements been appended to the ring buffer.
     pub fn push_iter<I: Iterator<Item = T>>(&mut self, elems: &mut I) -> usize {
-        self.push_fn(|| elems.next())
+        self.push_each(|| elems.next())
     }
 
     /// Removes at most `count` elements from the `Consumer` of the ring buffer

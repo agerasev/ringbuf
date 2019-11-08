@@ -1,6 +1,50 @@
 use crate::RingBuffer;
 
 #[test]
+fn for_each() {
+    let cap = 2;
+    let buf = RingBuffer::<i32>::new(cap);
+    let (mut prod, mut cons) = buf.split();
+
+    prod.push(10).unwrap();
+    prod.push(20).unwrap();
+
+    let mut sum_1 = 0;
+    cons.for_each(|v| {
+        sum_1 += *v;
+    });
+
+    let first = cons.pop().expect("First element not available");
+    let second = cons.pop().expect("Second element not available");
+
+    assert_eq!(sum_1, first + second);
+}
+
+#[test]
+fn for_each_mut() {
+    let cap = 2;
+    let buf = RingBuffer::<i32>::new(cap);
+    let (mut prod, mut cons) = buf.split();
+
+    prod.push(10).unwrap();
+    prod.push(20).unwrap();
+
+    cons.for_each_mut(|v| {
+        *v *= 2;
+    });
+
+    let mut sum_1 = 0;
+    cons.for_each_mut(|v| {
+        sum_1 += *v;
+    });
+
+    let first = cons.pop().expect("First element not available");
+    let second = cons.pop().expect("Second element not available");
+
+    assert_eq!(sum_1, first + second);
+}
+
+#[test]
 fn push_pop_slice() {
     let buf = RingBuffer::<i32>::new(4);
     let (mut prod, mut cons) = buf.split();

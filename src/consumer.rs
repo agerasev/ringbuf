@@ -129,7 +129,7 @@ impl<T: Sized> Consumer<T> {
         }
     }
 
-    pub fn pop_fn<F: FnMut(T) -> bool>(&mut self, mut f: F, count: Option<usize>) -> usize {
+    pub fn pop_each<F: FnMut(T) -> bool>(&mut self, mut f: F, count: Option<usize>) -> usize {
         unsafe {
             self.pop_access(|left, right| {
                 let lb = match count {
@@ -156,6 +156,48 @@ impl<T: Sized> Consumer<T> {
                 }
                 left.len() + right.len()
             })
+        }
+    }
+
+    /// Iterate immutably over the elements contained by the ring buffer without popping them.
+    pub fn for_each<F: FnMut(&T)>(&self, mut f: F) {
+        unsafe {
+            let head = self.rb.head.load(Ordering::Acquire);
+            let tail = self.rb.tail.load(Ordering::Acquire);
+            let len = self.rb.data.get_ref().len();
+
+            let ranges = if head < tail {
+                (head..tail, 0..0)
+            } else if head > tail {
+                (head..len, 0..tail)
+            } else {
+                (0..0, 0..0)
+            };
+
+            let left = &self.rb.data.get_ref()[ranges.0];
+            let right = &self.rb.data.get_ref()[ranges.1];
+
+            for c in left.iter() {
+                f(c.as_ptr().as_ref().unwrap());
+            }
+            for c in right.iter() {
+                f(c.as_ptr().as_ref().unwrap());
+            }
+        }
+    }
+
+    /// Iterate mutably over the elements contained by the ring buffer without popping them.
+    pub fn for_each_mut<F: FnMut(&mut T)>(&mut self, mut f: F) {
+        unsafe {
+            self.pop_access(|left, right| {
+                for c in left.iter_mut() {
+                    f(c.as_mut_ptr().as_mut().unwrap());
+                }
+                for c in right.iter_mut() {
+                    f(c.as_mut_ptr().as_mut().unwrap());
+                }
+                0
+            });
         }
     }
 

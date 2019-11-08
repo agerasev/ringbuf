@@ -57,7 +57,7 @@ fn single() {
 }
 
 #[test]
-fn multiple_fn() {
+fn multiple_each() {
     let set = RefCell::new(HashSet::new());
 
     let cap = 5;
@@ -71,7 +71,7 @@ fn multiple_fn() {
         let mut cnt = 0;
 
         assert_eq!(
-            prod.push_fn(|| {
+            prod.push_each(|| {
                 if cnt < 4 {
                     id += 1;
                     cnt += 1;
@@ -86,7 +86,7 @@ fn multiple_fn() {
         assert_eq!(cnt, set.borrow().len());
 
         assert_eq!(
-            cons.pop_fn(
+            cons.pop_each(
                 |_| {
                     cnt -= 1;
                     true
@@ -99,7 +99,7 @@ fn multiple_fn() {
         assert_eq!(cnt, set.borrow().len());
 
         assert_eq!(
-            prod.push_fn(|| {
+            prod.push_each(|| {
                 id += 1;
                 cnt += 1;
                 Some(Dropper::new(&set, id))
@@ -110,7 +110,7 @@ fn multiple_fn() {
         assert_eq!(cnt, set.borrow().len());
 
         assert_eq!(
-            cons.pop_fn(
+            cons.pop_each(
                 |_| {
                     cnt -= 1;
                     true
@@ -123,7 +123,7 @@ fn multiple_fn() {
         assert_eq!(cnt, set.borrow().len());
 
         assert_eq!(
-            prod.push_fn(|| {
+            prod.push_each(|| {
                 id += 1;
                 cnt += 1;
                 Some(Dropper::new(&set, id))
