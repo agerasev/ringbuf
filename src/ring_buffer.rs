@@ -26,6 +26,7 @@ impl<T: Sized> SharedVec<T> {
     pub unsafe fn get_ref(&self) -> &Vec<T> {
         &*self.cell.get()
     }
+    #[allow(clippy::mut_from_ref)]
     pub unsafe fn get_mut(&self) -> &mut Vec<T> {
         &mut *self.cell.get()
     }
@@ -42,7 +43,7 @@ impl<T: Sized> RingBuffer<T> {
     /// Creates a new instance of a ring buffer.
     pub fn new(capacity: usize) -> Self {
         let mut data = Vec::new();
-        data.resize_with(capacity + 1, || MaybeUninit::uninit());
+        data.resize_with(capacity + 1, MaybeUninit::uninit);
         Self {
             data: SharedVec::new(data),
             head: AtomicUsize::new(0),
@@ -133,7 +134,7 @@ impl<T> SlicePtr<T> {
         }
     }
     unsafe fn shift(&mut self, count: usize) {
-        self.ptr = self.ptr.offset(count as isize);
+        self.ptr = self.ptr.add(count);
         self.len -= count;
     }
 }
@@ -148,10 +149,12 @@ pub fn move_items<T>(src: &mut Consumer<T>, dst: &mut Producer<T>, count: Option
     unsafe {
         src.pop_access(|src_left, src_right| -> usize {
             dst.push_access(|dst_left, dst_right| -> usize {
-                let n = count.unwrap_or(min(
-                    src_left.len() + src_right.len(),
-                    dst_left.len() + dst_right.len(),
-                ));
+                let n = count.unwrap_or_else(|| {
+                    min(
+                        src_left.len() + src_right.len(),
+                        dst_left.len() + dst_right.len(),
+                    )
+                });
                 let mut m = 0;
                 let mut src = (SlicePtr::new(src_left), SlicePtr::new(src_right));
                 let mut dst = (SlicePtr::new(dst_left), SlicePtr::new(dst_right));

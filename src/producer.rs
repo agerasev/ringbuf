@@ -1,6 +1,6 @@
 use std::{
     io::{self, Read, Write},
-    mem::{self, transmute, MaybeUninit},
+    mem::{self, MaybeUninit},
     ptr::copy_nonoverlapping,
     sync::{atomic::Ordering, Arc},
 };
@@ -73,19 +73,15 @@ impl<T: Sized> Producer<T> {
         let ranges = if tail >= head {
             if head > 0 {
                 (tail..len, 0..(head - 1))
-            } else {
-                if tail < len - 1 {
-                    (tail..(len - 1), 0..0)
-                } else {
-                    (0..0, 0..0)
-                }
-            }
-        } else {
-            if tail < head - 1 {
-                (tail..(head - 1), 0..0)
+            } else if tail < len - 1 {
+                (tail..(len - 1), 0..0)
             } else {
                 (0..0, 0..0)
             }
+        } else if tail < head - 1 {
+            (tail..(head - 1), 0..0)
+        } else {
+            (0..0, 0..0)
         };
 
         let slices = (
@@ -117,14 +113,14 @@ impl<T: Sized> Producer<T> {
                 copy_nonoverlapping(elems.as_ptr(), left.as_mut_ptr(), left.len());
                 if elems.len() < left.len() + right.len() {
                     copy_nonoverlapping(
-                        elems.as_ptr().offset(left.len() as isize),
+                        elems.as_ptr().add(left.len()),
                         right.as_mut_ptr(),
                         elems.len() - left.len(),
                     );
                     elems.len()
                 } else {
                     copy_nonoverlapping(
-                        elems.as_ptr().offset(left.len() as isize),
+                        elems.as_ptr().add(left.len()),
                         right.as_mut_ptr(),
                         right.len(),
                     );
@@ -140,7 +136,7 @@ impl<T: Sized> Producer<T> {
         let mut elem_mu = MaybeUninit::new(elem);
         let n = unsafe {
             self.push_access(|slice, _| {
-                if slice.len() > 0 {
+                if !slice.is_empty() {
                     mem::swap(slice.get_unchecked_mut(0), &mut elem_mu);
                     1
                 } else {
@@ -204,7 +200,7 @@ impl<T: Sized + Copy> Producer<T> {
     ///
     /// Returns count of elements been appended to the ring buffer.
     pub fn push_slice(&mut self, elems: &[T]) -> usize {
-        unsafe { self.push_copy(transmute::<&[T], &[MaybeUninit<T>]>(elems)) }
+        unsafe { self.push_copy(&*(elems as *const [T] as *const [MaybeUninit<T>])) }
     }
 }
 
@@ -233,7 +229,7 @@ impl Producer<u8> {
                     None => left,
                 };
                 match reader
-                    .read(transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(left))
+                    .read(&mut *(left as *mut [MaybeUninit<u8>] as *mut [u8]))
                     .and_then(|n| {
                         if n <= left.len() {
                             Ok(n)
@@ -262,7 +258,7 @@ impl Producer<u8> {
 impl Write for Producer<u8> {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         let n = self.push_slice(buffer);
-        if n == 0 && buffer.len() != 0 {
+        if n == 0 && !buffer.is_empty() {
             Err(io::Error::new(
                 io::ErrorKind::WouldBlock,
                 "Ring buffer is full",

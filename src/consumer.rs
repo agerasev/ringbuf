@@ -1,7 +1,7 @@
 use std::{
     cmp::min,
     io::{self, Read, Write},
-    mem::{self, transmute, MaybeUninit},
+    mem::{self, MaybeUninit},
     ops::Range,
     ptr::copy_nonoverlapping,
     sync::{atomic::Ordering, Arc},
@@ -79,8 +79,8 @@ impl<T: Sized> Consumer<T> {
             let right = &self.rb.data.get_ref()[ranges.1];
 
             f(
-                transmute::<&[MaybeUninit<T>], &[T]>(left),
-                transmute::<&[MaybeUninit<T>], &[T]>(right),
+                &*(left as *const [MaybeUninit<T>] as *const [T]),
+                &*(right as *const [MaybeUninit<T>] as *const [T]),
             );
         }
     }
@@ -100,8 +100,8 @@ impl<T: Sized> Consumer<T> {
             let right = &mut self.rb.data.get_mut()[ranges.1];
 
             f(
-                transmute::<&mut [MaybeUninit<T>], &mut [T]>(left),
-                transmute::<&mut [MaybeUninit<T>], &mut [T]>(right),
+                &mut *(left as *mut [MaybeUninit<T>] as *mut [T]),
+                &mut *(right as *mut [MaybeUninit<T>] as *mut [T]),
             );
         }
     }
@@ -167,14 +167,14 @@ impl<T: Sized> Consumer<T> {
                 if elems.len() < left.len() + right.len() {
                     copy_nonoverlapping(
                         right.as_ptr(),
-                        elems.as_mut_ptr().offset(left.len() as isize),
+                        elems.as_mut_ptr().add(left.len()),
                         elems.len() - left.len(),
                     );
                     elems.len()
                 } else {
                     copy_nonoverlapping(
                         right.as_ptr(),
-                        elems.as_mut_ptr().offset(left.len() as isize),
+                        elems.as_mut_ptr().add(left.len()),
                         right.len(),
                     );
                     left.len() + right.len()
@@ -189,7 +189,7 @@ impl<T: Sized> Consumer<T> {
         let mut elem_mu = MaybeUninit::uninit();
         let n = unsafe {
             self.pop_access(|slice, _| {
-                if slice.len() > 0 {
+                if !slice.is_empty() {
                     mem::swap(slice.get_unchecked_mut(0), &mut elem_mu);
                     1
                 } else {
@@ -283,7 +283,7 @@ impl<T: Sized + Copy> Consumer<T> {
     ///
     /// On success returns count of elements been removed from the ring buffer.
     pub fn pop_slice(&mut self, elems: &mut [T]) -> usize {
-        unsafe { self.pop_copy(transmute::<&mut [T], &mut [MaybeUninit<T>]>(elems)) }
+        unsafe { self.pop_copy(&mut *(elems as *mut [T] as *mut [MaybeUninit<T>])) }
     }
 }
 
@@ -315,7 +315,7 @@ impl Consumer<u8> {
                     None => left,
                 };
                 match writer
-                    .write(transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(left))
+                    .write(&*(left as *const [MaybeUninit<u8>] as *const [u8]))
                     .and_then(|n| {
                         if n <= left.len() {
                             Ok(n)
@@ -344,7 +344,7 @@ impl Consumer<u8> {
 impl Read for Consumer<u8> {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         let n = self.pop_slice(buffer);
-        if n == 0 && buffer.len() != 0 {
+        if n == 0 && !buffer.is_empty() {
             Err(io::Error::new(
                 io::ErrorKind::WouldBlock,
                 "Ring buffer is empty",
