@@ -22,6 +22,11 @@ addons:
       - binutils-dev
       - libiberty-dev
 
+script:
+  - cargo build --verbose
+  - cargo test --verbose
+  - bash -c "! rustc -V | grep nightly || cargo bench --features benchmark --verbose"
+
 after_success: |
   wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
   tar xzf master.tar.gz &&

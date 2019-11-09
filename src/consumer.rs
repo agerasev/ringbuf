@@ -67,7 +67,7 @@ impl<T: Sized> Consumer<T> {
     /// Gives immutable access to the elements contained by the ring buffer without removing them.
     ///
     /// The method takes a function `f` as argument.
-    /// `f` takes two slices of ring buffer content (the second one of both of them may be empty).
+    /// `f` takes two slices of ring buffer content (the second one or both of them may be empty).
     /// First slice contains older elements.
     ///
     /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*
@@ -88,7 +88,7 @@ impl<T: Sized> Consumer<T> {
     /// Gives mutable access to the elements contained by the ring buffer without removing them.
     ///
     /// The method takes a function `f` as argument.
-    /// `f` takes two slices of ring buffer content (the second one of both of them may be empty).
+    /// `f` takes two slices of ring buffer content (the second one or both of them may be empty).
     /// First slice contains older elements.
     ///
     /// *The iteration may not include elements pushed to the buffer by concurring producer after the method call.*
@@ -111,7 +111,7 @@ impl<T: Sized> Consumer<T> {
     /// *This function is unsafe because it gives access to possibly uninitialized memory*
     ///
     /// The method takes a function `f` as argument.
-    /// `f` takes two slices of ring buffer content (the second one of both of them may be empty).
+    /// `f` takes two slices of ring buffer content (the second one or both of them may be empty).
     /// First slice contains older elements.
     ///
     /// `f` should return number of elements been read.

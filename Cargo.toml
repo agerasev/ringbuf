@@ -13,13 +13,8 @@ keywords = ["lock-free", "spsc", "ring-buffer", "rb", "fifo"]
 categories = ["concurrency", "data-structures"]
 license = "MIT/Apache-2.0"
 
-build = "build.rs"
-
 [features]
 default = []
-benchmark = ["rustc_version"]
+benchmark = []
 
 [dependencies]
-
-[build-dependencies]
-rustc_version = { version = "0.2", optional = true }

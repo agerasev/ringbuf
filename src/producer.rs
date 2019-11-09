@@ -53,7 +53,7 @@ impl<T: Sized> Producer<T> {
     /// *This function is unsafe because it gives access to possibly uninitialized memory*
     ///
     /// The method takes a function `f` as argument.
-    /// `f` takes two slices of ring buffer content (the second one of both of them may be empty).
+    /// `f` takes two slices of ring buffer content (the second one or both of them may be empty).
     /// First slice contains older elements.
     ///
     /// `f` should return number of elements been written.

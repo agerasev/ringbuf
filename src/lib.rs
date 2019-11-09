@@ -112,16 +112,16 @@
 //! ```
 //!
 
-#![cfg_attr(all(benchmark, rustc_nightly), feature(test))]
+#![cfg_attr(feature = "benchmark", feature(test))]
 
-#[cfg(all(test, benchmark, rustc_nightly))]
+#[cfg(feature = "benchmark")]
 extern crate test;
 
-#[cfg(all(test, benchmark, rustc_nightly))]
+#[cfg(feature = "benchmark")]
 mod benchmark;
 
 #[cfg(test)]
-mod test;
+mod tests;
 
 mod consumer;
 mod producer;
