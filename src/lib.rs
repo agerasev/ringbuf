@@ -15,6 +15,8 @@
 //! [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
 //! [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
 //!
+//! When building with nightly toolchain it is possible to run benchmarks via `cargo bench --features benchmark`.
+//!
 //! # Examples
 //!
 //! ## Simple example
