@@ -218,7 +218,7 @@ impl<T: Sized> Consumer<T> {
                 };
                 for (i, dst) in left[0..lb].iter_mut().enumerate() {
                     if !f(mem::replace(dst, MaybeUninit::uninit()).assume_init()) {
-                        return i;
+                        return i + 1;
                     }
                 }
                 if lb < left.len() {
@@ -231,7 +231,7 @@ impl<T: Sized> Consumer<T> {
                 };
                 for (i, dst) in right[0..rb].iter_mut().enumerate() {
                     if !f(mem::replace(dst, MaybeUninit::uninit()).assume_init()) {
-                        return i + lb;
+                        return i + lb + 1;
                     }
                 }
                 left.len() + right.len()
