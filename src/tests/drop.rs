@@ -139,17 +139,16 @@ fn multiple_each() {
 
 /// Test the `pop_each` with internal function that returns false
 #[test]
-fn pop_each_test1(){
-
+fn pop_each_test1() {
     let cap = 10usize;
     let (mut producer, mut consumer) = RingBuffer::new(cap).split();
 
-    for i in 0..cap{
+    for i in 0..cap {
         producer.push((i, vec![0u8; 1000])).unwrap();
     }
 
-    for _ in 0..cap{
-        let removed = consumer.pop_each(|_val| -> bool{false}, None);
+    for _ in 0..cap {
+        let removed = consumer.pop_each(|_val| -> bool { false }, None);
         assert_eq!(removed, 1);
     }
 
@@ -158,17 +157,16 @@ fn pop_each_test1(){
 
 /// Test the `pop_each` with capped pop
 #[test]
-fn pop_each_test2(){
-
+fn pop_each_test2() {
     let cap = 10usize;
     let (mut producer, mut consumer) = RingBuffer::new(cap).split();
 
-    for i in 0..cap{
+    for i in 0..cap {
         producer.push((i, vec![0u8; 1000])).unwrap();
     }
 
-    for _ in 0..cap{
-        let removed = consumer.pop_each(|_val| -> bool{true}, Some(1));
+    for _ in 0..cap {
+        let removed = consumer.pop_each(|_val| -> bool { true }, Some(1));
         assert_eq!(removed, 1);
     }
 
@@ -177,8 +175,7 @@ fn pop_each_test2(){
 
 /// Test the `push_each` with internal function that adds only 1 element.
 #[test]
-fn push_each_test1(){
-
+fn push_each_test1() {
     let cap = 10usize;
     let (mut producer, mut consumer) = RingBuffer::new(cap).split();
 
@@ -189,14 +186,14 @@ fn push_each_test1(){
             if count == 0 {
                 count += 1;
                 Some((i, vec![0u8; 1000]))
-            }else{
+            } else {
                 None
             }
         });
         assert_eq!(added, 1);
     }
 
-    for _ in 0..cap{
+    for _ in 0..cap {
         consumer.pop().unwrap();
     }
 
@@ -205,19 +202,18 @@ fn push_each_test1(){
 
 /// Test the `push_each` with split internal buffer
 #[test]
-fn push_each_test2(){
-
+fn push_each_test2() {
     let cap = 10usize;
     let cap_half = 5usize;
     let (mut producer, mut consumer) = RingBuffer::new(cap).split();
 
     // Fill the entire buffer
-    for i in 0..cap{
+    for i in 0..cap {
         producer.push((i, vec![0u8; 1000])).unwrap();
     }
 
     // Remove half elements
-    for _ in 0..cap_half{
+    for _ in 0..cap_half {
         consumer.pop().unwrap();
     }
 
@@ -229,14 +225,14 @@ fn push_each_test2(){
             if count == 0 {
                 count += 1;
                 Some((i, vec![0u8; 1000]))
-            }else{
+            } else {
                 None
             }
         });
         assert_eq!(added, 1);
     }
 
-    for _ in 0..cap{
+    for _ in 0..cap {
         consumer.pop().unwrap();
     }
 
