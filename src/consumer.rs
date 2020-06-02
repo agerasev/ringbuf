@@ -150,6 +150,30 @@ impl<T: Sized> Consumer<T> {
         n
     }
 
+    /// Remove data from the buffer without copying
+    ///
+    /// Remove `n` elements from the buffer by shifting the head.
+    ///
+    /// Returns the number of deleted item or an error.
+    pub fn pop_shift(&mut self, n: usize) -> Result<usize, ()> {
+        let head = self.rb.head.load(Ordering::Acquire);
+        let mut len = self.len();
+        if len == 0 {
+            return Err(());
+        }
+        // We cannot overwrite the tail
+        len -= 1;
+        let capacity = self.capacity();
+
+        let removed_elements = min(len, n);
+        if removed_elements > 0 {
+            let new_head = (head + removed_elements) % capacity;
+            self.rb.head.store(new_head, Ordering::Release);
+            return Ok(removed_elements);
+        }
+        Err(())
+    }
+
     /// Copies data from the ring buffer to the slice in byte-to-byte manner.
     ///
     /// The `elems` slice should contain **un-initialized** data before the method call.

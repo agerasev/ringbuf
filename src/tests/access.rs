@@ -232,3 +232,37 @@ fn push_pop() {
 
     assert_eq!(unsafe { cons.pop_access(pop_fn_11) }, 2);
 }
+
+/// Test `pop_shift`
+#[test]
+fn pop_shift() {
+    // Initialize ringbuffer, prod and cons
+    let rb = RingBuffer::<i8>::new(10);
+    let (mut prod, mut cons) = rb.split();
+
+    // Fill the buffer
+    for i in 0..10 {
+        prod.push(i).unwrap();
+    }
+
+    // Pop in the middle of the buffer
+    assert_eq!(cons.pop_shift(5), Ok(5));
+
+    // Make sure changes are taken into account
+    assert_eq!(cons.pop().unwrap(), 5);
+
+    // Fill the buffer again
+    for i in 0..6 {
+        prod.push(i).unwrap();
+    }
+
+    // Ask too much, delete the max number of elements
+    assert_eq!(cons.pop_shift(10), Ok(9));
+
+    // Try to remove more than possible
+    assert_eq!(cons.pop_shift(1), Err(()));
+
+    // Make sure it is still usable
+    assert_eq!(prod.push(0), Ok(()));
+    assert_eq!(cons.pop(), Some(0));
+}
