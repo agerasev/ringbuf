@@ -233,42 +233,54 @@ fn push_pop() {
     assert_eq!(unsafe { cons.pop_access(pop_fn_11) }, 2);
 }
 
-/// Test `pop_shift`
 #[test]
-fn pop_shift() {
+fn discard() {
     // Initialize ringbuffer, prod and cons
     let rb = RingBuffer::<i8>::new(10);
     let (mut prod, mut cons) = rb.split();
+    let mut i = 0;
 
     // Fill the buffer
-    for i in 0..10 {
+    for _ in 0..10 {
         prod.push(i).unwrap();
+        i += 1;
     }
 
     // Pop in the middle of the buffer
-    assert_eq!(cons.pop_shift(5), Ok(5));
+    assert_eq!(cons.discard(5), 5);
 
     // Make sure changes are taken into account
     assert_eq!(cons.pop().unwrap(), 5);
 
     // Fill the buffer again
-    for i in 0..6 {
+    for _ in 0..5 {
         prod.push(i).unwrap();
+        i += 1;
+    }
+
+    assert_eq!(cons.discard(6), 6);
+    assert_eq!(cons.pop().unwrap(), 12);
+
+    // Fill the buffer again
+    for _ in 0..7 {
+        prod.push(i).unwrap();
+        i += 1;
     }
 
     // Ask too much, delete the max number of elements
-    assert_eq!(cons.pop_shift(10), Ok(9));
+    assert_eq!(cons.discard(10), 9);
 
     // Try to remove more than possible
-    assert_eq!(cons.pop_shift(1), Err(()));
+    assert_eq!(cons.discard(1), 0);
 
     // Make sure it is still usable
+    assert_eq!(cons.pop(), None);
     assert_eq!(prod.push(0), Ok(()));
     assert_eq!(cons.pop(), Some(0));
 }
 
 #[test]
-fn pop_shift_drop() {
+fn discard_drop() {
     use std::rc::Rc;
 
     let rc = Rc::<()>::new(());
@@ -285,8 +297,8 @@ fn pop_shift_drop() {
     assert_eq!(cons.len(), N);
     assert_eq!(Rc::strong_count(&rc), N + 1);
 
-    cons.pop_shift(N).unwrap();
-    
+    assert_eq!(cons.discard(N), N);
+
     // Check ring buffer is empty
     assert_eq!(cons.len(), 0);
     // Check that items are dropped
