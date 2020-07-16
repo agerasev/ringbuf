@@ -267,6 +267,37 @@ impl<T: Sized> Consumer<T> {
         });
     }
 
+    /// Removes `n` items from the buffer and safely drops them.
+    ///
+    /// Returns the number of deleted items.
+    pub fn discard(&mut self, n: usize) -> usize {
+        unsafe { self.pop_access(|left, right| {
+            let (mut cnt, mut rem) = (0, n);
+            let left_elems = if rem <= left.len() {
+                cnt += rem;
+                left.get_unchecked_mut(0..rem)
+            } else {
+                cnt += left.len();
+                left
+            };
+            rem = n - cnt;
+
+            let right_elems = if rem <= right.len() {
+                cnt += rem;
+                right.get_unchecked_mut(0..rem)
+            } else {
+                cnt += right.len();
+                right
+            };
+
+            for e in left_elems.iter_mut().chain(right_elems.iter_mut()) {
+                e.as_mut_ptr().drop_in_place();
+            }
+
+            cnt
+        }) }
+    }
+
     /// Removes at most `count` elements from the consumer and appends them to the producer.
     /// If `count` is `None` then as much as possible elements will be moved.
     /// The producer and consumer parts may be of different buffers as well as of the same one.
