@@ -266,3 +266,29 @@ fn pop_shift() {
     assert_eq!(prod.push(0), Ok(()));
     assert_eq!(cons.pop(), Some(0));
 }
+
+#[test]
+fn pop_shift_drop() {
+    use std::rc::Rc;
+
+    let rc = Rc::<()>::new(());
+
+    static N: usize = 10;
+
+    let rb = RingBuffer::<Rc<()>>::new(N);
+    let (mut prod, mut cons) = rb.split();
+
+    for _ in 0..N {
+        prod.push(rc.clone()).unwrap();
+    }
+
+    assert_eq!(cons.len(), N);
+    assert_eq!(Rc::strong_count(&rc), N + 1);
+
+    cons.pop_shift(N).unwrap();
+    
+    // Check ring buffer is empty
+    assert_eq!(cons.len(), 0);
+    // Check that items are dropped
+    assert_eq!(Rc::strong_count(&rc), 1);
+}
