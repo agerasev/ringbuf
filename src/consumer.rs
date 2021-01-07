@@ -1,10 +1,10 @@
 use std::{
-    cmp::min,
+    cmp::{self, min},
     io::{self, Read, Write},
     mem::{self, MaybeUninit},
     ops::Range,
     ptr::copy_nonoverlapping,
-    sync::{atomic::Ordering, Arc},
+    sync::{atomic, Arc},
 };
 
 use crate::{producer::Producer, ring_buffer::*};
@@ -51,16 +51,14 @@ impl<T: Sized> Consumer<T> {
     }
 
     fn get_ranges(&self) -> (Range<usize>, Range<usize>) {
-        let head = self.rb.head.load(Ordering::Acquire);
-        let tail = self.rb.tail.load(Ordering::Acquire);
+        let head = self.rb.head.load(atomic::Ordering::Acquire);
+        let tail = self.rb.tail.load(atomic::Ordering::Acquire);
         let len = unsafe { self.rb.data.get_ref().len() };
 
-        if head < tail {
-            (head..tail, 0..0)
-        } else if head > tail {
-            (head..len, 0..tail)
-        } else {
-            (0..0, 0..0)
+        match head.cmp(&tail) {
+            cmp::Ordering::Less => (head..tail, 0..0),
+            cmp::Ordering::Greater => (head..len, 0..tail),
+            cmp::Ordering::Equal => (0..0, 0..0),
         }
     }
 
@@ -120,20 +118,25 @@ impl<T: Sized> Consumer<T> {
     /// The method **always** calls `f` even if ring buffer is empty.
     ///
     /// The method returns number returned from `f`.
+    ///
+    /// # Safety
+    ///
+    /// The method gives access to ring buffer underlying memory which may be uninitialized.
+    ///
+    /// *It's up to you to copy or drop appropriate elements if you use this function.*
+    ///
     pub unsafe fn pop_access<F>(&mut self, f: F) -> usize
     where
         F: FnOnce(&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) -> usize,
     {
-        let head = self.rb.head.load(Ordering::Acquire);
-        let tail = self.rb.tail.load(Ordering::Acquire);
+        let head = self.rb.head.load(atomic::Ordering::Acquire);
+        let tail = self.rb.tail.load(atomic::Ordering::Acquire);
         let len = self.rb.data.get_ref().len();
 
-        let ranges = if head < tail {
-            (head..tail, 0..0)
-        } else if head > tail {
-            (head..len, 0..tail)
-        } else {
-            (0..0, 0..0)
+        let ranges = match head.cmp(&tail) {
+            cmp::Ordering::Less => (head..tail, 0..0),
+            cmp::Ordering::Greater => (head..len, 0..tail),
+            cmp::Ordering::Equal => (0..0, 0..0),
         };
 
         let slices = (
@@ -145,7 +148,7 @@ impl<T: Sized> Consumer<T> {
 
         if n > 0 {
             let new_head = (head + n) % len;
-            self.rb.head.store(new_head, Ordering::Release);
+            self.rb.head.store(new_head, atomic::Ordering::Release);
         }
         n
     }
@@ -157,6 +160,13 @@ impl<T: Sized> Consumer<T> {
     /// The remaining part is still **un-iniitilized**.
     ///
     /// Returns the number of items been copied.
+    ///
+    /// # Safety
+    ///
+    /// The method copies raw data from the ring buffer.
+    ///
+    /// *You should manage copied elements after call, otherwise you may get a memory leak.*
+    ///
     pub unsafe fn pop_copy(&mut self, elems: &mut [MaybeUninit<T>]) -> usize {
         self.pop_access(|left, right| {
             if elems.len() < left.len() {
@@ -271,31 +281,33 @@ impl<T: Sized> Consumer<T> {
     ///
     /// Returns the number of deleted items.
     pub fn discard(&mut self, n: usize) -> usize {
-        unsafe { self.pop_access(|left, right| {
-            let (mut cnt, mut rem) = (0, n);
-            let left_elems = if rem <= left.len() {
-                cnt += rem;
-                left.get_unchecked_mut(0..rem)
-            } else {
-                cnt += left.len();
-                left
-            };
-            rem = n - cnt;
+        unsafe {
+            self.pop_access(|left, right| {
+                let (mut cnt, mut rem) = (0, n);
+                let left_elems = if rem <= left.len() {
+                    cnt += rem;
+                    left.get_unchecked_mut(0..rem)
+                } else {
+                    cnt += left.len();
+                    left
+                };
+                rem = n - cnt;
 
-            let right_elems = if rem <= right.len() {
-                cnt += rem;
-                right.get_unchecked_mut(0..rem)
-            } else {
-                cnt += right.len();
-                right
-            };
+                let right_elems = if rem <= right.len() {
+                    cnt += rem;
+                    right.get_unchecked_mut(0..rem)
+                } else {
+                    cnt += right.len();
+                    right
+                };
 
-            for e in left_elems.iter_mut().chain(right_elems.iter_mut()) {
-                e.as_mut_ptr().drop_in_place();
-            }
+                for e in left_elems.iter_mut().chain(right_elems.iter_mut()) {
+                    e.as_mut_ptr().drop_in_place();
+                }
 
-            cnt
-        }) }
+                cnt
+            })
+        }
     }
 
     /// Removes at most `count` elements from the consumer and appends them to the producer.

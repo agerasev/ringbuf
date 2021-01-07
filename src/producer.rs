@@ -62,6 +62,11 @@ impl<T: Sized> Producer<T> {
     /// The method **always** calls `f` even if ring buffer is full.
     ///
     /// The method returns number returned from `f`.
+    ///
+    /// # Safety
+    ///
+    /// The method gives access to ring buffer underlying memory which may be uninitialized.
+    ///
     pub unsafe fn push_access<F>(&mut self, f: F) -> usize
     where
         F: FnOnce(&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) -> usize,
@@ -104,6 +109,13 @@ impl<T: Sized> Producer<T> {
     /// After the call the copied part of data in `elems` should be interpreted as **un-initialized**.
     ///
     /// Returns the number of items been copied.
+    ///
+    /// # Safety
+    ///
+    /// The method copies raw data into the ring buffer.
+    ///
+    /// *You should properly fill the slice and manage remaining elements after copy.*
+    ///
     pub unsafe fn push_copy(&mut self, elems: &[MaybeUninit<T>]) -> usize {
         self.push_access(|left, right| -> usize {
             if elems.len() < left.len() {
