@@ -1,9 +1,11 @@
-use std::{
-    io::{self, Read, Write},
+use alloc::sync::Arc;
+use core::{
     mem::{self, MaybeUninit},
     ptr::copy_nonoverlapping,
-    sync::{atomic::Ordering, Arc},
+    sync::atomic::Ordering,
 };
+#[cfg(feature = "std")]
+use std::io::{self, Read, Write};
 
 use crate::{consumer::Consumer, ring_buffer::*};
 
@@ -216,6 +218,7 @@ impl<T: Sized + Copy> Producer<T> {
     }
 }
 
+#[cfg(feature = "std")]
 impl Producer<u8> {
     /// Reads at most `count` bytes
     /// from [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) instance
@@ -267,6 +270,7 @@ impl Producer<u8> {
     }
 }
 
+#[cfg(feature = "std")]
 impl Write for Producer<u8> {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         let n = self.push_slice(buffer);

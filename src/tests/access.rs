@@ -1,6 +1,6 @@
-use std::mem::MaybeUninit;
-
 use crate::RingBuffer;
+use alloc::rc::Rc;
+use core::mem::MaybeUninit;
 
 #[test]
 fn push() {
@@ -281,8 +281,6 @@ fn discard() {
 
 #[test]
 fn discard_drop() {
-    use std::rc::Rc;
-
     let rc = Rc::<()>::new(());
 
     static N: usize = 10;

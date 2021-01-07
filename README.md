@@ -40,6 +40,8 @@ And finally, there are `unsafe` methods allowing thread-safe direct access in pl
 
 When building with nightly toolchain it is possible to run benchmarks via `cargo bench --features benchmark`.
 
+Also the crate could be used with `no_std` (but `alloc` is still required).
+
 # Examples
 
 ## Simple example

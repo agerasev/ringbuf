@@ -28,6 +28,7 @@ addons:
 script:
   - cargo build --verbose
   - cargo test --verbose
+  - cargo test --no-default-features --verbose
   - bash -c "! rustc -V | grep nightly || cargo bench --features benchmark --verbose"
 
 after_success: |

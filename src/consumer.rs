@@ -1,11 +1,13 @@
-use std::{
+use alloc::sync::Arc;
+use core::{
     cmp::{self, min},
-    io::{self, Read, Write},
     mem::{self, MaybeUninit},
     ops::Range,
     ptr::copy_nonoverlapping,
-    sync::{atomic, Arc},
+    sync::atomic,
 };
+#[cfg(feature = "std")]
+use std::io::{self, Read, Write};
 
 use crate::{producer::Producer, ring_buffer::*};
 
@@ -330,6 +332,7 @@ impl<T: Sized + Copy> Consumer<T> {
     }
 }
 
+#[cfg(feature = "std")]
 impl Consumer<u8> {
     /// Removes at most first `count` bytes from the ring buffer and writes them into
     /// a [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) instance.
@@ -384,6 +387,7 @@ impl Consumer<u8> {
     }
 }
 
+#[cfg(feature = "std")]
 impl Read for Consumer<u8> {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         let n = self.pop_slice(buffer);

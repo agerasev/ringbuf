@@ -1,12 +1,10 @@
-use std::{
+use alloc::{sync::Arc, vec::Vec};
+use core::{
     cell::UnsafeCell,
     cmp::min,
     mem::{self, MaybeUninit},
     ptr::{self, copy},
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
+    sync::atomic::{AtomicUsize, Ordering},
 };
 
 use crate::{consumer::Consumer, producer::Producer};
