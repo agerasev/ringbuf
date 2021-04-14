@@ -228,7 +228,7 @@ impl Producer<u8> {
     /// Returns `Ok(n)` if `read` is succeded. `n` is number of bytes been read.
     /// `n == 0` means that either `read` returned zero or ring buffer is full.
     ///
-    /// If `read` is failed then error is returned.
+    /// If `read` is failed or returned an invalid number then error is returned.
     pub fn read_from(&mut self, reader: &mut dyn Read, count: Option<usize>) -> io::Result<usize> {
         let mut err = None;
         let n = unsafe {
@@ -251,7 +251,7 @@ impl Producer<u8> {
                         } else {
                             Err(io::Error::new(
                                 io::ErrorKind::InvalidInput,
-                                "Read operation returned invalid number",
+                                "Read operation returned an invalid number",
                             ))
                         }
                     }) {
@@ -275,10 +275,7 @@ impl Write for Producer<u8> {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         let n = self.push_slice(buffer);
         if n == 0 && !buffer.is_empty() {
-            Err(io::Error::new(
-                io::ErrorKind::WouldBlock,
-                "Ring buffer is full",
-            ))
+            Err(io::ErrorKind::WouldBlock.into())
         } else {
             Ok(n)
         }

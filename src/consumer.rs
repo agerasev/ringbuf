@@ -341,7 +341,7 @@ impl Consumer<u8> {
     /// Returns `Ok(n)` if `write` is succeded. `n` is number of bytes been written.
     /// `n == 0` means that either `write` returned zero or ring buffer is empty.
     ///
-    /// If `write` is failed then error is returned.
+    /// If `write` is failed or returned an invalid number then error is returned.
     pub fn write_into(
         &mut self,
         writer: &mut dyn Write,
@@ -368,7 +368,7 @@ impl Consumer<u8> {
                         } else {
                             Err(io::Error::new(
                                 io::ErrorKind::InvalidInput,
-                                "Write operation returned invalid number",
+                                "Write operation returned an invalid number",
                             ))
                         }
                     }) {
@@ -392,10 +392,7 @@ impl Read for Consumer<u8> {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         let n = self.pop_slice(buffer);
         if n == 0 && !buffer.is_empty() {
-            Err(io::Error::new(
-                io::ErrorKind::WouldBlock,
-                "Ring buffer is empty",
-            ))
+            Err(io::ErrorKind::WouldBlock.into())
         } else {
             Ok(n)
         }
