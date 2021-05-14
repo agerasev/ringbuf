@@ -1,6 +1,6 @@
 [package]
 name = "ringbuf"
-version = "0.2.4"
+version = "0.2.5"
 authors = ["Alexey Gerasev <alexey.gerasev@gmail.com>"]
 edition = "2018"
 
@@ -25,3 +25,4 @@ name = "message"
 required-features = ["std"]
 
 [dependencies]
+cache-padded = "1.1.1"
