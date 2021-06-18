@@ -243,10 +243,10 @@ impl<T: Sized> Consumer<T> {
                 };
                 for (i, dst) in right[0..rb].iter_mut().enumerate() {
                     if !f(mem::replace(dst, MaybeUninit::uninit()).assume_init()) {
-                        return i + lb + 1;
+                        return lb + i + 1;
                     }
                 }
-                left.len() + right.len()
+                lb + rb
             })
         }
     }
