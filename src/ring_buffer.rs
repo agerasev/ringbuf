@@ -102,7 +102,7 @@ impl<T: Sized> Drop for RingBuffer<T> {
         };
 
         let drop = |elem_ref: &mut MaybeUninit<T>| unsafe {
-            mem::replace(elem_ref, MaybeUninit::uninit()).assume_init();
+            elem_ref.as_ptr().read();
         };
         for elem in data[slices.0].iter_mut() {
             drop(elem);
