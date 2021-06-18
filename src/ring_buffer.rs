@@ -1,13 +1,13 @@
+use crate::{consumer::Consumer, producer::Producer};
 use alloc::{sync::Arc, vec::Vec};
+use cache_padded::CachePadded;
 use core::{
     cell::UnsafeCell,
     cmp::min,
-    mem::{self, MaybeUninit},
+    mem::MaybeUninit,
     ptr::{self, copy},
     sync::atomic::{AtomicUsize, Ordering},
 };
-use cache_padded::CachePadded;
-use crate::{consumer::Consumer, producer::Producer};
 
 pub(crate) struct SharedVec<T: Sized> {
     cell: UnsafeCell<Vec<T>>,
