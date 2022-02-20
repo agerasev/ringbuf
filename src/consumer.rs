@@ -83,7 +83,7 @@ impl<T: Sized> Consumer<T> {
 
     /// Returns a pair of slices which contain, in order, the contents of the `RingBuffer`.
     ///
-    /// *The iteration may not include elements pushed to the buffer by concurring producer after the method call.*
+    /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*
     pub fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
         let ranges = self.get_ranges();
 
@@ -96,6 +96,36 @@ impl<T: Sized> Consumer<T> {
                 &mut *(right as *mut [MaybeUninit<T>] as *mut [T]),
             )
         }
+    }
+
+    /// Gives immutable access to the elements contained by the ring buffer without removing them.
+    ///
+    /// The method takes a function `f` as argument.
+    /// `f` takes two slices of ring buffer contents (the second one or both of them may be empty).
+    /// First slice contains older elements.
+    ///
+    /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*
+    ///
+    /// *Marked deprecated in favor of `as_slices`.*
+    #[deprecated(since = "0.2.7", note = "please use `as_slices` instead")]
+    pub fn access<F: FnOnce(&[T], &[T])>(&self, f: F) {
+        let (left, right) = self.as_slices();
+        f(left, right);
+    }
+
+    /// Gives mutable access to the elements contained by the ring buffer without removing them.
+    ///
+    /// The method takes a function `f` as argument.
+    /// `f` takes two slices of ring buffer contents (the second one or both of them may be empty).
+    /// First slice contains older elements.
+    ///
+    /// *The iteration may not include elements pushed to the buffer by concurring producer after the method call.*
+    ///
+    /// *Marked deprecated in favor of `as_mut_slices`.*
+    #[deprecated(since = "0.2.7", note = "please use `as_mut_slices` instead")]
+    pub fn access_mut<F: FnOnce(&mut [T], &mut [T])>(&mut self, f: F) {
+        let (left, right) = self.as_mut_slices();
+        f(left, right);
     }
 
     /// Allows to read from ring buffer memory directly.
@@ -246,6 +276,9 @@ impl<T: Sized> Consumer<T> {
     /// Iterate immutably over the elements contained by the ring buffer without removing them.
     ///
     /// *The iteration may not include elements pushed to the buffer by concurring producer after the method call.*
+    ///
+    /// *Marked deprecated in favor of `iter`.*
+    #[deprecated(since = "0.2.7", note = "please use `iter` instead")]
     pub fn for_each<F: FnMut(&T)>(&self, mut f: F) {
         let (left, right) = self.as_slices();
 
@@ -267,6 +300,9 @@ impl<T: Sized> Consumer<T> {
     /// Iterate mutably over the elements contained by the ring buffer without removing them.
     ///
     /// *The iteration may not include elements pushed to the buffer by concurring producer after the method call.*
+    ///
+    /// *Marked deprecated in favor of `iter_mut`.*
+    #[deprecated(since = "0.2.7", note = "please use `iter_mut` instead")]
     pub fn for_each_mut<F: FnMut(&mut T)>(&mut self, mut f: F) {
         let (left, right) = self.as_mut_slices();
 
@@ -285,7 +321,7 @@ impl<T: Sized> Consumer<T> {
         left.iter_mut().chain(right.iter_mut())
     }
 
-    /// Removes `n` items from the buffer and safely drops them.
+    /// Removes at most `n` items from the buffer and safely drops them.
     ///
     /// Returns the number of deleted items.
     pub fn discard(&mut self, n: usize) -> usize {
