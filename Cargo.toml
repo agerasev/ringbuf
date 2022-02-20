@@ -20,6 +20,7 @@ benchmark = []
 
 [[example]]
 name = "simple"
+
 [[example]]
 name = "message"
 required-features = ["std"]
