@@ -364,6 +364,14 @@ impl<T: Sized> Consumer<T> {
     }
 }
 
+impl<T: Sized> Iterator for Consumer<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        self.pop()
+    }
+}
+
 impl<T: Sized + Copy> Consumer<T> {
     /// Removes first elements from the ring buffer and writes them into a slice.
     /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).

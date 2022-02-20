@@ -35,3 +35,17 @@ fn iter_mut() {
 
     assert_eq!(sum, first + second);
 }
+
+#[test]
+fn into_iter() {
+    let buf = RingBuffer::<i32>::new(2);
+    let (mut prod, cons) = buf.split();
+
+    prod.push(10).unwrap();
+    prod.push(20).unwrap();
+
+    for (i, v) in cons.into_iter().enumerate() {
+        assert_eq!(10 * (i + 1) as i32, v);
+    }
+    assert!(prod.is_empty());
+}
