@@ -4,6 +4,7 @@ use core::{
     mem::{self, MaybeUninit},
     ops::Range,
     ptr::copy_nonoverlapping,
+    slice,
     sync::atomic,
 };
 #[cfg(feature = "std")]
@@ -88,8 +89,10 @@ impl<T: Sized> Consumer<T> {
         let ranges = self.get_ranges();
 
         unsafe {
-            let left = &mut self.rb.data.get_mut()[ranges.0];
-            let right = &mut self.rb.data.get_mut()[ranges.1];
+            let ptr = self.rb.data.get_mut().as_mut_ptr();
+
+            let left = slice::from_raw_parts_mut(ptr.wrapping_add(ranges.0.start), ranges.0.len());
+            let right = slice::from_raw_parts_mut(ptr.wrapping_add(ranges.1.start), ranges.1.len());
 
             (
                 &mut *(left as *mut [MaybeUninit<T>] as *mut [T]),
@@ -163,9 +166,11 @@ impl<T: Sized> Consumer<T> {
             cmp::Ordering::Equal => (0..0, 0..0),
         };
 
+        let ptr = self.rb.data.get_mut().as_mut_ptr();
+
         let slices = (
-            &mut self.rb.data.get_mut()[ranges.0],
-            &mut self.rb.data.get_mut()[ranges.1],
+            slice::from_raw_parts_mut(ptr.wrapping_add(ranges.0.start), ranges.0.len()),
+            slice::from_raw_parts_mut(ptr.wrapping_add(ranges.1.start), ranges.1.len()),
         );
 
         let n = f(slices.0, slices.1);
