@@ -44,6 +44,7 @@
 
 #![no_std]
 #![cfg_attr(feature = "benchmark", feature(test))]
+#![feature(slice_split_at_unchecked)]
 
 extern crate alloc;
 #[cfg(feature = "std")]

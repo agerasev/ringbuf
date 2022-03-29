@@ -71,8 +71,14 @@ impl<T: Sized> Consumer<T> {
         let ranges = self.get_ranges();
 
         unsafe {
-            let left = &self.rb.data.get_ref()[ranges.0];
-            let right = &self.rb.data.get_ref()[ranges.1];
+            let data = &self.rb.data.get_ref()[..];
+            let (left, right) = if ranges.1.is_empty() {
+                (&data[ranges.0], &[][..])
+            } else {
+                let (not_left, left) = data.split_at_unchecked(ranges.0.start);
+                let (right, _) = not_left.split_at_unchecked(ranges.1.end);
+                (left, right)
+            };
 
             (
                 &*(left as *const [MaybeUninit<T>] as *const [T]),
@@ -88,8 +94,15 @@ impl<T: Sized> Consumer<T> {
         let ranges = self.get_ranges();
 
         unsafe {
-            let left = &mut self.rb.data.get_mut()[ranges.0];
-            let right = &mut self.rb.data.get_mut()[ranges.1];
+            let data = &mut self.rb.data.get_mut()[..];
+
+            let (left, right) = if ranges.1.is_empty() {
+                (&mut data[ranges.0], &mut [][..])
+            } else {
+                let (not_left, left) = data.split_at_mut_unchecked(ranges.0.start);
+                let (right, _) = not_left.split_at_mut_unchecked(ranges.1.end);
+                (left, right)
+            };
 
             (
                 &mut *(left as *mut [MaybeUninit<T>] as *mut [T]),
