@@ -328,9 +328,27 @@ impl<T: Sized> Consumer<T> {
         left.iter_mut().chain(right.iter_mut())
     }
 
-    /// Removes at most `n` items from the buffer and safely drops them.
+    /// Removes at most `n` and at least `min(n, Consumer::len())` items from the buffer and safely drops them.
+    ///
+    /// If there is no concurring producer activity then exactly `min(n, Consumer::len())` items are removed.
     ///
     /// Returns the number of deleted items.
+    ///
+    ///
+    /// ```rust
+    /// # extern crate ringbuf;
+    /// # use ringbuf::RingBuffer;
+    /// # fn main() {
+    /// let rb = RingBuffer::<i32>::new(8);
+    /// let (mut prod, mut cons) = rb.split();
+    ///
+    /// assert_eq!(prod.push_iter(&mut (0..8)), 8);
+    ///
+    /// assert_eq!(cons.discard(4), 4);
+    /// assert_eq!(cons.discard(8), 4);
+    /// assert_eq!(cons.discard(8), 0);
+    /// # }
+    /// ```
     pub fn discard(&mut self, n: usize) -> usize {
         unsafe {
             self.pop_access(|left, right| {
