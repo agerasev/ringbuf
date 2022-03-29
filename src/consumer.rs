@@ -72,8 +72,10 @@ impl<T: Sized> Consumer<T> {
         let ranges = self.get_ranges();
 
         unsafe {
-            let left = &self.rb.data.get_ref()[ranges.0];
-            let right = &self.rb.data.get_ref()[ranges.1];
+            let ptr = self.rb.data.get_ref().as_ptr();
+
+            let left = slice::from_raw_parts(ptr.add(ranges.0.start), ranges.0.len());
+            let right = slice::from_raw_parts(ptr.add(ranges.1.start), ranges.1.len());
 
             (
                 &*(left as *const [MaybeUninit<T>] as *const [T]),
@@ -91,8 +93,8 @@ impl<T: Sized> Consumer<T> {
         unsafe {
             let ptr = self.rb.data.get_mut().as_mut_ptr();
 
-            let left = slice::from_raw_parts_mut(ptr.wrapping_add(ranges.0.start), ranges.0.len());
-            let right = slice::from_raw_parts_mut(ptr.wrapping_add(ranges.1.start), ranges.1.len());
+            let left = slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len());
+            let right = slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len());
 
             (
                 &mut *(left as *mut [MaybeUninit<T>] as *mut [T]),
