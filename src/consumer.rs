@@ -56,7 +56,7 @@ impl<T: Sized> Consumer<T> {
     fn get_ranges(&self) -> (Range<usize>, Range<usize>) {
         let head = self.rb.head.load(atomic::Ordering::Acquire);
         let tail = self.rb.tail.load(atomic::Ordering::Acquire);
-        let len = unsafe { self.rb.data.get_ref().len() };
+        let len = self.rb.data.len();
 
         match head.cmp(&tail) {
             cmp::Ordering::Less => (head..tail, 0..0),
@@ -160,7 +160,7 @@ impl<T: Sized> Consumer<T> {
     {
         let head = self.rb.head.load(atomic::Ordering::Acquire);
         let tail = self.rb.tail.load(atomic::Ordering::Acquire);
-        let len = self.rb.data.get_ref().len();
+        let len = self.rb.data.len();
 
         let ranges = match head.cmp(&tail) {
             cmp::Ordering::Less => (head..tail, 0..0),

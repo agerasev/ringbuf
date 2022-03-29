@@ -76,7 +76,7 @@ impl<T: Sized> Producer<T> {
     {
         let head = self.rb.head.load(Ordering::Acquire);
         let tail = self.rb.tail.load(Ordering::Acquire);
-        let len = self.rb.data.get_ref().len();
+        let len = self.rb.data.len();
 
         let ranges = if tail >= head {
             if head > 0 {
