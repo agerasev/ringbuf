@@ -6,8 +6,8 @@ edition = "2021"
 
 description = "Lock-free SPSC FIFO ring buffer with direct access to inner data"
 documentation = "https://docs.rs/ringbuf"
-homepage = "https://github.com/nthend/ringbuf"
-repository = "https://github.com/nthend/ringbuf.git"
+homepage = "https://github.com/agerasev/ringbuf"
+repository = "https://github.com/agerasev/ringbuf.git"
 readme = "README.md"
 keywords = ["lock-free", "spsc", "ring-buffer", "rb", "fifo"]
 categories = ["concurrency", "data-structures", "no-std"]
