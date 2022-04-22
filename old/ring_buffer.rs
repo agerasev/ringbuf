@@ -1,108 +1,64 @@
+use crate::{consumer::Consumer, producer::Producer};
 use alloc::{sync::Arc, vec::Vec};
 use cache_padded::CachePadded;
 use core::{
     cell::UnsafeCell,
-    convert::{AsMut, AsRef},
-    marker::PhantomData,
+    cmp::min,
     mem::MaybeUninit,
+    ptr::{self, copy},
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use crate::{
-    consumer::{ArcConsumer, RefConsumer},
-    producer::{ArcProducer, RefProducer},
-};
-
-pub trait Storage<U> {
-    fn len(&self) -> usize;
-    unsafe fn as_slice(&self) -> &[U];
-    unsafe fn as_mut_slice(&mut self) -> &mut [U];
-}
-
-pub trait Container<U>: AsRef<[U]> + AsMut<[U]> {}
-impl<U, C> Container<U> for C where C: AsRef<[U]> + AsMut<[U]> {}
-
-struct ContainerStorage<U, C: Container<U>> {
+pub(crate) struct SharedVec<T: Sized> {
+    cell: UnsafeCell<Vec<T>>,
     len: usize,
-    container: UnsafeCell<C>,
-    phantom: PhantomData<U>,
 }
 
-unsafe impl<U, C: Container<U>> Sync for ContainerStorage<U, C> {}
+unsafe impl<T: Sized> Sync for SharedVec<T> {}
 
-impl<U, C> ContainerStorage<U, C>
-where
-    C: AsRef<[U]> + AsMut<[U]>,
-{
-    pub fn new(mut container: C) -> Self {
+impl<T: Sized> SharedVec<T> {
+    pub fn new(data: Vec<T>) -> Self {
         Self {
-            len: container.as_mut().len(),
-            container: UnsafeCell::new(container),
-            phantom: PhantomData,
+            len: data.len(),
+            cell: UnsafeCell::new(data),
         }
     }
 
-    pub fn into_inner(self) -> C {
-        self.container.into_inner()
-    }
-}
-
-impl<U, C: Container> Storage<T> for ContainerStorage<U, C> {
-    fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.len
     }
-
-    unsafe fn as_slice(&self) -> &[U] {
-        (&*self.container.get()).as_ref()
+    pub unsafe fn get_ref(&self) -> &Vec<T> {
+        &*self.cell.get()
     }
-
-    unsafe fn as_mut_slice(&mut self) -> &mut [U] {
-        (&mut *self.container.get()).as_mut()
+    #[allow(clippy::mut_from_ref)]
+    pub unsafe fn get_mut(&self) -> &mut Vec<T> {
+        &mut *self.cell.get()
     }
 }
 
-pub struct RingBuffer<T, C: Container<MaybeUninit<T>>> {
-    pub(crate) data: ContainerStorage<MaybeUninit<T>, C>,
+/// Ring buffer itself.
+pub struct RingBuffer<T: Sized> {
+    pub(crate) data: SharedVec<MaybeUninit<T>>,
     pub(crate) head: CachePadded<AtomicUsize>,
     pub(crate) tail: CachePadded<AtomicUsize>,
 }
 
-//pub type StaticRingBuffer<T, const N: usize> = RingBuffer<T, [MaybeUninit<T>; N]>;
-//pub type HeapRingBuffer<T> = RingBuffer<T, Vec<MaybeUninit<T>>>;
-
-impl<T> RingBuffer<T, Vec<MaybeUninit<T>>> {
+impl<T: Sized> RingBuffer<T> {
+    /// Creates a new instance of a ring buffer.
     pub fn new(capacity: usize) -> Self {
         let mut data = Vec::new();
         data.resize_with(capacity + 1, MaybeUninit::uninit);
-        unsafe { Self::from_raw_parts(data, 0, 0) }
-    }
-}
-
-impl<T, const N: usize> Default for RingBuffer<T, [MaybeUninit<T>; N]> {
-    fn default() -> Self {
-        let uninit = MaybeUninit::<[T; N]>::uninit();
-        let array = unsafe { (&uninit as *const _ as *const [MaybeUninit<T>; N]).read() };
-        unsafe { Self::from_raw_parts(array, 0, 0) }
-    }
-}
-
-impl<T, C: Container<MaybeUninit<T>>> RingBuffer<T, C> {
-    pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
         Self {
-            data: ContainerStorage::new(container),
-            head: CachePadded::new(AtomicUsize::new(head)),
-            tail: CachePadded::new(AtomicUsize::new(tail)),
+            data: SharedVec::new(data),
+            head: CachePadded::new(AtomicUsize::new(0)),
+            tail: CachePadded::new(AtomicUsize::new(0)),
         }
     }
 
     /// Splits ring buffer into producer and consumer.
-    pub fn split(self) -> (ArcProducer<T, C>, ArcConsumer<T, C>) {
+    pub fn split(self) -> (Producer<T>, Consumer<T>) {
         let arc = Arc::new(self);
-        (ArcProducer { rb: arc.clone() }, ArcConsumer { rb: arc })
-    }
-
-    pub fn split_ref(&mut self) -> (RefProducer<'_, T, C>, RefConsumer<'_, T, C>) {
-        (RefProducer { rb: self }, RefConsumer { rb: self })
+        (Producer { rb: arc.clone() }, Consumer { rb: arc })
     }
 
     /// Returns capacity of the ring buffer.
@@ -137,9 +93,9 @@ impl<T, C: Container<MaybeUninit<T>>> RingBuffer<T, C> {
     }
 }
 
-impl<T, C: Container<MaybeUninit<T>>> Drop for RingBuffer<T, C> {
+impl<T: Sized> Drop for RingBuffer<T> {
     fn drop(&mut self) {
-        let data = unsafe { self.data.as_mut_slice() };
+        let data = unsafe { self.data.get_mut() };
 
         let head = self.head.load(Ordering::Acquire);
         let tail = self.tail.load(Ordering::Acquire);
@@ -163,7 +119,30 @@ impl<T, C: Container<MaybeUninit<T>>> Drop for RingBuffer<T, C> {
     }
 }
 
-/*
+struct SlicePtr<T: Sized> {
+    pub ptr: *mut T,
+    pub len: usize,
+}
+
+impl<T> SlicePtr<T> {
+    fn null() -> Self {
+        Self {
+            ptr: ptr::null_mut(),
+            len: 0,
+        }
+    }
+    fn new(slice: &mut [T]) -> Self {
+        Self {
+            ptr: slice.as_mut_ptr(),
+            len: slice.len(),
+        }
+    }
+    unsafe fn shift(&mut self, count: usize) {
+        self.ptr = self.ptr.add(count);
+        self.len -= count;
+    }
+}
+
 /// Moves at most `count` items from the `src` consumer to the `dst` producer.
 /// Consumer and producer may be of different buffers as well as of the same one.
 ///
@@ -210,4 +189,3 @@ pub fn move_items<T>(src: &mut Consumer<T>, dst: &mut Producer<T>, count: Option
         })
     }
 }
-*/

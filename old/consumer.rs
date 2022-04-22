@@ -10,21 +10,12 @@ use core::{
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use crate::{
-    producer::Producer,
-    ring_buffer::{Container, RingBuffer},
-};
+use crate::{producer::Producer, ring_buffer::*};
 
 /// Consumer part of ring buffer.
-pub struct ArcConsumer<T, C: Container<T>> {
-    rb: Arc<RingBuffer<T, C>>,
+pub struct Consumer<T> {
+    pub(crate) rb: Arc<RingBuffer<T>>,
 }
-
-pub struct RefConsumer<'a, T, C: Container<T>> {
-    rb: &'a RingBuffer<T, C>,
-}
-
-pub trait Consumer<T> {}
 
 impl<T: Sized> Consumer<T> {
     /// Returns capacity of the ring buffer.

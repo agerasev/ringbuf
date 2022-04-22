@@ -49,15 +49,19 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-//#[cfg(feature = "benchmark")]
-//extern crate test;
+#[cfg(feature = "benchmark")]
+extern crate test;
 
-//#[cfg(feature = "benchmark")]
-//mod benchmark;
+#[cfg(feature = "benchmark")]
+mod benchmark;
 
-//#[cfg(test)]
-//mod tests;
+#[cfg(test)]
+mod tests;
 
 mod consumer;
 mod producer;
 mod ring_buffer;
+
+pub use consumer::*;
+pub use producer::*;
+pub use ring_buffer::*;

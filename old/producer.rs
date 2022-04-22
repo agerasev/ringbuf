@@ -8,23 +8,14 @@ use core::{
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use crate::{
-    consumer::Consumer,
-    ring_buffer::{Container, RingBuffer, StaticRingBuffer},
-};
-
-pub trait Producer<T> {}
+use crate::{consumer::Consumer, ring_buffer::*};
 
 /// Producer part of ring buffer.
-pub struct ArcProducer<T, C: Container<MaybeUninit<T>>> {
+pub struct Producer<T> {
     pub(crate) rb: Arc<RingBuffer<T>>,
 }
 
-pub struct RefProducer<'a, T, const N: usize> {
-    pub(crate) rb: &'a StaticRingBuffer<T, N>,
-}
-
-impl<T, C: Container<MaybeUninit<T>>> Producer<T, C> {
+impl<T: Sized> Producer<T> {
     /// Returns capacity of the ring buffer.
     ///
     /// The capacity of the buffer is constant.
