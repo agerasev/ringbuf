@@ -1,139 +1,142 @@
 use alloc::{sync::Arc, vec::Vec};
 use cache_padded::CachePadded;
 use core::{
-    cell::UnsafeCell,
-    convert::{AsMut, AsRef},
-    marker::PhantomData,
+    cmp,
     mem::MaybeUninit,
+    slice,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
 use crate::{
     consumer::{ArcConsumer, RefConsumer},
     producer::{ArcProducer, RefProducer},
+    storage::{Container, Storage},
 };
 
-pub trait Storage<U> {
-    fn len(&self) -> usize;
-    unsafe fn as_slice(&self) -> &[U];
-    unsafe fn as_mut_slice(&mut self) -> &mut [U];
-}
+pub trait AbstractRingBuffer<T> {
+    /// Returns capacity of the ring buffer.
+    fn capacity(&self) -> usize;
 
-pub trait Container<U>: AsRef<[U]> + AsMut<[U]> {}
-impl<U, C> Container<U> for C where C: AsRef<[U]> + AsMut<[U]> {}
+    unsafe fn move_head(&self, count: usize);
+    unsafe fn move_tail(&self, count: usize);
 
-struct ContainerStorage<U, C: Container<U>> {
-    len: usize,
-    container: UnsafeCell<C>,
-    phantom: PhantomData<U>,
-}
+    /// All elements in slices are guaranteed to be *initialized*.
+    unsafe fn occupied_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]);
+    /// All elements in slices are guaranteed to be *uninitialized*.
+    unsafe fn vacant_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]);
 
-unsafe impl<U, C: Container<U>> Sync for ContainerStorage<U, C> {}
+    /// The length of the data in the buffer.
+    fn occupied_len(&self) -> usize;
+    /// The remaining space in the buffer.
+    fn vacant_len(&self) -> usize;
 
-impl<U, C> ContainerStorage<U, C>
-where
-    C: AsRef<[U]> + AsMut<[U]>,
-{
-    pub fn new(mut container: C) -> Self {
-        Self {
-            len: container.as_mut().len(),
-            container: UnsafeCell::new(container),
-            phantom: PhantomData,
-        }
+    /// Checks if the ring buffer is empty.
+    fn is_empty(&self) -> bool {
+        self.occupied_len() == 0
     }
 
-    pub fn into_inner(self) -> C {
-        self.container.into_inner()
-    }
-}
-
-impl<U, C: Container> Storage<T> for ContainerStorage<U, C> {
-    fn len(&self) -> usize {
-        self.len
-    }
-
-    unsafe fn as_slice(&self) -> &[U] {
-        (&*self.container.get()).as_ref()
-    }
-
-    unsafe fn as_mut_slice(&mut self) -> &mut [U] {
-        (&mut *self.container.get()).as_mut()
+    /// Checks if the ring buffer is full.
+    fn is_full(&self) -> bool {
+        self.vacant_len() == 0
     }
 }
 
 pub struct RingBuffer<T, C: Container<MaybeUninit<T>>> {
-    pub(crate) data: ContainerStorage<MaybeUninit<T>, C>,
-    pub(crate) head: CachePadded<AtomicUsize>,
-    pub(crate) tail: CachePadded<AtomicUsize>,
+    data: Storage<MaybeUninit<T>, C>,
+    head: CachePadded<AtomicUsize>,
+    tail: CachePadded<AtomicUsize>,
 }
-
-//pub type StaticRingBuffer<T, const N: usize> = RingBuffer<T, [MaybeUninit<T>; N]>;
-//pub type HeapRingBuffer<T> = RingBuffer<T, Vec<MaybeUninit<T>>>;
-
-impl<T> RingBuffer<T, Vec<MaybeUninit<T>>> {
-    pub fn new(capacity: usize) -> Self {
-        let mut data = Vec::new();
-        data.resize_with(capacity + 1, MaybeUninit::uninit);
-        unsafe { Self::from_raw_parts(data, 0, 0) }
-    }
-}
-
-impl<T, const N: usize> Default for RingBuffer<T, [MaybeUninit<T>; N]> {
-    fn default() -> Self {
-        let uninit = MaybeUninit::<[T; N]>::uninit();
-        let array = unsafe { (&uninit as *const _ as *const [MaybeUninit<T>; N]).read() };
-        unsafe { Self::from_raw_parts(array, 0, 0) }
-    }
-}
-
 impl<T, C: Container<MaybeUninit<T>>> RingBuffer<T, C> {
+    fn head(&self) -> usize {
+        self.head.load(Ordering::Acquire)
+    }
+    fn tail(&self) -> usize {
+        self.head.load(Ordering::Acquire)
+    }
+    fn modulo(&self) -> usize {
+        2 * self.capacity()
+    }
+
     pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
         Self {
-            data: ContainerStorage::new(container),
+            data: Storage::new(container),
             head: CachePadded::new(AtomicUsize::new(head)),
             tail: CachePadded::new(AtomicUsize::new(tail)),
         }
     }
 
     /// Splits ring buffer into producer and consumer.
-    pub fn split(self) -> (ArcProducer<T, C>, ArcConsumer<T, C>) {
+    pub fn split(self) -> (ArcProducer<T, Self>, ArcConsumer<T, Self>) {
         let arc = Arc::new(self);
-        (ArcProducer { rb: arc.clone() }, ArcConsumer { rb: arc })
+        (ArcProducer::new(arc.clone()), ArcConsumer::new(arc))
     }
 
-    pub fn split_ref(&mut self) -> (RefProducer<'_, T, C>, RefConsumer<'_, T, C>) {
-        (RefProducer { rb: self }, RefConsumer { rb: self })
+    pub fn split_ref(&mut self) -> (RefProducer<'_, T, Self>, RefConsumer<'_, T, Self>) {
+        (RefProducer::new(self), RefConsumer::new(self))
+    }
+}
+
+impl<T, C: Container<MaybeUninit<T>>> AbstractRingBuffer<T> for RingBuffer<T, C> {
+    fn capacity(&self) -> usize {
+        self.data.len()
     }
 
-    /// Returns capacity of the ring buffer.
-    pub fn capacity(&self) -> usize {
-        self.data.len() - 1
+    unsafe fn move_head(&self, count: usize) {
+        assert!(count <= self.occupied_len());
+        self.head
+            .store((self.head() + count) % self.modulo(), Ordering::Release);
+    }
+    unsafe fn move_tail(&self, count: usize) {
+        assert!(count <= self.vacant_len());
+        self.tail
+            .store((self.tail() + count) % self.modulo(), Ordering::Release);
     }
 
-    /// Checks if the ring buffer is empty.
-    pub fn is_empty(&self) -> bool {
-        let head = self.head.load(Ordering::Acquire);
-        let tail = self.tail.load(Ordering::Acquire);
-        head == tail
+    /// All elements in slices are guaranteed to be *initialized*.
+    unsafe fn occupied_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+        let head = self.head();
+        let tail = self.tail();
+        let len = self.data.len();
+
+        let ranges = match head.cmp(&tail) {
+            cmp::Ordering::Less => ((head % len)..(tail % len), 0..0),
+            cmp::Ordering::Greater => ((head % len)..len, 0..(tail % len)),
+            cmp::Ordering::Equal => (0..0, 0..0),
+        };
+
+        let ptr = self.data.as_mut_slice().as_mut_ptr();
+        (
+            slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
+            slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
+        )
     }
 
-    /// Checks if the ring buffer is full.
-    pub fn is_full(&self) -> bool {
-        let head = self.head.load(Ordering::Acquire);
-        let tail = self.tail.load(Ordering::Acquire);
-        (tail + 1) % self.data.len() == head
+    /// All elements in slices are guaranteed to be *uninitialized*.
+    unsafe fn vacant_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+        let head = self.head();
+        let tail = self.tail();
+        let len = self.data.len();
+
+        let ranges = match head.cmp(&tail) {
+            cmp::Ordering::Less => ((tail % len)..len, 0..(head % len)),
+            cmp::Ordering::Greater => ((tail % len)..(head % len), 0..0),
+            cmp::Ordering::Equal => (0..0, 0..0),
+        };
+
+        let ptr = self.data.as_mut_slice().as_mut_ptr();
+        (
+            slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
+            slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
+        )
     }
 
-    /// The length of the data in the buffer.
-    pub fn len(&self) -> usize {
-        let head = self.head.load(Ordering::Acquire);
-        let tail = self.tail.load(Ordering::Acquire);
-        (tail + self.data.len() - head) % self.data.len()
+    /// The number of elements stored in the buffer.
+    fn occupied_len(&self) -> usize {
+        (self.modulo() + self.tail() - self.head()) % self.modulo()
     }
-
-    /// The remaining space in the buffer.
-    pub fn remaining(&self) -> usize {
-        self.capacity() - self.len()
+    /// The number of vacant places in the buffer.
+    fn vacant_len(&self) -> usize {
+        (self.modulo() + self.head() - self.tail() - self.capacity()) % self.modulo()
     }
 }
 
@@ -160,6 +163,22 @@ impl<T, C: Container<MaybeUninit<T>>> Drop for RingBuffer<T, C> {
         for elem in data[slices.1].iter_mut() {
             drop(elem);
         }
+    }
+}
+
+impl<T> RingBuffer<T, Vec<MaybeUninit<T>>> {
+    pub fn new(capacity: usize) -> Self {
+        let mut data = Vec::new();
+        data.resize_with(capacity + 1, MaybeUninit::uninit);
+        unsafe { Self::from_raw_parts(data, 0, 0) }
+    }
+}
+
+impl<T, const N: usize> Default for RingBuffer<T, [MaybeUninit<T>; N]> {
+    fn default() -> Self {
+        let uninit = MaybeUninit::<[T; N]>::uninit();
+        let array = unsafe { (&uninit as *const _ as *const [MaybeUninit<T>; N]).read() };
+        unsafe { Self::from_raw_parts(array, 0, 0) }
     }
 }
 

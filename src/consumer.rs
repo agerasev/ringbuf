@@ -1,6 +1,7 @@
 use alloc::sync::Arc;
 use core::{
     cmp::{self, min},
+    marker::PhantomData,
     mem::{self, MaybeUninit},
     ops::Range,
     ptr::copy_nonoverlapping,
@@ -10,20 +11,38 @@ use core::{
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use crate::{
-    producer::Producer,
-    ring_buffer::{Container, RingBuffer},
-};
+use crate::ring_buffer::AbstractRingBuffer;
 
 /// Consumer part of ring buffer.
-pub struct ArcConsumer<T, C: Container<T>> {
-    rb: Arc<RingBuffer<T, C>>,
+pub struct ArcConsumer<T, Rb: AbstractRingBuffer<T>> {
+    rb: Arc<Rb>,
+    _phantom: PhantomData<T>,
 }
 
-pub struct RefConsumer<'a, T, C: Container<T>> {
-    rb: &'a RingBuffer<T, C>,
+impl<T, Rb: AbstractRingBuffer<T>> ArcConsumer<T, Rb> {
+    pub fn new(rb: Arc<Rb>) -> Self {
+        Self {
+            rb,
+            _phantom: PhantomData,
+        }
+    }
 }
 
+pub struct RefConsumer<'a, T, Rb: AbstractRingBuffer<T>> {
+    rb: &'a Rb,
+    _phantom: PhantomData<T>,
+}
+
+impl<'a, T, Rb: AbstractRingBuffer<T>> RefConsumer<'a, T, Rb> {
+    pub fn new(rb: &'a Rb) -> Self {
+        Self {
+            rb,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+/*
 pub trait Consumer<T> {}
 
 impl<T: Sized> Consumer<T> {
@@ -482,3 +501,4 @@ impl Read for Consumer<u8> {
         }
     }
 }
+*/

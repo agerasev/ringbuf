@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 use core::{
+    marker::PhantomData,
     mem::{self, MaybeUninit},
     ptr::copy_nonoverlapping,
     slice,
@@ -8,22 +9,40 @@ use core::{
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use crate::{
-    consumer::Consumer,
-    ring_buffer::{Container, RingBuffer, StaticRingBuffer},
-};
+use crate::ring_buffer::AbstractRingBuffer;
 
 pub trait Producer<T> {}
 
 /// Producer part of ring buffer.
-pub struct ArcProducer<T, C: Container<MaybeUninit<T>>> {
-    pub(crate) rb: Arc<RingBuffer<T>>,
+pub struct ArcProducer<T, Rb: AbstractRingBuffer<T>> {
+    rb: Arc<Rb>,
+    _phantom: PhantomData<T>,
 }
 
-pub struct RefProducer<'a, T, const N: usize> {
-    pub(crate) rb: &'a StaticRingBuffer<T, N>,
+impl<T, Rb: AbstractRingBuffer<T>> ArcProducer<T, Rb> {
+    pub fn new(rb: Arc<Rb>) -> Self {
+        Self {
+            rb,
+            _phantom: PhantomData,
+        }
+    }
 }
 
+pub struct RefProducer<'a, T, Rb: AbstractRingBuffer<T>> {
+    rb: &'a Rb,
+    _phantom: PhantomData<T>,
+}
+
+impl<'a, T, Rb: AbstractRingBuffer<T>> RefProducer<'a, T, Rb> {
+    pub fn new(rb: &'a Rb) -> Self {
+        Self {
+            rb,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+/*
 impl<T, C: Container<MaybeUninit<T>>> Producer<T, C> {
     /// Returns capacity of the ring buffer.
     ///
@@ -297,3 +316,4 @@ impl Write for Producer<u8> {
         Ok(())
     }
 }
+*/

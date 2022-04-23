@@ -61,3 +61,6 @@ extern crate std;
 mod consumer;
 mod producer;
 mod ring_buffer;
+mod storage;
+
+pub use ring_buffer::RingBuffer;
