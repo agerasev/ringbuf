@@ -2,6 +2,7 @@ use alloc::sync::Arc;
 use core::{
     marker::PhantomData,
     mem::{self, MaybeUninit},
+    ops::Deref,
     ptr::copy_nonoverlapping,
     slice,
     sync::atomic::Ordering,
@@ -11,34 +12,44 @@ use std::io::{self, Read, Write};
 
 use crate::ring_buffer::RingBufferTail;
 
-pub trait Producer<T> {}
+pub trait RbTailRef<T> {
+    type Target: RingBufferTail<T>;
+    fn rb(&self) -> &Self::Target;
+}
+
+impl<T, B: RingBufferTail<T>> RbTailRef<T> for Arc<B> {
+    type Target = B;
+    fn rb(&self) -> &B {
+        self.as_ref()
+    }
+}
+
+impl<'a, T, B: RingBufferTail<T>> RbTailRef<T> for &'a B {
+    type Target = B;
+    fn rb(&self) -> &B {
+        *self
+    }
+}
 
 /// Producer part of ring buffer.
-pub struct ArcProducer<T, Rb: RingBufferTail<T>> {
-    rb: Arc<Rb>,
+pub struct Producer<T, B: RingBufferTail<T>, R: RbTailRef<T, Target = B>> {
+    rb_ref: R,
     _phantom: PhantomData<T>,
 }
 
-impl<T, Rb: RingBufferTail<T>> ArcProducer<T, Rb> {
-    pub fn new(rb: Arc<Rb>) -> Self {
+impl<T, B: RingBufferTail<T>, R: RbTailRef<T, Target = B>> Producer<T, B, R> {
+    pub(crate) fn new(rb_ref: R) -> Self {
         Self {
-            rb,
+            rb_ref,
             _phantom: PhantomData,
         }
     }
 }
 
-pub struct RefProducer<'a, T, Rb: RingBufferTail<T>> {
-    rb: &'a Rb,
-    _phantom: PhantomData<T>,
-}
-
-impl<'a, T, Rb: RingBufferTail<T>> RefProducer<'a, T, Rb> {
-    pub fn new(rb: &'a Rb) -> Self {
-        Self {
-            rb,
-            _phantom: PhantomData,
-        }
+impl<T, B: RingBufferTail<T>, R: RbTailRef<T, Target = B>> Deref for Producer<T, B, R> {
+    type Target = B;
+    fn deref(&self) -> &B {
+        self.rb_ref.rb()
     }
 }
 

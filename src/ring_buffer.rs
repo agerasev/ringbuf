@@ -10,10 +10,7 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use crate::{
-    consumer::{ArcConsumer, RefConsumer},
-    producer::{ArcProducer, RefProducer},
-};
+use crate::{consumer::Consumer, producer::Producer};
 
 pub trait Container<U>: AsRef<[U]> + AsMut<[U]> {}
 impl<U, C> Container<U> for C where C: AsRef<[U]> + AsMut<[U]> {}
@@ -26,10 +23,7 @@ struct Storage<U, C: Container<U>> {
 
 unsafe impl<U, C: Container<U>> Sync for Storage<U, C> {}
 
-impl<U, C> Storage<U, C>
-where
-    C: AsRef<[U]> + AsMut<[U]>,
-{
+impl<U, C: Container<U>> Storage<U, C> {
     pub fn new(mut container: C) -> Self {
         Self {
             len: container.as_mut().len(),
@@ -145,13 +139,13 @@ impl<T, C: Container<MaybeUninit<T>>> RingBuffer<T, C> {
     }
 
     /// Splits ring buffer into producer and consumer.
-    pub fn split(self) -> (ArcProducer<T, Self>, ArcConsumer<T, Self>) {
+    pub fn split(self) -> (Producer<T, Self, Arc<Self>>, Consumer<T, Self, Arc<Self>>) {
         let arc = Arc::new(self);
-        (ArcProducer::new(arc.clone()), ArcConsumer::new(arc))
+        (Producer::new(arc.clone()), Consumer::new(arc))
     }
 
-    pub fn split_ref(&mut self) -> (RefProducer<'_, T, Self>, RefConsumer<'_, T, Self>) {
-        (RefProducer::new(self), RefConsumer::new(self))
+    pub fn split_ref(&mut self) -> (Producer<T, Self, &Self>, Consumer<T, Self, &Self>) {
+        (Producer::new(self), Consumer::new(self))
     }
 }
 
@@ -229,7 +223,10 @@ impl<T, C: Container<MaybeUninit<T>>> Drop for RingBuffer<T, C> {
     }
 }
 
-impl<T> RingBuffer<T, Vec<MaybeUninit<T>>> {
+pub type VecRingBuffer<T> = RingBuffer<T, Vec<MaybeUninit<T>>>;
+pub type StaticRingBuffer<T, const N: usize> = RingBuffer<T, [MaybeUninit<T>; N]>;
+
+impl<T> VecRingBuffer<T> {
     pub fn new(capacity: usize) -> Self {
         let mut data = Vec::new();
         data.resize_with(capacity, MaybeUninit::uninit);
@@ -237,7 +234,7 @@ impl<T> RingBuffer<T, Vec<MaybeUninit<T>>> {
     }
 }
 
-impl<T, const N: usize> Default for RingBuffer<T, [MaybeUninit<T>; N]> {
+impl<T, const N: usize> Default for StaticRingBuffer<T, N> {
     fn default() -> Self {
         let uninit = MaybeUninit::<[T; N]>::uninit();
         let array = unsafe { (&uninit as *const _ as *const [MaybeUninit<T>; N]).read() };

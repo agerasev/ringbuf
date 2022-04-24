@@ -13,54 +13,48 @@ use std::io::{self, Read, Write};
 
 use crate::ring_buffer::RingBufferHead;
 
+pub trait RbHeadRef<T> {
+    type Target: RingBufferHead<T>;
+    fn rb(&self) -> &Self::Target;
+}
+
+impl<T, B: RingBufferHead<T>> RbHeadRef<T> for Arc<B> {
+    type Target = B;
+    fn rb(&self) -> &B {
+        self.as_ref()
+    }
+}
+
+impl<'a, T, B: RingBufferHead<T>> RbHeadRef<T> for &'a B {
+    type Target = B;
+    fn rb(&self) -> &B {
+        *self
+    }
+}
+
 /// Consumer part of ring buffer.
-pub struct ArcConsumer<T, Rb: RingBufferHead<T>> {
-    rb: Arc<Rb>,
-    _phantom: PhantomData<T>,
+pub struct Consumer<T, B: RingBufferHead<T>, R: RbHeadRef<T, Target = B>> {
+    rb_ref: R,
+    _phantom: PhantomData<(T, B)>,
 }
 
-impl<T, Rb: RingBufferHead<T>> ArcConsumer<T, Rb> {
-    pub fn new(rb: Arc<Rb>) -> Self {
+impl<T, B: RingBufferHead<T>, R: RbHeadRef<T, Target = B>> Consumer<T, B, R> {
+    pub(crate) fn new(rb_ref: R) -> Self {
         Self {
-            rb,
+            rb_ref,
             _phantom: PhantomData,
         }
     }
 }
 
-impl<T, Rb: RingBufferHead<T>> Deref for ArcConsumer<T, Rb> {
-    type Target = Rb;
-    fn deref(&self) -> &Rb {
-        self.rb.as_ref()
+impl<T, B: RingBufferHead<T>, R: RbHeadRef<T, Target = B>> Deref for Consumer<T, B, R> {
+    type Target = B;
+    fn deref(&self) -> &B {
+        self.rb_ref.rb()
     }
 }
 
-pub struct RefConsumer<'a, T, Rb: RingBufferHead<T>> {
-    rb: &'a Rb,
-    _phantom: PhantomData<T>,
-}
-
-impl<'a, T, Rb: RingBufferHead<T>> RefConsumer<'a, T, Rb> {
-    pub fn new(rb: &'a Rb) -> Self {
-        Self {
-            rb,
-            _phantom: PhantomData,
-        }
-    }
-}
-
-impl<'a, T, Rb: RingBufferHead<T>> Deref for RefConsumer<'a, T, Rb> {
-    type Target = Rb;
-    fn deref(&self) -> &Rb {
-        self.rb
-    }
-}
-
-pub trait Consumer<T>: Deref<Target = Self::RingBuffer> {
-    type RingBuffer: RingBufferHead<T>;
-
-    fn ring_buffer(&self) -> &Self::RingBuffer;
-
+impl<T, B: RingBufferHead<T>, R: RbHeadRef<T, Target = B>> Consumer<T, B, R> {
     /// Returns a pair of slices which contain, in order, the contents of the `RingBuffer`.
     ///
     /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*
