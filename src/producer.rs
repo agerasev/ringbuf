@@ -9,17 +9,17 @@ use core::{
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use crate::ring_buffer::AbstractRingBuffer;
+use crate::ring_buffer::RingBufferTail;
 
 pub trait Producer<T> {}
 
 /// Producer part of ring buffer.
-pub struct ArcProducer<T, Rb: AbstractRingBuffer<T>> {
+pub struct ArcProducer<T, Rb: RingBufferTail<T>> {
     rb: Arc<Rb>,
     _phantom: PhantomData<T>,
 }
 
-impl<T, Rb: AbstractRingBuffer<T>> ArcProducer<T, Rb> {
+impl<T, Rb: RingBufferTail<T>> ArcProducer<T, Rb> {
     pub fn new(rb: Arc<Rb>) -> Self {
         Self {
             rb,
@@ -28,12 +28,12 @@ impl<T, Rb: AbstractRingBuffer<T>> ArcProducer<T, Rb> {
     }
 }
 
-pub struct RefProducer<'a, T, Rb: AbstractRingBuffer<T>> {
+pub struct RefProducer<'a, T, Rb: RingBufferTail<T>> {
     rb: &'a Rb,
     _phantom: PhantomData<T>,
 }
 
-impl<'a, T, Rb: AbstractRingBuffer<T>> RefProducer<'a, T, Rb> {
+impl<'a, T, Rb: RingBufferTail<T>> RefProducer<'a, T, Rb> {
     pub fn new(rb: &'a Rb) -> Self {
         Self {
             rb,
