@@ -11,34 +11,23 @@ use core::{
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use crate::ring_buffer::RingBufferHead;
-
-pub trait RbHeadRef<T> {
-    type Target: RingBufferHead<T>;
-    fn rb(&self) -> &Self::Target;
-}
-
-impl<T, B: RingBufferHead<T>> RbHeadRef<T> for Arc<B> {
-    type Target = B;
-    fn rb(&self) -> &B {
-        self.as_ref()
-    }
-}
-
-impl<'a, T, B: RingBufferHead<T>> RbHeadRef<T> for &'a B {
-    type Target = B;
-    fn rb(&self) -> &B {
-        *self
-    }
-}
+use crate::ring_buffer::{Container, RingBuffer, RingBufferRef};
 
 /// Consumer part of ring buffer.
-pub struct Consumer<T, B: RingBufferHead<T>, R: RbHeadRef<T, Target = B>> {
+pub struct Consumer<T, C, R>
+where
+    C: Container<MaybeUninit<T>>,
+    R: RingBufferRef<T, C>,
+{
     rb_ref: R,
-    _phantom: PhantomData<(T, B)>,
+    _phantom: PhantomData<(T, C)>,
 }
 
-impl<T, B: RingBufferHead<T>, R: RbHeadRef<T, Target = B>> Consumer<T, B, R> {
+impl<T, C, R> Consumer<T, C, R>
+where
+    C: Container<MaybeUninit<T>>,
+    R: RingBufferRef<T, C>,
+{
     pub(crate) fn new(rb_ref: R) -> Self {
         Self {
             rb_ref,
@@ -47,14 +36,22 @@ impl<T, B: RingBufferHead<T>, R: RbHeadRef<T, Target = B>> Consumer<T, B, R> {
     }
 }
 
-impl<T, B: RingBufferHead<T>, R: RbHeadRef<T, Target = B>> Deref for Consumer<T, B, R> {
-    type Target = B;
-    fn deref(&self) -> &B {
-        self.rb_ref.rb()
+impl<T, C, R> Deref for Consumer<T, C, R>
+where
+    C: Container<MaybeUninit<T>>,
+    R: RingBufferRef<T, C>,
+{
+    type Target = RingBuffer<T, C>;
+    fn deref(&self) -> &RingBuffer<T, C> {
+        self.rb_ref.ring_buffer()
     }
 }
 
-impl<T, B: RingBufferHead<T>, R: RbHeadRef<T, Target = B>> Consumer<T, B, R> {
+impl<T, C, R> Consumer<T, C, R>
+where
+    C: Container<MaybeUninit<T>>,
+    R: RingBufferRef<T, C>,
+{
     /// Returns a pair of slices which contain, in order, the contents of the `RingBuffer`.
     ///
     /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*

@@ -10,34 +10,23 @@ use core::{
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use crate::ring_buffer::RingBufferTail;
-
-pub trait RbTailRef<T> {
-    type Target: RingBufferTail<T>;
-    fn rb(&self) -> &Self::Target;
-}
-
-impl<T, B: RingBufferTail<T>> RbTailRef<T> for Arc<B> {
-    type Target = B;
-    fn rb(&self) -> &B {
-        self.as_ref()
-    }
-}
-
-impl<'a, T, B: RingBufferTail<T>> RbTailRef<T> for &'a B {
-    type Target = B;
-    fn rb(&self) -> &B {
-        *self
-    }
-}
+use crate::ring_buffer::{Container, RingBuffer, RingBufferRef};
 
 /// Producer part of ring buffer.
-pub struct Producer<T, B: RingBufferTail<T>, R: RbTailRef<T, Target = B>> {
+pub struct Producer<T, C, R>
+where
+    C: Container<MaybeUninit<T>>,
+    R: RingBufferRef<T, C>,
+{
     rb_ref: R,
-    _phantom: PhantomData<T>,
+    _phantom: PhantomData<(T, C)>,
 }
 
-impl<T, B: RingBufferTail<T>, R: RbTailRef<T, Target = B>> Producer<T, B, R> {
+impl<T, C, R> Producer<T, C, R>
+where
+    C: Container<MaybeUninit<T>>,
+    R: RingBufferRef<T, C>,
+{
     pub(crate) fn new(rb_ref: R) -> Self {
         Self {
             rb_ref,
@@ -46,10 +35,14 @@ impl<T, B: RingBufferTail<T>, R: RbTailRef<T, Target = B>> Producer<T, B, R> {
     }
 }
 
-impl<T, B: RingBufferTail<T>, R: RbTailRef<T, Target = B>> Deref for Producer<T, B, R> {
-    type Target = B;
-    fn deref(&self) -> &B {
-        self.rb_ref.rb()
+impl<T, C, R> Deref for Producer<T, C, R>
+where
+    C: Container<MaybeUninit<T>>,
+    R: RingBufferRef<T, C>,
+{
+    type Target = RingBuffer<T, C>;
+    fn deref(&self) -> &RingBuffer<T, C> {
+        self.rb_ref.ring_buffer()
     }
 }
 
