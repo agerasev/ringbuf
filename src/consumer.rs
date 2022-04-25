@@ -4,7 +4,7 @@ use core::{
     marker::PhantomData,
     mem::{self, MaybeUninit},
     ops::{Deref, Range},
-    ptr::copy_nonoverlapping,
+    ptr::{self, copy_nonoverlapping},
     slice,
     sync::atomic,
 };
@@ -19,7 +19,7 @@ where
     C: Container<MaybeUninit<T>>,
     R: RingBufferRef<T, C>,
 {
-    rb_ref: R,
+    rb: R,
     _phantom: PhantomData<(T, C)>,
 }
 
@@ -28,22 +28,11 @@ where
     C: Container<MaybeUninit<T>>,
     R: RingBufferRef<T, C>,
 {
-    pub(crate) fn new(rb_ref: R) -> Self {
+    pub(crate) fn new(rb: R) -> Self {
         Self {
-            rb_ref,
+            rb,
             _phantom: PhantomData,
         }
-    }
-}
-
-impl<T, C, R> Deref for Consumer<T, C, R>
-where
-    C: Container<MaybeUninit<T>>,
-    R: RingBufferRef<T, C>,
-{
-    type Target = RingBuffer<T, C>;
-    fn deref(&self) -> &RingBuffer<T, C> {
-        self.rb_ref.ring_buffer()
     }
 }
 
@@ -52,12 +41,47 @@ where
     C: Container<MaybeUninit<T>>,
     R: RingBufferRef<T, C>,
 {
+    /// Returns capacity of the ring buffer.
+    ///
+    /// The capacity of the buffer is constant.
+    pub fn capacity(&self) -> usize {
+        self.rb.capacity()
+    }
+
+    /// Checks if the ring buffer is empty.
+    ///
+    /// The result is relevant until you push items to the producer.
+    pub fn is_empty(&self) -> bool {
+        self.rb.is_empty()
+    }
+
+    /// Checks if the ring buffer is full.
+    ///
+    /// *The result may become irrelevant at any time because of concurring activity of the consumer.*
+    pub fn is_full(&self) -> bool {
+        self.rb.is_full()
+    }
+
+    /// The length of the data stored in the buffer.
+    ///
+    /// Actual length may be equal to or less than the returned value.
+    pub fn len(&self) -> usize {
+        self.rb.occupied_len()
+    }
+
+    /// The remaining space in the buffer.
+    ///
+    /// Actual remaining space may be equal to or greater than the returning value.
+    pub fn remaining(&self) -> usize {
+        self.rb.vacant_len()
+    }
+
     /// Returns a pair of slices which contain, in order, the contents of the `RingBuffer`.
     ///
     /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*
-    fn as_slices(&self) -> (&[T], &[T]) {
+    pub fn as_slices(&self) -> (&[T], &[T]) {
         unsafe {
-            let (left, right) = self.occupied_slices();
+            let (left, right) = self.rb.occupied_slices();
             // TODO: Change to `slice_assume_init` on `maybe_uninit_slice` stabilization.
             (
                 &*(left as *const [MaybeUninit<T>] as *const [T]),
@@ -69,9 +93,9 @@ where
     /// Returns a pair of slices which contain, in order, the contents of the `RingBuffer`.
     ///
     /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*
-    fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
+    pub fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
         unsafe {
-            let (left, right) = self.occupied_slices();
+            let (left, right) = self.rb.occupied_slices();
             // TODO: Change to `slice_assume_init_mut` on `maybe_uninit_slice` stabilization.
             (
                 &mut *(left as *mut [MaybeUninit<T>] as *mut [T]),
@@ -82,29 +106,32 @@ where
 
     /// Removes latest element from the ring buffer and returns it.
     /// Returns `None` if the ring buffer is empty.
-    fn pop(&mut self) -> Option<T> {
-        unsafe {
-            let (left, _) = self.occupied_slices();
-            if let Some(elem) = left.iter().next() {
-                let ret = elem.as_ptr().read();
-                self.move_head(1);
-                Some(ret)
-            } else {
-                None
+    pub fn pop(&mut self) -> Option<T> {
+        let (left, _) = unsafe { self.rb.occupied_slices() };
+        match left.iter().next() {
+            Some(place) => {
+                let elem = unsafe { place.as_ptr().read() };
+                unsafe { self.rb.move_head(1) };
+                Some(elem)
             }
+            None => None,
         }
     }
 
-    /*
+    /// Returns iterator that removes elements one by one from the ring buffer.
+    pub fn pop_iter(&mut self) -> PopIterator<'_, T, C, R> {
+        PopIterator { consumer: self }
+    }
+
     /// Returns a front-to-back iterator.
-    fn iter(&self) -> impl Iterator<Item = &T> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = &T> + '_ {
         let (left, right) = self.as_slices();
 
         left.iter().chain(right.iter())
     }
 
     /// Returns a front-to-back iterator that returns mutable references.
-    fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> + '_ {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> + '_ {
         let (left, right) = self.as_mut_slices();
 
         left.iter_mut().chain(right.iter_mut())
@@ -131,36 +158,13 @@ where
     /// assert_eq!(cons.discard(8), 0);
     /// # }
     /// ```
-    fn discard(&mut self, n: usize) -> usize {
-        unsafe {
-            self.pop_access(|left, right| {
-                let (mut cnt, mut rem) = (0, n);
-                let left_elems = if rem <= left.len() {
-                    cnt += rem;
-                    left.get_unchecked_mut(0..rem)
-                } else {
-                    cnt += left.len();
-                    left
-                };
-                rem = n - cnt;
-
-                let right_elems = if rem <= right.len() {
-                    cnt += rem;
-                    right.get_unchecked_mut(0..rem)
-                } else {
-                    cnt += right.len();
-                    right
-                };
-
-                for e in left_elems.iter_mut().chain(right_elems.iter_mut()) {
-                    e.as_mut_ptr().drop_in_place();
-                }
-
-                cnt
-            })
-        }
+    pub fn skip(&mut self, count: usize) -> usize {
+        let actual_count = cmp::min(count, self.rb.occupied_len());
+        self.rb.skip(actual_count);
+        actual_count
     }
 
+    /*
     /// Removes at most `count` elements from the consumer and appends them to the producer.
     /// If `count` is `None` then as much as possible elements will be moved.
     /// The producer and consumer parts may be of different buffers as well as of the same one.
@@ -172,14 +176,26 @@ where
     */
 }
 
-/*
-impl<T: Sized> Iterator for Consumer<T> {
+pub struct PopIterator<'a, T, C, R>
+where
+    C: Container<MaybeUninit<T>>,
+    R: RingBufferRef<T, C>,
+{
+    consumer: &'a mut Consumer<T, C, R>,
+}
+
+impl<'a, T, C, R> Iterator for PopIterator<'a, T, C, R>
+where
+    C: Container<MaybeUninit<T>>,
+    R: RingBufferRef<T, C>,
+{
     type Item = T;
     fn next(&mut self) -> Option<T> {
-        self.pop()
+        self.consumer.pop()
     }
 }
 
+/*
 impl<T: Sized + Copy> Consumer<T> {
     /// Removes first elements from the ring buffer and writes them into a slice.
     /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).

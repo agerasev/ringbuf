@@ -18,7 +18,7 @@ where
     C: Container<MaybeUninit<T>>,
     R: RingBufferRef<T, C>,
 {
-    rb_ref: R,
+    rb: R,
     _phantom: PhantomData<(T, C)>,
 }
 
@@ -27,27 +27,19 @@ where
     C: Container<MaybeUninit<T>>,
     R: RingBufferRef<T, C>,
 {
-    pub(crate) fn new(rb_ref: R) -> Self {
+    pub(crate) fn new(rb: R) -> Self {
         Self {
-            rb_ref,
+            rb,
             _phantom: PhantomData,
         }
     }
 }
 
-impl<T, C, R> Deref for Producer<T, C, R>
+impl<T, C, R> Producer<T, C, R>
 where
     C: Container<MaybeUninit<T>>,
     R: RingBufferRef<T, C>,
 {
-    type Target = RingBuffer<T, C>;
-    fn deref(&self) -> &RingBuffer<T, C> {
-        self.rb_ref.ring_buffer()
-    }
-}
-
-/*
-impl<T, C: Container<MaybeUninit<T>>> Producer<T, C> {
     /// Returns capacity of the ring buffer.
     ///
     /// The capacity of the buffer is constant.
@@ -73,155 +65,28 @@ impl<T, C: Container<MaybeUninit<T>>> Producer<T, C> {
     ///
     /// Actual length may be equal to or less than the returned value.
     pub fn len(&self) -> usize {
-        self.rb.len()
+        self.rb.occupied_len()
     }
 
     /// The remaining space in the buffer.
     ///
     /// Actual remaining space may be equal to or greater than the returning value.
     pub fn remaining(&self) -> usize {
-        self.rb.remaining()
-    }
-
-    /// Allows to write into ring buffer memory directly.
-    ///
-    /// *This function is unsafe because it gives access to possibly uninitialized memory*
-    ///
-    /// The method takes a function `f` as argument.
-    /// `f` takes two slices of ring buffer content (the second one or both of them may be empty).
-    /// First slice contains older elements.
-    ///
-    /// `f` should return number of elements been written.
-    /// *There is no checks for returned number - it remains on the developer's conscience.*
-    ///
-    /// The method **always** calls `f` even if ring buffer is full.
-    ///
-    /// The method returns number returned from `f`.
-    ///
-    /// # Safety
-    ///
-    /// The method gives access to ring buffer underlying memory which may be uninitialized.
-    ///
-    pub unsafe fn push_access<F>(&mut self, f: F) -> usize
-    where
-        F: FnOnce(&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) -> usize,
-    {
-        let head = self.rb.head.load(Ordering::Acquire);
-        let tail = self.rb.tail.load(Ordering::Acquire);
-        let len = self.rb.data.len();
-
-        let ranges = if tail >= head {
-            if head > 0 {
-                (tail..len, 0..(head - 1))
-            } else if tail < len - 1 {
-                (tail..(len - 1), 0..0)
-            } else {
-                (0..0, 0..0)
-            }
-        } else if tail < head - 1 {
-            (tail..(head - 1), 0..0)
-        } else {
-            (0..0, 0..0)
-        };
-
-        let ptr = self.rb.data.get_mut().as_mut_ptr();
-
-        let slices = (
-            slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
-            slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
-        );
-
-        let n = f(slices.0, slices.1);
-
-        if n > 0 {
-            let new_tail = (tail + n) % len;
-            self.rb.tail.store(new_tail, Ordering::Release);
-        }
-        n
-    }
-
-    /// Copies data from the slice to the ring buffer in byte-to-byte manner.
-    ///
-    /// The `elems` slice should contain **initialized** data before the method call.
-    /// After the call the copied part of data in `elems` should be interpreted as **un-initialized**.
-    ///
-    /// Returns the number of items been copied.
-    ///
-    /// # Safety
-    ///
-    /// The method copies raw data into the ring buffer.
-    ///
-    /// *You should properly fill the slice and manage remaining elements after copy.*
-    ///
-    pub unsafe fn push_copy(&mut self, elems: &[MaybeUninit<T>]) -> usize {
-        self.push_access(|left, right| -> usize {
-            if elems.len() < left.len() {
-                copy_nonoverlapping(elems.as_ptr(), left.as_mut_ptr(), elems.len());
-                elems.len()
-            } else {
-                copy_nonoverlapping(elems.as_ptr(), left.as_mut_ptr(), left.len());
-                if elems.len() < left.len() + right.len() {
-                    copy_nonoverlapping(
-                        elems.as_ptr().add(left.len()),
-                        right.as_mut_ptr(),
-                        elems.len() - left.len(),
-                    );
-                    elems.len()
-                } else {
-                    copy_nonoverlapping(
-                        elems.as_ptr().add(left.len()),
-                        right.as_mut_ptr(),
-                        right.len(),
-                    );
-                    left.len() + right.len()
-                }
-            }
-        })
+        self.rb.vacant_len()
     }
 
     /// Appends an element to the ring buffer.
-    /// On failure returns an error containing the element that hasn't been appended.
+    ///
+    /// On failure returns an `Err` containing the element that hasn't been appended.
     pub fn push(&mut self, elem: T) -> Result<(), T> {
-        let mut elem_mu = MaybeUninit::new(elem);
-        let n = unsafe {
-            self.push_access(|slice, _| {
-                if !slice.is_empty() {
-                    mem::swap(slice.get_unchecked_mut(0), &mut elem_mu);
-                    1
-                } else {
-                    0
-                }
-            })
-        };
-        match n {
-            0 => Err(unsafe { elem_mu.assume_init() }),
-            1 => Ok(()),
-            _ => unreachable!(),
-        }
-    }
-
-    /// Repeatedly calls the closure `f` and pushes elements returned from it to the ring buffer.
-    ///
-    /// The closure is called until it returns `None` or the ring buffer is full.
-    ///
-    /// The method returns number of elements been put into the buffer.
-    pub fn push_each<F: FnMut() -> Option<T>>(&mut self, mut f: F) -> usize {
-        unsafe {
-            self.push_access(|left, right| {
-                for (i, dst) in left.iter_mut().enumerate() {
-                    match f() {
-                        Some(e) => dst.as_mut_ptr().write(e),
-                        None => return i,
-                    };
-                }
-                for (i, dst) in right.iter_mut().enumerate() {
-                    match f() {
-                        Some(e) => dst.as_mut_ptr().write(e),
-                        None => return i + left.len(),
-                    };
-                }
-                left.len() + right.len()
-            })
+        let (left, _) = unsafe { self.rb.vacant_slices() };
+        match left.iter_mut().next() {
+            Some(place) => {
+                unsafe { place.as_mut_ptr().write(elem) };
+                unsafe { self.rb.move_tail(1) };
+                Ok(())
+            }
+            None => Err(elem),
         }
     }
 
@@ -229,10 +94,23 @@ impl<T, C: Container<MaybeUninit<T>>> Producer<T, C> {
     /// Elements that haven't been added to the ring buffer remain in the iterator.
     ///
     /// Returns count of elements been appended to the ring buffer.
-    pub fn push_iter<I: Iterator<Item = T>>(&mut self, elems: &mut I) -> usize {
-        self.push_each(|| elems.next())
+    ///
+    /// *Inserted elements are commited to the ring buffer all at once in the end,*
+    /// *e.g. when buffer is full or iterator has ended.*
+    pub fn push_iter<I: Iterator<Item = T>>(&mut self, iter: &mut I) -> usize {
+        let (left, right) = unsafe { self.rb.vacant_slices() };
+        let mut count = 0;
+        for place in left.iter_mut().chain(right.iter_mut()) {
+            match iter.next() {
+                Some(elem) => unsafe { place.as_mut_ptr().write(elem) },
+                None => break,
+            }
+            count += 1;
+        }
+        unsafe { self.rb.move_tail(count) };
+        count
     }
-
+    /*
     /// Removes at most `count` elements from the consumer and appends them to the producer.
     /// If `count` is `None` then as much as possible elements will be moved.
     /// The producer and consumer parts may be of different buffers as well as of the same one.
@@ -241,8 +119,9 @@ impl<T, C: Container<MaybeUninit<T>>> Producer<T, C> {
     pub fn move_from(&mut self, other: &mut Consumer<T>, count: Option<usize>) -> usize {
         move_items(other, self, count)
     }
+    */
 }
-
+/*
 impl<T: Sized + Copy> Producer<T> {
     /// Appends elements from slice to the ring buffer.
     /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
