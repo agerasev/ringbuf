@@ -13,18 +13,18 @@ use core::{
 
 use crate::{consumer::Consumer, producer::Producer};
 
-pub trait Container<U>: AsRef<[U]> + AsMut<[U]> {}
-impl<U, C> Container<U> for C where C: AsRef<[U]> + AsMut<[U]> {}
+pub trait Container<T>: AsRef<[MaybeUninit<T>]> + AsMut<[MaybeUninit<T>]> {}
+impl<T, C> Container<T> for C where C: AsRef<[MaybeUninit<T>]> + AsMut<[MaybeUninit<T>]> {}
 
-struct Storage<U, C: Container<U>> {
+struct Storage<T, C: Container<T>> {
     len: usize,
     container: UnsafeCell<C>,
-    phantom: PhantomData<U>,
+    phantom: PhantomData<T>,
 }
 
-unsafe impl<U, C: Container<U>> Sync for Storage<U, C> {}
+unsafe impl<T, C: Container<T>> Sync for Storage<T, C> {}
 
-impl<U, C: Container<U>> Storage<U, C> {
+impl<T, C: Container<T>> Storage<T, C> {
     fn new(mut container: C) -> Self {
         Self {
             len: container.as_mut().len(),
@@ -41,35 +41,32 @@ impl<U, C: Container<U>> Storage<U, C> {
         self.len
     }
 
-    unsafe fn as_slice(&self) -> &[U] {
+    unsafe fn as_slice(&self) -> &[MaybeUninit<T>] {
         (&*self.container.get()).as_ref()
     }
 
     #[warn(clippy::mut_from_ref)]
-    unsafe fn as_mut_slice(&self) -> &mut [U] {
+    unsafe fn as_mut_slice(&self) -> &mut [MaybeUninit<T>] {
         (&mut *self.container.get()).as_mut()
     }
 }
 
-pub trait RingBufferRef<T, C: Container<MaybeUninit<T>>>: Deref<Target = RingBuffer<T, C>> {}
-impl<T, C: Container<MaybeUninit<T>>> RingBufferRef<T, C> for Arc<RingBuffer<T, C>> {}
-impl<'a, T, C: Container<MaybeUninit<T>>> RingBufferRef<T, C> for &'a RingBuffer<T, C> {}
+pub trait RingBufferRef<T, C: Container<T>>: Deref<Target = RingBuffer<T, C>> {}
+impl<T, C: Container<T>> RingBufferRef<T, C> for Arc<RingBuffer<T, C>> {}
+impl<'a, T, C: Container<T>> RingBufferRef<T, C> for &'a RingBuffer<T, C> {}
 
-pub struct RingBuffer<T, C: Container<MaybeUninit<T>>> {
-    data: Storage<MaybeUninit<T>, C>,
+pub struct RingBuffer<T, C: Container<T>> {
+    data: Storage<T, C>,
     head: CachePadded<AtomicUsize>,
     tail: CachePadded<AtomicUsize>,
 }
 
-impl<T, C: Container<MaybeUninit<T>>> RingBuffer<T, C> {
+impl<T, C: Container<T>> RingBuffer<T, C> {
     fn head(&self) -> usize {
         self.head.load(Ordering::Acquire)
     }
     fn tail(&self) -> usize {
         self.head.load(Ordering::Acquire)
-    }
-    fn modulus(&self) -> usize {
-        2 * self.capacity()
     }
 
     pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
@@ -95,6 +92,9 @@ impl<T, C: Container<MaybeUninit<T>>> RingBuffer<T, C> {
     /// This value does not change.
     pub fn capacity(&self) -> usize {
         self.data.len()
+    }
+    fn modulus(&self) -> usize {
+        2 * self.capacity()
     }
 
     /// The number of elements stored in the buffer at the moment.
@@ -125,7 +125,7 @@ impl<T, C: Container<MaybeUninit<T>>> RingBuffer<T, C> {
     /// Does not check if `count` is greater than number of elements in the ring buffer.*
     ///
     /// Allowed to call only from **consumer** side.
-    pub(crate) unsafe fn move_head(&self, count: usize) {
+    pub unsafe fn move_head(&self, count: usize) {
         debug_assert!(count <= self.occupied_len());
         self.head
             .store((self.head() + count) % self.modulus(), Ordering::Release);
@@ -140,7 +140,7 @@ impl<T, C: Container<MaybeUninit<T>>> RingBuffer<T, C> {
     /// Does not check if `count` is greater than number of vacant places in the ring buffer.
     ///
     /// Allowed to call only from **producer** side.
-    pub(crate) unsafe fn move_tail(&self, count: usize) {
+    pub unsafe fn move_tail(&self, count: usize) {
         debug_assert!(count <= self.vacant_len());
         self.tail
             .store((self.tail() + count) % self.modulus(), Ordering::Release);
@@ -155,7 +155,7 @@ impl<T, C: Container<MaybeUninit<T>>> RingBuffer<T, C> {
     /// # Safety
     ///
     /// Allowed to call only from **consumer** side.
-    pub(crate) unsafe fn occupied_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+    pub unsafe fn occupied_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
         let head = self.head();
         let tail = self.tail();
         let len = self.data.len();
@@ -182,7 +182,7 @@ impl<T, C: Container<MaybeUninit<T>>> RingBuffer<T, C> {
     /// # Safety
     ///
     /// Allowed to call only from **producer** side.
-    pub(crate) unsafe fn vacant_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+    pub unsafe fn vacant_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
         let head = self.head();
         let tail = self.tail();
         let len = self.data.len();
@@ -203,7 +203,7 @@ impl<T, C: Container<MaybeUninit<T>>> RingBuffer<T, C> {
     /// Removes exactly `count` elements from the head of ring buffer and drops them.
     ///
     /// *Panics if `count` is greater than number of elements stored in the buffer.*
-    pub(crate) fn skip(&self, count: usize) {
+    pub fn skip(&self, count: usize) {
         let (left, right) = unsafe { self.occupied_slices() };
         assert!(count <= left.len() + right.len());
         for elem in left.iter_mut().chain(right.iter_mut()).take(count) {
@@ -212,7 +212,7 @@ impl<T, C: Container<MaybeUninit<T>>> RingBuffer<T, C> {
     }
 }
 
-impl<T, C: Container<MaybeUninit<T>>> Drop for RingBuffer<T, C> {
+impl<T, C: Container<T>> Drop for RingBuffer<T, C> {
     fn drop(&mut self) {
         self.skip(self.occupied_len());
     }

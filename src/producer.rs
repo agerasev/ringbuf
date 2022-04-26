@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 use core::{
+    cmp,
     marker::PhantomData,
     mem::{self, MaybeUninit},
     ops::Deref,
@@ -15,7 +16,7 @@ use crate::ring_buffer::{Container, RingBuffer, RingBufferRef};
 /// Producer part of ring buffer.
 pub struct Producer<T, C, R>
 where
-    C: Container<MaybeUninit<T>>,
+    C: Container<T>,
     R: RingBufferRef<T, C>,
 {
     rb: R,
@@ -24,7 +25,7 @@ where
 
 impl<T, C, R> Producer<T, C, R>
 where
-    C: Container<MaybeUninit<T>>,
+    C: Container<T>,
     R: RingBufferRef<T, C>,
 {
     pub(crate) fn new(rb: R) -> Self {
@@ -37,7 +38,7 @@ where
 
 impl<T, C, R> Producer<T, C, R>
 where
-    C: Container<MaybeUninit<T>>,
+    C: Container<T>,
     R: RingBufferRef<T, C>,
 {
     /// Returns capacity of the ring buffer.
@@ -121,19 +122,46 @@ where
     }
     */
 }
-/*
-impl<T: Sized + Copy> Producer<T> {
+
+impl<T: Copy, C, R> Producer<T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C>,
+{
     /// Appends elements from slice to the ring buffer.
     /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
     ///
     /// Returns count of elements been appended to the ring buffer.
     pub fn push_slice(&mut self, elems: &[T]) -> usize {
-        unsafe { self.push_copy(&*(elems as *const [T] as *const [MaybeUninit<T>])) }
+        let (left, right) = unsafe { self.rb.vacant_slices() };
+        // TODO: Change to `write_slice` on `maybe_uninit_write_slice` stabilization.
+        let elems: &[MaybeUninit<T>] = unsafe { mem::transmute(elems) };
+        let count = if elems.len() < left.len() {
+            left[..elems.len()].copy_from_slice(elems);
+            elems.len()
+        } else {
+            let (left_elems, elems) = elems.split_at(left.len());
+            left.copy_from_slice(left_elems);
+            left.len()
+                + if elems.len() < right.len() {
+                    right[..elems.len()].copy_from_slice(elems);
+                    elems.len()
+                } else {
+                    right.copy_from_slice(&elems[..right.len()]);
+                    right.len()
+                }
+        };
+        unsafe { self.rb.move_tail(count) };
+        count
     }
 }
 
 #[cfg(feature = "std")]
-impl Producer<u8> {
+impl<C, R> Producer<u8, C, R>
+where
+    C: Container<u8>,
+    R: RingBufferRef<u8, C>,
+{
     /// Reads at most `count` bytes
     /// from [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) instance
     /// and appends them to the ring buffer.
@@ -143,49 +171,29 @@ impl Producer<u8> {
     /// `n == 0` means that either `read` returned zero or ring buffer is full.
     ///
     /// If `read` is failed or returned an invalid number then error is returned.
-    pub fn read_from(&mut self, reader: &mut dyn Read, count: Option<usize>) -> io::Result<usize> {
-        let mut err = None;
-        let n = unsafe {
-            self.push_access(|left, _| -> usize {
-                let left = match count {
-                    Some(c) => {
-                        if c < left.len() {
-                            &mut left[0..c]
-                        } else {
-                            left
-                        }
-                    }
-                    None => left,
-                };
-                match reader
-                    .read(&mut *(left as *mut [MaybeUninit<u8>] as *mut [u8]))
-                    .and_then(|n| {
-                        if n <= left.len() {
-                            Ok(n)
-                        } else {
-                            Err(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                "Read operation returned an invalid number",
-                            ))
-                        }
-                    }) {
-                    Ok(n) => n,
-                    Err(e) => {
-                        err = Some(e);
-                        0
-                    }
-                }
+    pub fn read_from<S: Read>(
+        &mut self,
+        reader: &mut S,
+        count: Option<usize>,
+    ) -> io::Result<usize> {
+        let (left, _) = unsafe { self.rb.vacant_slices() };
+        let count = cmp::min(count.unwrap_or(left.len()), left.len());
+        let left = &mut left[..count];
+        reader
+            .read(unsafe { &mut *(left as *mut [MaybeUninit<u8>] as *mut [u8]) })
+            .map(|n| {
+                assert!(n <= left.len());
+                n
             })
-        };
-        match err {
-            Some(e) => Err(e),
-            None => Ok(n),
-        }
     }
 }
 
 #[cfg(feature = "std")]
-impl Write for Producer<u8> {
+impl<C, R> Write for Producer<u8, C, R>
+where
+    C: Container<u8>,
+    R: RingBufferRef<u8, C>,
+{
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         let n = self.push_slice(buffer);
         if n == 0 && !buffer.is_empty() {
@@ -199,4 +207,3 @@ impl Write for Producer<u8> {
         Ok(())
     }
 }
-*/

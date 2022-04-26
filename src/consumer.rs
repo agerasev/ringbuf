@@ -16,7 +16,7 @@ use crate::ring_buffer::{Container, RingBuffer, RingBufferRef};
 /// Consumer part of ring buffer.
 pub struct Consumer<T, C, R>
 where
-    C: Container<MaybeUninit<T>>,
+    C: Container<T>,
     R: RingBufferRef<T, C>,
 {
     rb: R,
@@ -25,7 +25,7 @@ where
 
 impl<T, C, R> Consumer<T, C, R>
 where
-    C: Container<MaybeUninit<T>>,
+    C: Container<T>,
     R: RingBufferRef<T, C>,
 {
     pub(crate) fn new(rb: R) -> Self {
@@ -38,7 +38,7 @@ where
 
 impl<T, C, R> Consumer<T, C, R>
 where
-    C: Container<MaybeUninit<T>>,
+    C: Container<T>,
     R: RingBufferRef<T, C>,
 {
     /// Returns capacity of the ring buffer.
@@ -178,7 +178,7 @@ where
 
 pub struct PopIterator<'a, T, C, R>
 where
-    C: Container<MaybeUninit<T>>,
+    C: Container<T>,
     R: RingBufferRef<T, C>,
 {
     consumer: &'a mut Consumer<T, C, R>,
@@ -186,7 +186,7 @@ where
 
 impl<'a, T, C, R> Iterator for PopIterator<'a, T, C, R>
 where
-    C: Container<MaybeUninit<T>>,
+    C: Container<T>,
     R: RingBufferRef<T, C>,
 {
     type Item = T;
@@ -195,19 +195,45 @@ where
     }
 }
 
-/*
-impl<T: Sized + Copy> Consumer<T> {
+impl<T: Copy, C, R> Consumer<T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C>,
+{
     /// Removes first elements from the ring buffer and writes them into a slice.
     /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
     ///
     /// On success returns count of elements been removed from the ring buffer.
     pub fn pop_slice(&mut self, elems: &mut [T]) -> usize {
-        unsafe { self.pop_copy(&mut *(elems as *mut [T] as *mut [MaybeUninit<T>])) }
+        let (left, right) = unsafe { self.rb.occupied_slices() };
+        // TODO: Change to `write_slice` on `maybe_uninit_write_slice` stabilization.
+        let elems: &mut [MaybeUninit<T>] = unsafe { mem::transmute(elems) };
+        let count = if elems.len() < left.len() {
+            elems.copy_from_slice(&left[..elems.len()]);
+            elems.len()
+        } else {
+            let (left_elems, elems) = elems.split_at_mut(left.len());
+            left_elems.copy_from_slice(left);
+            left.len()
+                + if elems.len() < right.len() {
+                    elems.copy_from_slice(&right[..elems.len()]);
+                    elems.len()
+                } else {
+                    elems[..right.len()].copy_from_slice(right);
+                    right.len()
+                }
+        };
+        unsafe { self.rb.move_head(count) };
+        count
     }
 }
 
 #[cfg(feature = "std")]
-impl Consumer<u8> {
+impl<C, R> Consumer<u8, C, R>
+where
+    C: Container<u8>,
+    R: RingBufferRef<u8, C>,
+{
     /// Removes at most first `count` bytes from the ring buffer and writes them into
     /// a [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) instance.
     /// If `count` is `None` then as much as possible bytes will be written.
@@ -216,53 +242,29 @@ impl Consumer<u8> {
     /// `n == 0` means that either `write` returned zero or ring buffer is empty.
     ///
     /// If `write` is failed or returned an invalid number then error is returned.
-    pub fn write_into(
+    pub fn write_into<S: Write>(
         &mut self,
-        writer: &mut dyn Write,
+        writer: &mut S,
         count: Option<usize>,
     ) -> io::Result<usize> {
-        let mut err = None;
-        let n = unsafe {
-            self.pop_access(|left, _| -> usize {
-                let left = match count {
-                    Some(c) => {
-                        if c < left.len() {
-                            &mut left[0..c]
-                        } else {
-                            left
-                        }
-                    }
-                    None => left,
-                };
-                match writer
-                    .write(&*(left as *const [MaybeUninit<u8>] as *const [u8]))
-                    .and_then(|n| {
-                        if n <= left.len() {
-                            Ok(n)
-                        } else {
-                            Err(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                "Write operation returned an invalid number",
-                            ))
-                        }
-                    }) {
-                    Ok(n) => n,
-                    Err(e) => {
-                        err = Some(e);
-                        0
-                    }
-                }
+        let (left, _) = unsafe { self.rb.occupied_slices() };
+        let count = cmp::min(count.unwrap_or(left.len()), left.len());
+        let left = &mut left[..count];
+        writer
+            .write(unsafe { &*(left as *const [MaybeUninit<u8>] as *const [u8]) })
+            .map(|n| {
+                assert!(n <= left.len());
+                n
             })
-        };
-        match err {
-            Some(e) => Err(e),
-            None => Ok(n),
-        }
     }
 }
 
 #[cfg(feature = "std")]
-impl Read for Consumer<u8> {
+impl<C, R> Read for Consumer<u8, C, R>
+where
+    C: Container<u8>,
+    R: RingBufferRef<u8, C>,
+{
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         let n = self.pop_slice(buffer);
         if n == 0 && !buffer.is_empty() {
@@ -272,4 +274,3 @@ impl Read for Consumer<u8> {
         }
     }
 }
-*/
