@@ -1,17 +1,15 @@
-use alloc::sync::Arc;
 use core::{
-    cmp::{self, min},
+    cmp,
     marker::PhantomData,
     mem::{self, MaybeUninit},
-    ops::{Deref, Range},
-    ptr::{self, copy_nonoverlapping},
-    slice,
-    sync::atomic,
 };
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use crate::ring_buffer::{Container, RingBuffer, RingBufferRef};
+use crate::{
+    producer::Producer,
+    ring_buffer::{move_items, Container, RingBufferRef},
+};
 
 /// Consumer part of ring buffer.
 pub struct Consumer<T, C, R>
@@ -76,12 +74,26 @@ where
         self.rb.vacant_len()
     }
 
+    pub unsafe fn as_uninit_slices(&self) -> (&[MaybeUninit<T>], &[MaybeUninit<T>]) {
+        let (left, right) = self.rb.occupied_slices();
+        (left, right)
+    }
+    pub unsafe fn as_mut_uninit_slices(
+        &mut self,
+    ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+        self.rb.occupied_slices()
+    }
+
+    pub unsafe fn accept(&mut self, count: usize) {
+        self.rb.shift_head(count);
+    }
+
     /// Returns a pair of slices which contain, in order, the contents of the `RingBuffer`.
     ///
     /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*
     pub fn as_slices(&self) -> (&[T], &[T]) {
         unsafe {
-            let (left, right) = self.rb.occupied_slices();
+            let (left, right) = self.as_uninit_slices();
             // TODO: Change to `slice_assume_init` on `maybe_uninit_slice` stabilization.
             (
                 &*(left as *const [MaybeUninit<T>] as *const [T]),
@@ -95,7 +107,7 @@ where
     /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*
     pub fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
         unsafe {
-            let (left, right) = self.rb.occupied_slices();
+            let (left, right) = self.as_mut_uninit_slices();
             // TODO: Change to `slice_assume_init_mut` on `maybe_uninit_slice` stabilization.
             (
                 &mut *(left as *mut [MaybeUninit<T>] as *mut [T]),
@@ -107,20 +119,15 @@ where
     /// Removes latest element from the ring buffer and returns it.
     /// Returns `None` if the ring buffer is empty.
     pub fn pop(&mut self) -> Option<T> {
-        let (left, _) = unsafe { self.rb.occupied_slices() };
+        let (left, _) = unsafe { self.as_uninit_slices() };
         match left.iter().next() {
             Some(place) => {
                 let elem = unsafe { place.as_ptr().read() };
-                unsafe { self.rb.move_head(1) };
+                unsafe { self.accept(1) };
                 Some(elem)
             }
             None => None,
         }
-    }
-
-    /// Returns iterator that removes elements one by one from the ring buffer.
-    pub fn pop_iter(&mut self) -> PopIterator<'_, T, C, R> {
-        PopIterator { consumer: self }
     }
 
     /// Returns a front-to-back iterator.
@@ -164,34 +171,32 @@ where
         actual_count
     }
 
-    /*
     /// Removes at most `count` elements from the consumer and appends them to the producer.
     /// If `count` is `None` then as much as possible elements will be moved.
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns count of elements been moved.
-    fn move_to(&mut self, other: &mut Producer<T>, count: Option<usize>) -> usize {
+    pub fn move_to<Cd, Rd>(
+        &mut self,
+        other: &mut Producer<T, Cd, Rd>,
+        count: Option<usize>,
+    ) -> usize
+    where
+        Cd: Container<T>,
+        Rd: RingBufferRef<T, Cd>,
+    {
         move_items(self, other, count)
     }
-    */
 }
 
-pub struct PopIterator<'a, T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C>,
-{
-    consumer: &'a mut Consumer<T, C, R>,
-}
-
-impl<'a, T, C, R> Iterator for PopIterator<'a, T, C, R>
+impl<T, C, R> Iterator for Consumer<T, C, R>
 where
     C: Container<T>,
     R: RingBufferRef<T, C>,
 {
     type Item = T;
     fn next(&mut self) -> Option<T> {
-        self.consumer.pop()
+        self.pop()
     }
 }
 
@@ -205,7 +210,7 @@ where
     ///
     /// On success returns count of elements been removed from the ring buffer.
     pub fn pop_slice(&mut self, elems: &mut [T]) -> usize {
-        let (left, right) = unsafe { self.rb.occupied_slices() };
+        let (left, right) = unsafe { self.as_uninit_slices() };
         // TODO: Change to `write_slice` on `maybe_uninit_write_slice` stabilization.
         let elems: &mut [MaybeUninit<T>] = unsafe { mem::transmute(elems) };
         let count = if elems.len() < left.len() {
@@ -223,7 +228,7 @@ where
                     right.len()
                 }
         };
-        unsafe { self.rb.move_head(count) };
+        unsafe { self.accept(count) };
         count
     }
 }
@@ -247,9 +252,9 @@ where
         writer: &mut S,
         count: Option<usize>,
     ) -> io::Result<usize> {
-        let (left, _) = unsafe { self.rb.occupied_slices() };
+        let (left, _) = unsafe { self.as_uninit_slices() };
         let count = cmp::min(count.unwrap_or(left.len()), left.len());
-        let left = &mut left[..count];
+        let left = &left[..count];
         writer
             .write(unsafe { &*(left as *const [MaybeUninit<u8>] as *const [u8]) })
             .map(|n| {

@@ -1,17 +1,15 @@
-use alloc::sync::Arc;
 use core::{
     cmp,
     marker::PhantomData,
     mem::{self, MaybeUninit},
-    ops::Deref,
-    ptr::copy_nonoverlapping,
-    slice,
-    sync::atomic::Ordering,
 };
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use crate::ring_buffer::{Container, RingBuffer, RingBufferRef};
+use crate::{
+    consumer::Consumer,
+    ring_buffer::{move_items, Container, RingBufferRef},
+};
 
 /// Producer part of ring buffer.
 pub struct Producer<T, C, R>
@@ -76,15 +74,25 @@ where
         self.rb.vacant_len()
     }
 
+    pub unsafe fn free_space_as_slices(
+        &mut self,
+    ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+        self.rb.vacant_slices()
+    }
+
+    pub unsafe fn accept(&mut self, count: usize) {
+        self.rb.shift_tail(count);
+    }
+
     /// Appends an element to the ring buffer.
     ///
     /// On failure returns an `Err` containing the element that hasn't been appended.
     pub fn push(&mut self, elem: T) -> Result<(), T> {
-        let (left, _) = unsafe { self.rb.vacant_slices() };
+        let (left, _) = unsafe { self.free_space_as_slices() };
         match left.iter_mut().next() {
             Some(place) => {
                 unsafe { place.as_mut_ptr().write(elem) };
-                unsafe { self.rb.move_tail(1) };
+                unsafe { self.accept(1) };
                 Ok(())
             }
             None => Err(elem),
@@ -99,7 +107,7 @@ where
     /// *Inserted elements are commited to the ring buffer all at once in the end,*
     /// *e.g. when buffer is full or iterator has ended.*
     pub fn push_iter<I: Iterator<Item = T>>(&mut self, iter: &mut I) -> usize {
-        let (left, right) = unsafe { self.rb.vacant_slices() };
+        let (left, right) = unsafe { self.free_space_as_slices() };
         let mut count = 0;
         for place in left.iter_mut().chain(right.iter_mut()) {
             match iter.next() {
@@ -108,19 +116,26 @@ where
             }
             count += 1;
         }
-        unsafe { self.rb.move_tail(count) };
+        unsafe { self.accept(count) };
         count
     }
-    /*
+
     /// Removes at most `count` elements from the consumer and appends them to the producer.
     /// If `count` is `None` then as much as possible elements will be moved.
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns number of elements been moved.
-    pub fn move_from(&mut self, other: &mut Consumer<T>, count: Option<usize>) -> usize {
+    pub fn move_from<Cs, Rs>(
+        &mut self,
+        other: &mut Consumer<T, Cs, Rs>,
+        count: Option<usize>,
+    ) -> usize
+    where
+        Cs: Container<T>,
+        Rs: RingBufferRef<T, Cs>,
+    {
         move_items(other, self, count)
     }
-    */
 }
 
 impl<T: Copy, C, R> Producer<T, C, R>
@@ -133,7 +148,7 @@ where
     ///
     /// Returns count of elements been appended to the ring buffer.
     pub fn push_slice(&mut self, elems: &[T]) -> usize {
-        let (left, right) = unsafe { self.rb.vacant_slices() };
+        let (left, right) = unsafe { self.free_space_as_slices() };
         // TODO: Change to `write_slice` on `maybe_uninit_write_slice` stabilization.
         let elems: &[MaybeUninit<T>] = unsafe { mem::transmute(elems) };
         let count = if elems.len() < left.len() {
@@ -151,7 +166,7 @@ where
                     right.len()
                 }
         };
-        unsafe { self.rb.move_tail(count) };
+        unsafe { self.accept(count) };
         count
     }
 }
@@ -176,7 +191,7 @@ where
         reader: &mut S,
         count: Option<usize>,
     ) -> io::Result<usize> {
-        let (left, _) = unsafe { self.rb.vacant_slices() };
+        let (left, _) = unsafe { self.free_space_as_slices() };
         let count = cmp::min(count.unwrap_or(left.len()), left.len());
         let left = &mut left[..count];
         reader

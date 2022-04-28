@@ -125,7 +125,7 @@ impl<T, C: Container<T>> RingBuffer<T, C> {
     /// Does not check if `count` is greater than number of elements in the ring buffer.*
     ///
     /// Allowed to call only from **consumer** side.
-    pub unsafe fn move_head(&self, count: usize) {
+    pub unsafe fn shift_head(&self, count: usize) {
         debug_assert!(count <= self.occupied_len());
         self.head
             .store((self.head() + count) % self.modulus(), Ordering::Release);
@@ -140,7 +140,7 @@ impl<T, C: Container<T>> RingBuffer<T, C> {
     /// Does not check if `count` is greater than number of vacant places in the ring buffer.
     ///
     /// Allowed to call only from **producer** side.
-    pub unsafe fn move_tail(&self, count: usize) {
+    pub unsafe fn shift_tail(&self, count: usize) {
         debug_assert!(count <= self.vacant_len());
         self.tail
             .store((self.tail() + count) % self.modulus(), Ordering::Release);
@@ -237,51 +237,37 @@ impl<T, const N: usize> Default for StaticRingBuffer<T, N> {
     }
 }
 
-/*
 /// Moves at most `count` items from the `src` consumer to the `dst` producer.
 /// Consumer and producer may be of different buffers as well as of the same one.
 ///
 /// `count` is the number of items being moved, if `None` - as much as possible items will be moved.
 ///
 /// Returns number of items been moved.
-pub fn move_items<T>(src: &mut Consumer<T>, dst: &mut Producer<T>, count: Option<usize>) -> usize {
-    unsafe {
-        src.pop_access(|src_left, src_right| -> usize {
-            dst.push_access(|dst_left, dst_right| -> usize {
-                let n = count.unwrap_or_else(|| {
-                    min(
-                        src_left.len() + src_right.len(),
-                        dst_left.len() + dst_right.len(),
-                    )
-                });
-                let mut m = 0;
-                let mut src = (SlicePtr::new(src_left), SlicePtr::new(src_right));
-                let mut dst = (SlicePtr::new(dst_left), SlicePtr::new(dst_right));
+pub fn move_items<T, Cs, Cd, Rs, Rd>(
+    src: &mut Consumer<T, Cs, Rs>,
+    dst: &mut Producer<T, Cd, Rd>,
+    count: Option<usize>,
+) -> usize
+where
+    Cs: Container<T>,
+    Cd: Container<T>,
+    Rs: RingBufferRef<T, Cs>,
+    Rd: RingBufferRef<T, Cd>,
+{
+    let (src_left, src_right) = unsafe { src.as_uninit_slices() };
+    let (dst_left, dst_right) = unsafe { dst.free_space_as_slices() };
+    let src_iter = src_left.iter().chain(src_right.iter());
+    let dst_iter = dst_left.iter_mut().chain(dst_right.iter_mut());
 
-                loop {
-                    let k = min(n - m, min(src.0.len, dst.0.len));
-                    if k == 0 {
-                        break;
-                    }
-                    copy(src.0.ptr, dst.0.ptr, k);
-                    if src.0.len == k {
-                        src.0 = src.1;
-                        src.1 = SlicePtr::null();
-                    } else {
-                        src.0.shift(k);
-                    }
-                    if dst.0.len == k {
-                        dst.0 = dst.1;
-                        dst.1 = SlicePtr::null();
-                    } else {
-                        dst.0.shift(k);
-                    }
-                    m += k
-                }
-
-                m
-            })
-        })
+    let mut actual_count = 0;
+    for (src_elem, dst_place) in src_iter.zip(dst_iter) {
+        if let Some(count) = count {
+            if actual_count >= count {
+                break;
+            }
+        }
+        unsafe { dst_place.write(src_elem.as_ptr().read()) };
+        actual_count += 1;
     }
+    actual_count
 }
-*/
