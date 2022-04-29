@@ -140,7 +140,6 @@ impl<T, C: Container<T>> RingBuffer<T, C> {
     ///
     /// Allowed to call only from **producer** side.
     pub unsafe fn shift_tail(&self, count: usize) {
-        std::println!("count: {}, vacant: {}", count, self.vacant_len());
         assert!(count <= self.vacant_len());
         self.tail
             .store((self.tail() + count) % self.modulus(), Ordering::Release);
@@ -211,12 +210,6 @@ impl<T, C: Container<T>> RingBuffer<T, C> {
     /// *Panics if `count` is greater than number of elements stored in the buffer.*
     pub fn skip(&self, count: usize) {
         let (left, right) = unsafe { self.occupied_slices() };
-        std::println!(
-            "count: {}, left.len(): {}, right.len(): {}",
-            count,
-            left.len(),
-            right.len()
-        );
         assert!(count <= left.len() + right.len());
         for elem in left.iter_mut().chain(right.iter_mut()).take(count) {
             unsafe { ptr::drop_in_place(elem.as_mut_ptr()) };
