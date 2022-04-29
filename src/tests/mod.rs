@@ -1,12 +1,11 @@
 mod access;
+mod base;
 mod drop;
-mod single;
+mod iter;
 mod skip;
+mod slice;
 
-//mod drop;
-//mod iter;
 //#[cfg(feature = "std")]
 //mod message;
-//mod multiple;
 //#[cfg(feature = "std")]
 //mod read_write;
