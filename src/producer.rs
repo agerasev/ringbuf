@@ -1,3 +1,4 @@
+use alloc::{sync::Arc, vec::Vec};
 use core::{
     cmp,
     marker::PhantomData,
@@ -7,12 +8,12 @@ use core::{
 use std::io::{self, Read, Write};
 
 use crate::{
-    consumer::Consumer,
-    ring_buffer::{transfer, Container, RingBufferRef},
+    consumer::GenericConsumer,
+    ring_buffer::{transfer, Container, RingBuffer, RingBufferRef, StaticRingBuffer},
 };
 
 /// Producer part of ring buffer.
-pub struct Producer<T, C, R>
+pub struct GenericProducer<T, C, R>
 where
     C: Container<T>,
     R: RingBufferRef<T, C>,
@@ -21,7 +22,7 @@ where
     _phantom: PhantomData<(T, C)>,
 }
 
-impl<T, C, R> Producer<T, C, R>
+impl<T, C, R> GenericProducer<T, C, R>
 where
     C: Container<T>,
     R: RingBufferRef<T, C>,
@@ -34,7 +35,7 @@ where
     }
 }
 
-impl<T, C, R> Producer<T, C, R>
+impl<T, C, R> GenericProducer<T, C, R>
 where
     C: Container<T>,
     R: RingBufferRef<T, C>,
@@ -127,7 +128,7 @@ where
     /// On success returns number of elements been moved.
     pub fn transfer_from<Cs, Rs>(
         &mut self,
-        other: &mut Consumer<T, Cs, Rs>,
+        other: &mut GenericConsumer<T, Cs, Rs>,
         count: Option<usize>,
     ) -> usize
     where
@@ -138,7 +139,7 @@ where
     }
 }
 
-impl<T: Copy, C, R> Producer<T, C, R>
+impl<T: Copy, C, R> GenericProducer<T, C, R>
 where
     C: Container<T>,
     R: RingBufferRef<T, C>,
@@ -172,7 +173,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<C, R> Producer<u8, C, R>
+impl<C, R> GenericProducer<u8, C, R>
 where
     C: Container<u8>,
     R: RingBufferRef<u8, C>,
@@ -204,7 +205,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<C, R> Write for Producer<u8, C, R>
+impl<C, R> Write for GenericProducer<u8, C, R>
 where
     C: Container<u8>,
     R: RingBufferRef<u8, C>,
@@ -222,3 +223,7 @@ where
         Ok(())
     }
 }
+
+pub type Producer<T> = GenericProducer<T, Vec<MaybeUninit<T>>, Arc<RingBuffer<T>>>;
+pub type StaticProducer<'a, T, const N: usize> =
+    GenericProducer<T, [MaybeUninit<T>; N], &'a StaticRingBuffer<T, N>>;

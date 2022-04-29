@@ -1,8 +1,8 @@
-use crate::VecRingBuffer;
+use crate::RingBuffer;
 
 #[test]
 fn iter() {
-    let buf = VecRingBuffer::<i32>::new(2);
+    let buf = RingBuffer::<i32>::new(2);
     let (mut prod, mut cons) = buf.split();
 
     prod.push(10).unwrap();
@@ -18,7 +18,7 @@ fn iter() {
 
 #[test]
 fn iter_mut() {
-    let buf = VecRingBuffer::<i32>::new(2);
+    let buf = RingBuffer::<i32>::new(2);
     let (mut prod, mut cons) = buf.split();
 
     prod.push(10).unwrap();
@@ -38,7 +38,7 @@ fn iter_mut() {
 
 #[test]
 fn pop_iter() {
-    let buf = VecRingBuffer::<i32>::new(2);
+    let buf = RingBuffer::<i32>::new(2);
     let (mut prod, mut cons) = buf.split();
 
     prod.push(10).unwrap();

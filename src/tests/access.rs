@@ -1,10 +1,10 @@
-use crate::VecRingBuffer;
+use crate::RingBuffer;
 use core::mem::MaybeUninit;
 
 #[test]
 fn push() {
     let cap = 3;
-    let buf = VecRingBuffer::<i32>::new(cap);
+    let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
 
     let vs_20 = (123, 456);
@@ -47,7 +47,7 @@ fn push() {
 #[test]
 fn pop_full() {
     let cap = 2;
-    let buf = VecRingBuffer::<i32>::new(cap);
+    let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
 
     for i in 0..cap {
@@ -72,7 +72,7 @@ fn pop_full() {
 #[test]
 fn pop_empty() {
     let cap = 2;
-    let buf = VecRingBuffer::<i32>::new(cap);
+    let buf = RingBuffer::<i32>::new(cap);
     let (_, mut cons) = buf.split();
 
     {
@@ -86,7 +86,7 @@ fn pop_empty() {
 #[test]
 fn pop() {
     let cap = 3;
-    let buf = VecRingBuffer::<i32>::new(cap);
+    let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
 
     let vs_20 = (123, 456, 789);
@@ -136,7 +136,7 @@ fn pop() {
 #[test]
 fn push_return() {
     let cap = 2;
-    let buf = VecRingBuffer::<i32>::new(cap);
+    let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
 
     {
@@ -170,7 +170,7 @@ fn push_return() {
 #[test]
 fn pop_return() {
     let cap = 2;
-    let buf = VecRingBuffer::<i32>::new(cap);
+    let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
 
     assert_eq!(prod.push(12), Ok(()));
@@ -206,7 +206,7 @@ fn pop_return() {
 #[test]
 fn push_pop() {
     let cap = 3;
-    let buf = VecRingBuffer::<i32>::new(cap);
+    let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
 
     let vs_20 = (123, 456);

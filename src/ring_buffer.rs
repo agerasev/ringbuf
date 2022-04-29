@@ -10,7 +10,7 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use crate::{consumer::Consumer, producer::Producer};
+use crate::{consumer::GenericConsumer, producer::GenericProducer};
 
 pub trait Container<T>: AsRef<[MaybeUninit<T>]> + AsMut<[MaybeUninit<T>]> {}
 impl<T, C> Container<T> for C where C: AsRef<[MaybeUninit<T>]> + AsMut<[MaybeUninit<T>]> {}
@@ -50,17 +50,17 @@ impl<T, C: Container<T>> Storage<T, C> {
     }
 }
 
-pub trait RingBufferRef<T, C: Container<T>>: Deref<Target = RingBuffer<T, C>> {}
-impl<T, C: Container<T>> RingBufferRef<T, C> for Arc<RingBuffer<T, C>> {}
-impl<'a, T, C: Container<T>> RingBufferRef<T, C> for &'a RingBuffer<T, C> {}
+pub trait RingBufferRef<T, C: Container<T>>: Deref<Target = GenericRingBuffer<T, C>> {}
+impl<T, C: Container<T>> RingBufferRef<T, C> for Arc<GenericRingBuffer<T, C>> {}
+impl<'a, T, C: Container<T>> RingBufferRef<T, C> for &'a GenericRingBuffer<T, C> {}
 
-pub struct RingBuffer<T, C: Container<T>> {
+pub struct GenericRingBuffer<T, C: Container<T>> {
     data: Storage<T, C>,
     head: CachePadded<AtomicUsize>,
     tail: CachePadded<AtomicUsize>,
 }
 
-impl<T, C: Container<T>> RingBuffer<T, C> {
+impl<T, C: Container<T>> GenericRingBuffer<T, C> {
     pub(crate) fn head(&self) -> usize {
         self.head.load(Ordering::Acquire)
     }
@@ -77,13 +77,18 @@ impl<T, C: Container<T>> RingBuffer<T, C> {
     }
 
     /// Splits ring buffer into producer and consumer.
-    pub fn split(self) -> (Producer<T, C, Arc<Self>>, Consumer<T, C, Arc<Self>>) {
+    pub fn split(
+        self,
+    ) -> (
+        GenericProducer<T, C, Arc<Self>>,
+        GenericConsumer<T, C, Arc<Self>>,
+    ) {
         let arc = Arc::new(self);
-        (Producer::new(arc.clone()), Consumer::new(arc))
+        (GenericProducer::new(arc.clone()), GenericConsumer::new(arc))
     }
 
-    pub fn split_ref(&mut self) -> (Producer<T, C, &Self>, Consumer<T, C, &Self>) {
-        (Producer::new(self), Consumer::new(self))
+    pub fn split_static(&mut self) -> (GenericProducer<T, C, &Self>, GenericConsumer<T, C, &Self>) {
+        (GenericProducer::new(self), GenericConsumer::new(self))
     }
 
     /// The capacity of the ring buffer.
@@ -218,16 +223,16 @@ impl<T, C: Container<T>> RingBuffer<T, C> {
     }
 }
 
-impl<T, C: Container<T>> Drop for RingBuffer<T, C> {
+impl<T, C: Container<T>> Drop for GenericRingBuffer<T, C> {
     fn drop(&mut self) {
         self.skip(self.occupied_len());
     }
 }
 
-pub type VecRingBuffer<T> = RingBuffer<T, Vec<MaybeUninit<T>>>;
-pub type StaticRingBuffer<T, const N: usize> = RingBuffer<T, [MaybeUninit<T>; N]>;
+pub type RingBuffer<T> = GenericRingBuffer<T, Vec<MaybeUninit<T>>>;
+pub type StaticRingBuffer<T, const N: usize> = GenericRingBuffer<T, [MaybeUninit<T>; N]>;
 
-impl<T> VecRingBuffer<T> {
+impl<T> RingBuffer<T> {
     pub fn new(capacity: usize) -> Self {
         let mut data = Vec::new();
         data.resize_with(capacity, MaybeUninit::uninit);
@@ -250,8 +255,8 @@ impl<T, const N: usize> Default for StaticRingBuffer<T, N> {
 ///
 /// Returns number of items been moved.
 pub fn transfer<T, Cs, Cd, Rs, Rd>(
-    src: &mut Consumer<T, Cs, Rs>,
-    dst: &mut Producer<T, Cd, Rd>,
+    src: &mut GenericConsumer<T, Cs, Rs>,
+    dst: &mut GenericProducer<T, Cd, Rd>,
     count: Option<usize>,
 ) -> usize
 where

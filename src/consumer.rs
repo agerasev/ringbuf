@@ -1,3 +1,4 @@
+use alloc::{sync::Arc, vec::Vec};
 use core::{
     cmp,
     marker::PhantomData,
@@ -7,12 +8,12 @@ use core::{
 use std::io::{self, Read, Write};
 
 use crate::{
-    producer::Producer,
-    ring_buffer::{transfer, Container, RingBufferRef},
+    producer::GenericProducer,
+    ring_buffer::{transfer, Container, RingBuffer, RingBufferRef, StaticRingBuffer},
 };
 
 /// Consumer part of ring buffer.
-pub struct Consumer<T, C, R>
+pub struct GenericConsumer<T, C, R>
 where
     C: Container<T>,
     R: RingBufferRef<T, C>,
@@ -21,7 +22,7 @@ where
     _phantom: PhantomData<(T, C)>,
 }
 
-impl<T, C, R> Consumer<T, C, R>
+impl<T, C, R> GenericConsumer<T, C, R>
 where
     C: Container<T>,
     R: RingBufferRef<T, C>,
@@ -34,7 +35,7 @@ where
     }
 }
 
-impl<T, C, R> Consumer<T, C, R>
+impl<T, C, R> GenericConsumer<T, C, R>
 where
     C: Container<T>,
     R: RingBufferRef<T, C>,
@@ -158,9 +159,9 @@ where
     ///
     /// ```rust
     /// # extern crate ringbuf;
-    /// # use ringbuf::VecRingBuffer;
+    /// # use ringbuf::RingBuffer;
     /// # fn main() {
-    /// let rb = VecRingBuffer::<i32>::new(8);
+    /// let rb = RingBuffer::<i32>::new(8);
     /// let (mut prod, mut cons) = rb.split();
     ///
     /// assert_eq!(prod.push_iter(&mut (0..8)), 8);
@@ -183,7 +184,7 @@ where
     /// On success returns count of elements been moved.
     pub fn transfer_to<Cd, Rd>(
         &mut self,
-        other: &mut Producer<T, Cd, Rd>,
+        other: &mut GenericProducer<T, Cd, Rd>,
         count: Option<usize>,
     ) -> usize
     where
@@ -199,7 +200,7 @@ where
     C: Container<T>,
     R: RingBufferRef<T, C>,
 {
-    consumer: &'a mut Consumer<T, C, R>,
+    consumer: &'a mut GenericConsumer<T, C, R>,
 }
 
 impl<'a, T, C, R> Iterator for PopIterator<'a, T, C, R>
@@ -213,7 +214,7 @@ where
     }
 }
 
-impl<T: Copy, C, R> Consumer<T, C, R>
+impl<T: Copy, C, R> GenericConsumer<T, C, R>
 where
     C: Container<T>,
     R: RingBufferRef<T, C>,
@@ -247,7 +248,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<C, R> Consumer<u8, C, R>
+impl<C, R> GenericConsumer<u8, C, R>
 where
     C: Container<u8>,
     R: RingBufferRef<u8, C>,
@@ -278,7 +279,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<C, R> Read for Consumer<u8, C, R>
+impl<C, R> Read for GenericConsumer<u8, C, R>
 where
     C: Container<u8>,
     R: RingBufferRef<u8, C>,
@@ -292,3 +293,7 @@ where
         }
     }
 }
+
+pub type Consumer<T> = GenericConsumer<T, Vec<MaybeUninit<T>>, Arc<RingBuffer<T>>>;
+pub type StaticConsumer<'a, T, const N: usize> =
+    GenericConsumer<T, [MaybeUninit<T>; N], &'a StaticRingBuffer<T, N>>;

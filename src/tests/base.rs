@@ -1,21 +1,21 @@
-use crate::VecRingBuffer;
+use crate::RingBuffer;
 #[cfg(feature = "std")]
 use std::thread;
 
-fn head_tail<T>(rb: &VecRingBuffer<T>) -> (usize, usize) {
+fn head_tail<T>(rb: &RingBuffer<T>) -> (usize, usize) {
     (rb.head(), rb.tail())
 }
 
 #[test]
 fn capacity() {
     let cap = 13;
-    let buf = VecRingBuffer::<i32>::new(cap);
+    let buf = RingBuffer::<i32>::new(cap);
     assert_eq!(buf.capacity(), cap);
 }
 #[test]
 fn split_capacity() {
     let cap = 13;
-    let buf = VecRingBuffer::<i32>::new(cap);
+    let buf = RingBuffer::<i32>::new(cap);
     let (prod, cons) = buf.split();
 
     assert_eq!(prod.capacity(), cap);
@@ -25,7 +25,7 @@ fn split_capacity() {
 #[cfg(feature = "std")]
 #[test]
 fn split_threads() {
-    let buf = VecRingBuffer::<i32>::new(10);
+    let buf = RingBuffer::<i32>::new(10);
     let (prod, cons) = buf.split();
 
     let pjh = thread::spawn(move || {
@@ -43,7 +43,7 @@ fn split_threads() {
 #[test]
 fn push() {
     let cap = 2;
-    let buf = VecRingBuffer::<i32>::new(cap);
+    let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, _) = buf.split();
 
     assert_eq!(head_tail(&prod.rb), (0, 0));
@@ -61,7 +61,7 @@ fn push() {
 #[test]
 fn pop_empty() {
     let cap = 2;
-    let buf = VecRingBuffer::<i32>::new(cap);
+    let buf = RingBuffer::<i32>::new(cap);
     let (_, mut cons) = buf.split();
 
     assert_eq!(head_tail(&cons.rb), (0, 0));
@@ -73,7 +73,7 @@ fn pop_empty() {
 #[test]
 fn push_pop_one() {
     let cap = 2;
-    let buf = VecRingBuffer::<i32>::new(cap);
+    let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
 
     let vcap = 2 * cap;
@@ -95,7 +95,7 @@ fn push_pop_one() {
 #[test]
 fn push_pop_all() {
     let cap = 2;
-    let buf = VecRingBuffer::<i32>::new(cap);
+    let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
 
     let vcap = 2 * cap;
@@ -134,7 +134,7 @@ fn push_pop_all() {
 
 #[test]
 fn empty_full() {
-    let buf = VecRingBuffer::<i32>::new(1);
+    let buf = RingBuffer::<i32>::new(1);
     let (mut prod, cons) = buf.split();
 
     assert!(prod.is_empty());
@@ -152,7 +152,7 @@ fn empty_full() {
 
 #[test]
 fn len_remaining() {
-    let buf = VecRingBuffer::<i32>::new(2);
+    let buf = RingBuffer::<i32>::new(2);
     let (mut prod, mut cons) = buf.split();
 
     assert_eq!(prod.len(), 0);

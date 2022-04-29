@@ -23,9 +23,9 @@
 //!
 //! ```rust
 //! # extern crate ringbuf;
-//! use ringbuf::VecRingBuffer;
+//! use ringbuf::RingBuffer;
 //! # fn main() {
-//! let rb = VecRingBuffer::<i32>::new(2);
+//! let rb = RingBuffer::<i32>::new(2);
 //! let (mut prod, mut cons) = rb.split();
 //!
 //! prod.push(0).unwrap();
