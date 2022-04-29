@@ -1,4 +1,4 @@
-use alloc::{sync::Arc, vec::Vec};
+use crate::{consumer::GenericConsumer, producer::GenericProducer, utils::uninit_array};
 use cache_padded::CachePadded;
 use core::{
     cell::UnsafeCell,
@@ -10,7 +10,8 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use crate::{consumer::GenericConsumer, producer::GenericProducer, utils::uninit_array};
+#[cfg(feature = "alloc")]
+use alloc::{sync::Arc, vec::Vec};
 
 pub trait Container<T>: AsRef<[MaybeUninit<T>]> + AsMut<[MaybeUninit<T>]> {}
 impl<T, C> Container<T> for C where C: AsRef<[MaybeUninit<T>]> + AsMut<[MaybeUninit<T>]> {}
@@ -51,6 +52,7 @@ impl<T, C: Container<T>> Storage<T, C> {
 }
 
 pub trait RingBufferRef<T, C: Container<T>>: Deref<Target = GenericRingBuffer<T, C>> {}
+#[cfg(feature = "alloc")]
 impl<T, C: Container<T>> RingBufferRef<T, C> for Arc<GenericRingBuffer<T, C>> {}
 impl<'a, T, C: Container<T>> RingBufferRef<T, C> for &'a GenericRingBuffer<T, C> {}
 
@@ -77,6 +79,7 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
     }
 
     /// Splits ring buffer into producer and consumer.
+    #[cfg(feature = "alloc")]
     pub fn split(
         self,
     ) -> (
@@ -229,9 +232,11 @@ impl<T, C: Container<T>> Drop for GenericRingBuffer<T, C> {
     }
 }
 
-pub type RingBuffer<T> = GenericRingBuffer<T, Vec<MaybeUninit<T>>>;
 pub type StaticRingBuffer<T, const N: usize> = GenericRingBuffer<T, [MaybeUninit<T>; N]>;
+#[cfg(feature = "alloc")]
+pub type RingBuffer<T> = GenericRingBuffer<T, Vec<MaybeUninit<T>>>;
 
+#[cfg(feature = "alloc")]
 impl<T> RingBuffer<T> {
     pub fn new(capacity: usize) -> Self {
         let mut data = Vec::new();

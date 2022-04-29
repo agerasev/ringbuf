@@ -16,35 +16,39 @@
 //! [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
 //!
 //! When building with nightly toolchain it is possible to run benchmarks via `cargo bench --features benchmark`.
-//!
-//! # Examples
-//!
-//! ## Simple example
-//!
-//! ```rust
-//! # extern crate ringbuf;
-//! use ringbuf::RingBuffer;
-//! # fn main() {
-//! let rb = RingBuffer::<i32>::new(2);
-//! let (mut prod, mut cons) = rb.split();
-//!
-//! prod.push(0).unwrap();
-//! prod.push(1).unwrap();
-//! assert_eq!(prod.push(2), Err(2));
-//!
-//! assert_eq!(cons.pop().unwrap(), 0);
-//!
-//! prod.push(2).unwrap();
-//!
-//! assert_eq!(cons.pop().unwrap(), 1);
-//! assert_eq!(cons.pop().unwrap(), 2);
-//! assert_eq!(cons.pop(), None);
-//! # }
-//! ```
+#![cfg_attr(
+    feature = "alloc",
+    doc = r##"
+# Examples
 
+## Simple example
+
+```rust
+# extern crate ringbuf;
+use ringbuf::RingBuffer;
+# fn main() {
+let rb = RingBuffer::<i32>::new(2);
+let (mut prod, mut cons) = rb.split();
+
+prod.push(0).unwrap();
+prod.push(1).unwrap();
+assert_eq!(prod.push(2), Err(2));
+
+assert_eq!(cons.pop().unwrap(), 0);
+
+prod.push(2).unwrap();
+
+assert_eq!(cons.pop().unwrap(), 1);
+assert_eq!(cons.pop().unwrap(), 2);
+assert_eq!(cons.pop(), None);
+# }
+```
+"##
+)]
 #![no_std]
 #![cfg_attr(feature = "benchmark", feature(test))]
 
+#[cfg(feature = "alloc")]
 extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;

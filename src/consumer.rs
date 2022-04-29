@@ -1,17 +1,17 @@
-use alloc::{sync::Arc, vec::Vec};
-use core::{
-    cmp,
-    marker::PhantomData,
-    mem::{self, MaybeUninit},
-};
-#[cfg(feature = "std")]
-use std::io::{self, Read, Write};
-
 use crate::{
     producer::GenericProducer,
-    ring_buffer::{transfer, Container, RingBuffer, RingBufferRef, StaticRingBuffer},
+    ring_buffer::{transfer, Container, RingBufferRef, StaticRingBuffer},
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
+use core::{cmp, marker::PhantomData, mem::MaybeUninit};
+
+#[cfg(feature = "alloc")]
+use crate::ring_buffer::RingBuffer;
+#[cfg(feature = "alloc")]
+use alloc::{sync::Arc, vec::Vec};
+
+#[cfg(feature = "std")]
+use std::io::{self, Read, Write};
 
 /// Consumer part of ring buffer.
 pub struct GenericConsumer<T, C, R>
@@ -149,21 +149,25 @@ where
     ///
     /// Returns the number of deleted items.
     ///
-    ///
-    /// ```rust
-    /// # extern crate ringbuf;
-    /// # use ringbuf::RingBuffer;
-    /// # fn main() {
-    /// let rb = RingBuffer::<i32>::new(8);
-    /// let (mut prod, mut cons) = rb.split();
-    ///
-    /// assert_eq!(prod.push_iter(&mut (0..8)), 8);
-    ///
-    /// assert_eq!(cons.skip(4), 4);
-    /// assert_eq!(cons.skip(8), 4);
-    /// assert_eq!(cons.skip(8), 0);
-    /// # }
-    /// ```
+    #[cfg_attr(
+        feature = "alloc",
+        doc = r##"
+```rust
+# extern crate ringbuf;
+# use ringbuf::RingBuffer;
+# fn main() {
+let rb = RingBuffer::<i32>::new(8);
+let (mut prod, mut cons) = rb.split();
+
+assert_eq!(prod.push_iter(&mut (0..8)), 8);
+
+assert_eq!(cons.skip(4), 4);
+assert_eq!(cons.skip(8), 4);
+assert_eq!(cons.skip(8), 0);
+# }
+```
+"##
+    )]
     pub fn skip(&mut self, count: usize) -> usize {
         let actual_count = cmp::min(count, self.len());
         self.rb.skip(actual_count);
@@ -285,6 +289,7 @@ where
     }
 }
 
-pub type Consumer<T> = GenericConsumer<T, Vec<MaybeUninit<T>>, Arc<RingBuffer<T>>>;
 pub type StaticConsumer<'a, T, const N: usize> =
     GenericConsumer<T, [MaybeUninit<T>; N], &'a StaticRingBuffer<T, N>>;
+#[cfg(feature = "alloc")]
+pub type Consumer<T> = GenericConsumer<T, Vec<MaybeUninit<T>>, Arc<RingBuffer<T>>>;

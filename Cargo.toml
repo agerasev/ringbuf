@@ -14,8 +14,9 @@ categories = ["concurrency", "data-structures", "no-std"]
 license = "MIT/Apache-2.0"
 
 [features]
-default = ["std"]
-std = []
+default = ["std", "alloc"]
+alloc = []
+std = ["alloc"]
 benchmark = []
 
 #[[example]]

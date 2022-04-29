@@ -1,13 +1,21 @@
-use alloc::{sync::Arc, vec::Vec};
-use core::{cmp, marker::PhantomData, mem::MaybeUninit};
-#[cfg(feature = "std")]
-use std::io::{self, Read, Write};
-
 use crate::{
     consumer::GenericConsumer,
-    ring_buffer::{transfer, Container, RingBuffer, RingBufferRef, StaticRingBuffer},
-    utils::{slice_assume_init_mut, write_slice},
+    ring_buffer::{transfer, Container, RingBufferRef, StaticRingBuffer},
+    utils::write_slice,
 };
+use core::{marker::PhantomData, mem::MaybeUninit};
+
+#[cfg(feature = "alloc")]
+use crate::ring_buffer::RingBuffer;
+#[cfg(feature = "alloc")]
+use alloc::{sync::Arc, vec::Vec};
+
+#[cfg(feature = "std")]
+use crate::utils::slice_assume_init_mut;
+#[cfg(feature = "std")]
+use core::cmp;
+#[cfg(feature = "std")]
+use std::io::{self, Read, Write};
 
 /// Producer part of ring buffer.
 pub struct GenericProducer<T, C, R>
@@ -219,6 +227,7 @@ where
     }
 }
 
-pub type Producer<T> = GenericProducer<T, Vec<MaybeUninit<T>>, Arc<RingBuffer<T>>>;
 pub type StaticProducer<'a, T, const N: usize> =
     GenericProducer<T, [MaybeUninit<T>; N], &'a StaticRingBuffer<T, N>>;
+#[cfg(feature = "alloc")]
+pub type Producer<T> = GenericProducer<T, Vec<MaybeUninit<T>>, Arc<RingBuffer<T>>>;

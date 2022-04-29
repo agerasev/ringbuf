@@ -10,4 +10,5 @@ jobs:
         with:
           toolchain: stable
       - run: cargo test --no-default-features
+      - run: cargo test --no-default-features --features alloc
       - run: cargo test
