@@ -23,9 +23,9 @@
 //!
 //! ```rust
 //! # extern crate ringbuf;
-//! use ringbuf::RingBuffer;
+//! use ringbuf::VecRingBuffer;
 //! # fn main() {
-//! let rb = RingBuffer::<i32>::new(2);
+//! let rb = VecRingBuffer::<i32>::new(2);
 //! let (mut prod, mut cons) = rb.split();
 //!
 //! prod.push(0).unwrap();
@@ -55,8 +55,8 @@ extern crate std;
 //#[cfg(feature = "benchmark")]
 //mod benchmark;
 
-//#[cfg(test)]
-//mod tests;
+#[cfg(test)]
+mod tests;
 
 mod consumer;
 mod producer;

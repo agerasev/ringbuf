@@ -17,7 +17,7 @@ where
     C: Container<T>,
     R: RingBufferRef<T, C>,
 {
-    rb: R,
+    pub(crate) rb: R,
     _phantom: PhantomData<(T, C)>,
 }
 
@@ -130,6 +130,11 @@ where
         }
     }
 
+    /// Returns iterator that removes elements one by one from the ring buffer.
+    pub fn pop_iter(&mut self) -> PopIterator<'_, T, C, R> {
+        PopIterator { consumer: self }
+    }
+
     /// Returns a front-to-back iterator.
     pub fn iter(&self) -> impl Iterator<Item = &T> + '_ {
         let (left, right) = self.as_slices();
@@ -153,20 +158,20 @@ where
     ///
     /// ```rust
     /// # extern crate ringbuf;
-    /// # use ringbuf::RingBuffer;
+    /// # use ringbuf::VecRingBuffer;
     /// # fn main() {
-    /// let rb = RingBuffer::<i32>::new(8);
+    /// let rb = VecRingBuffer::<i32>::new(8);
     /// let (mut prod, mut cons) = rb.split();
     ///
     /// assert_eq!(prod.push_iter(&mut (0..8)), 8);
     ///
-    /// assert_eq!(cons.discard(4), 4);
-    /// assert_eq!(cons.discard(8), 4);
-    /// assert_eq!(cons.discard(8), 0);
+    /// assert_eq!(cons.skip(4), 4);
+    /// assert_eq!(cons.skip(8), 4);
+    /// assert_eq!(cons.skip(8), 0);
     /// # }
     /// ```
     pub fn skip(&mut self, count: usize) -> usize {
-        let actual_count = cmp::min(count, self.rb.occupied_len());
+        let actual_count = cmp::min(count, self.len());
         self.rb.skip(actual_count);
         actual_count
     }
@@ -189,14 +194,22 @@ where
     }
 }
 
-impl<T, C, R> Iterator for Consumer<T, C, R>
+pub struct PopIterator<'a, T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C>,
+{
+    consumer: &'a mut Consumer<T, C, R>,
+}
+
+impl<'a, T, C, R> Iterator for PopIterator<'a, T, C, R>
 where
     C: Container<T>,
     R: RingBufferRef<T, C>,
 {
     type Item = T;
     fn next(&mut self) -> Option<T> {
-        self.pop()
+        self.consumer.pop()
     }
 }
 

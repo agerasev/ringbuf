@@ -17,7 +17,7 @@ where
     C: Container<T>,
     R: RingBufferRef<T, C>,
 {
-    rb: R,
+    pub(crate) rb: R,
     _phantom: PhantomData<(T, C)>,
 }
 
@@ -88,7 +88,8 @@ where
     ///
     /// On failure returns an `Err` containing the element that hasn't been appended.
     pub fn push(&mut self, elem: T) -> Result<(), T> {
-        let (left, _) = unsafe { self.free_space_as_slices() };
+        let (left, right) = unsafe { self.free_space_as_slices() };
+        std::println!("left: {}, right: {}", left.len(), right.len());
         match left.iter_mut().next() {
             Some(place) => {
                 unsafe { place.as_mut_ptr().write(elem) };

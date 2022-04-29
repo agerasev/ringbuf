@@ -62,11 +62,11 @@ pub struct RingBuffer<T, C: Container<T>> {
 }
 
 impl<T, C: Container<T>> RingBuffer<T, C> {
-    fn head(&self) -> usize {
+    pub(crate) fn head(&self) -> usize {
         self.head.load(Ordering::Acquire)
     }
-    fn tail(&self) -> usize {
-        self.head.load(Ordering::Acquire)
+    pub(crate) fn tail(&self) -> usize {
+        self.tail.load(Ordering::Acquire)
     }
 
     pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
@@ -122,11 +122,11 @@ impl<T, C: Container<T>> RingBuffer<T, C> {
     ///
     /// First `count` elements in occupied area must be initialized before this call.
     ///
-    /// Does not check if `count` is greater than number of elements in the ring buffer.*
+    /// *Panics if `count` is greater than number of elements in the ring buffer.*
     ///
     /// Allowed to call only from **consumer** side.
     pub unsafe fn shift_head(&self, count: usize) {
-        debug_assert!(count <= self.occupied_len());
+        assert!(count <= self.occupied_len());
         self.head
             .store((self.head() + count) % self.modulus(), Ordering::Release);
     }
@@ -137,11 +137,12 @@ impl<T, C: Container<T>> RingBuffer<T, C> {
     ///
     /// First `count` elements in vacant area must be deinitialized (dropped) before this call.
     ///
-    /// Does not check if `count` is greater than number of vacant places in the ring buffer.
+    /// *Panics if `count` is greater than number of vacant places in the ring buffer.*
     ///
     /// Allowed to call only from **producer** side.
     pub unsafe fn shift_tail(&self, count: usize) {
-        debug_assert!(count <= self.vacant_len());
+        std::println!("count: {}, vacant: {}", count, self.vacant_len());
+        assert!(count <= self.vacant_len());
         self.tail
             .store((self.tail() + count) % self.modulus(), Ordering::Release);
     }
@@ -160,10 +161,13 @@ impl<T, C: Container<T>> RingBuffer<T, C> {
         let tail = self.tail();
         let len = self.data.len();
 
-        let ranges = match head.cmp(&tail) {
-            cmp::Ordering::Less => ((head % len)..(tail % len), 0..0),
-            cmp::Ordering::Greater => ((head % len)..len, 0..(tail % len)),
-            cmp::Ordering::Equal => (0..0, 0..0),
+        let (head_div, head_mod) = (head / len, head % len);
+        let (tail_div, tail_mod) = (tail / len, tail % len);
+
+        let ranges = if head_div == tail_div {
+            (head_mod..tail_mod, 0..0)
+        } else {
+            (head_mod..len, 0..tail_mod)
         };
 
         let ptr = self.data.as_mut_slice().as_mut_ptr();
@@ -187,10 +191,13 @@ impl<T, C: Container<T>> RingBuffer<T, C> {
         let tail = self.tail();
         let len = self.data.len();
 
-        let ranges = match head.cmp(&tail) {
-            cmp::Ordering::Less => ((tail % len)..len, 0..(head % len)),
-            cmp::Ordering::Greater => ((tail % len)..(head % len), 0..0),
-            cmp::Ordering::Equal => (0..0, 0..0),
+        let (head_div, head_mod) = (head / len, head % len);
+        let (tail_div, tail_mod) = (tail / len, tail % len);
+
+        let ranges = if head_div == tail_div {
+            (tail_mod..len, 0..head_mod)
+        } else {
+            (tail_mod..head_mod, 0..0)
         };
 
         let ptr = self.data.as_mut_slice().as_mut_ptr();
@@ -205,16 +212,23 @@ impl<T, C: Container<T>> RingBuffer<T, C> {
     /// *Panics if `count` is greater than number of elements stored in the buffer.*
     pub fn skip(&self, count: usize) {
         let (left, right) = unsafe { self.occupied_slices() };
+        std::println!(
+            "count: {}, left.len(): {}, right.len(): {}",
+            count,
+            left.len(),
+            right.len()
+        );
         assert!(count <= left.len() + right.len());
         for elem in left.iter_mut().chain(right.iter_mut()).take(count) {
             unsafe { ptr::drop_in_place(elem.as_mut_ptr()) };
         }
+        unsafe { self.shift_head(count) };
     }
 }
 
 impl<T, C: Container<T>> Drop for RingBuffer<T, C> {
     fn drop(&mut self) {
-        self.skip(self.occupied_len());
+        // self.skip(self.occupied_len());
     }
 }
 
