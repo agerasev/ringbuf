@@ -2,7 +2,6 @@ use alloc::{sync::Arc, vec::Vec};
 use cache_padded::CachePadded;
 use core::{
     cell::UnsafeCell,
-    cmp,
     convert::{AsMut, AsRef},
     marker::PhantomData,
     mem::MaybeUninit,
@@ -228,7 +227,7 @@ impl<T, C: Container<T>> RingBuffer<T, C> {
 
 impl<T, C: Container<T>> Drop for RingBuffer<T, C> {
     fn drop(&mut self) {
-        // self.skip(self.occupied_len());
+        self.skip(self.occupied_len());
     }
 }
 

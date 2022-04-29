@@ -60,16 +60,16 @@ where
         self.rb.is_full()
     }
 
-    /// The length of the data stored in the buffer.
+    /// The number of elements stored in the buffer.
     ///
-    /// Actual length may be equal to or less than the returned value.
+    /// Actual number may be equal to or greater than the returned value.
     pub fn len(&self) -> usize {
         self.rb.occupied_len()
     }
 
-    /// The remaining space in the buffer.
+    /// The number of remaining free places in the buffer.
     ///
-    /// Actual remaining space may be equal to or greater than the returning value.
+    /// Actual number may be equal to or less than the returning value.
     pub fn remaining(&self) -> usize {
         self.rb.vacant_len()
     }
