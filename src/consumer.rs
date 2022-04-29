@@ -10,6 +10,7 @@ use std::io::{self, Read, Write};
 use crate::{
     producer::GenericProducer,
     ring_buffer::{transfer, Container, RingBuffer, RingBufferRef, StaticRingBuffer},
+    utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
 
 /// Consumer part of ring buffer.
@@ -95,11 +96,7 @@ where
     pub fn as_slices(&self) -> (&[T], &[T]) {
         unsafe {
             let (left, right) = self.as_uninit_slices();
-            // TODO: Change to `slice_assume_init` on `maybe_uninit_slice` stabilization.
-            (
-                &*(left as *const [MaybeUninit<T>] as *const [T]),
-                &*(right as *const [MaybeUninit<T>] as *const [T]),
-            )
+            (slice_assume_init_ref(left), slice_assume_init_ref(right))
         }
     }
 
@@ -109,11 +106,7 @@ where
     pub fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
         unsafe {
             let (left, right) = self.as_mut_uninit_slices();
-            // TODO: Change to `slice_assume_init_mut` on `maybe_uninit_slice` stabilization.
-            (
-                &mut *(left as *mut [MaybeUninit<T>] as *mut [T]),
-                &mut *(right as *mut [MaybeUninit<T>] as *mut [T]),
-            )
+            (slice_assume_init_mut(left), slice_assume_init_mut(right))
         }
     }
 
@@ -225,20 +218,18 @@ where
     /// On success returns count of elements been removed from the ring buffer.
     pub fn pop_slice(&mut self, elems: &mut [T]) -> usize {
         let (left, right) = unsafe { self.as_uninit_slices() };
-        // TODO: Change to `write_slice` on `maybe_uninit_write_slice` stabilization.
-        let elems: &mut [MaybeUninit<T>] = unsafe { mem::transmute(elems) };
         let count = if elems.len() < left.len() {
-            elems.copy_from_slice(&left[..elems.len()]);
+            unsafe { write_uninit_slice(elems, &left[..elems.len()]) };
             elems.len()
         } else {
             let (left_elems, elems) = elems.split_at_mut(left.len());
-            left_elems.copy_from_slice(left);
+            unsafe { write_uninit_slice(left_elems, left) };
             left.len()
                 + if elems.len() < right.len() {
-                    elems.copy_from_slice(&right[..elems.len()]);
+                    unsafe { write_uninit_slice(elems, &right[..elems.len()]) };
                     elems.len()
                 } else {
-                    elems[..right.len()].copy_from_slice(right);
+                    unsafe { write_uninit_slice(&mut elems[..right.len()], right) };
                     right.len()
                 }
         };
@@ -260,7 +251,8 @@ where
     /// Returns `Ok(n)` if `write` succeeded. `n` is number of bytes been written.
     /// `n == 0` means that either `write` returned zero or ring buffer is empty.
     ///
-    /// If `write` is failed or returned an invalid number then error is returned.
+    /// If `write` is failed then original error is returned.
+    // TODO: Add note about writing only one contiguous slice at once.
     pub fn write_into<S: Write>(
         &mut self,
         writer: &mut S,
@@ -268,13 +260,12 @@ where
     ) -> io::Result<usize> {
         let (left, _) = unsafe { self.as_uninit_slices() };
         let count = cmp::min(count.unwrap_or(left.len()), left.len());
-        let left = &left[..count];
-        writer
-            .write(unsafe { &*(left as *const [MaybeUninit<u8>] as *const [u8]) })
-            .map(|n| {
-                assert!(n <= left.len());
-                n
-            })
+        let left_init = unsafe { slice_assume_init_ref(&left[..count]) };
+
+        let write_count = writer.write(left_init)?;
+        assert!(write_count <= count);
+        unsafe { self.advance(write_count) };
+        Ok(write_count)
     }
 }
 

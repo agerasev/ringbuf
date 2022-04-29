@@ -10,7 +10,7 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use crate::{consumer::GenericConsumer, producer::GenericProducer};
+use crate::{consumer::GenericConsumer, producer::GenericProducer, utils::uninit_array};
 
 pub trait Container<T>: AsRef<[MaybeUninit<T>]> + AsMut<[MaybeUninit<T>]> {}
 impl<T, C> Container<T> for C where C: AsRef<[MaybeUninit<T>]> + AsMut<[MaybeUninit<T>]> {}
@@ -242,9 +242,7 @@ impl<T> RingBuffer<T> {
 
 impl<T, const N: usize> Default for StaticRingBuffer<T, N> {
     fn default() -> Self {
-        let uninit = MaybeUninit::<[T; N]>::uninit();
-        let array = unsafe { (&uninit as *const _ as *const [MaybeUninit<T>; N]).read() };
-        unsafe { Self::from_raw_parts(array, 0, 0) }
+        unsafe { Self::from_raw_parts(uninit_array(), 0, 0) }
     }
 }
 

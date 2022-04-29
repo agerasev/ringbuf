@@ -1,15 +1,12 @@
 use alloc::{sync::Arc, vec::Vec};
-use core::{
-    cmp,
-    marker::PhantomData,
-    mem::{self, MaybeUninit},
-};
+use core::{cmp, marker::PhantomData, mem::MaybeUninit};
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
 use crate::{
     consumer::GenericConsumer,
     ring_buffer::{transfer, Container, RingBuffer, RingBufferRef, StaticRingBuffer},
+    utils::{slice_assume_init_mut, write_slice},
 };
 
 /// Producer part of ring buffer.
@@ -89,7 +86,7 @@ where
     ///
     /// On failure returns an `Err` containing the element that hasn't been appended.
     pub fn push(&mut self, elem: T) -> Result<(), T> {
-        let (left, right) = unsafe { self.free_space_as_slices() };
+        let (left, _) = unsafe { self.free_space_as_slices() };
         match left.iter_mut().next() {
             Some(place) => {
                 unsafe { place.as_mut_ptr().write(elem) };
@@ -150,20 +147,18 @@ where
     /// Returns count of elements been appended to the ring buffer.
     pub fn push_slice(&mut self, elems: &[T]) -> usize {
         let (left, right) = unsafe { self.free_space_as_slices() };
-        // TODO: Change to `write_slice` on `maybe_uninit_write_slice` stabilization.
-        let elems: &[MaybeUninit<T>] = unsafe { mem::transmute(elems) };
         let count = if elems.len() < left.len() {
-            left[..elems.len()].copy_from_slice(elems);
+            write_slice(&mut left[..elems.len()], elems);
             elems.len()
         } else {
             let (left_elems, elems) = elems.split_at(left.len());
-            left.copy_from_slice(left_elems);
+            write_slice(left, left_elems);
             left.len()
                 + if elems.len() < right.len() {
-                    right[..elems.len()].copy_from_slice(elems);
+                    write_slice(&mut right[..elems.len()], elems);
                     elems.len()
                 } else {
-                    right.copy_from_slice(&elems[..right.len()]);
+                    write_slice(right, &elems[..right.len()]);
                     right.len()
                 }
         };
@@ -187,6 +182,7 @@ where
     /// `n == 0` means that either `read` returned zero or ring buffer is full.
     ///
     /// If `read` is failed or returned an invalid number then error is returned.
+    // TODO: Add note about reading only one contiguous slice at once.
     pub fn read_from<S: Read>(
         &mut self,
         reader: &mut S,
@@ -194,13 +190,12 @@ where
     ) -> io::Result<usize> {
         let (left, _) = unsafe { self.free_space_as_slices() };
         let count = cmp::min(count.unwrap_or(left.len()), left.len());
-        let left = &mut left[..count];
-        reader
-            .read(unsafe { &mut *(left as *mut [MaybeUninit<u8>] as *mut [u8]) })
-            .map(|n| {
-                assert!(n <= left.len());
-                n
-            })
+        let left_init = unsafe { slice_assume_init_mut(&mut left[..count]) };
+
+        let read_count = reader.read(left_init)?;
+        assert!(read_count <= count);
+        unsafe { self.advance(read_count) };
+        Ok(read_count)
     }
 }
 
