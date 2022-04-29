@@ -256,7 +256,7 @@ impl<T, const N: usize> Default for StaticRingBuffer<T, N> {
 /// `count` is the number of items being moved, if `None` - as much as possible items will be moved.
 ///
 /// Returns number of items been moved.
-pub fn move_items<T, Cs, Cd, Rs, Rd>(
+pub fn transfer<T, Cs, Cd, Rs, Rd>(
     src: &mut Consumer<T, Cs, Rs>,
     dst: &mut Producer<T, Cd, Rd>,
     count: Option<usize>,
@@ -282,5 +282,7 @@ where
         unsafe { dst_place.write(src_elem.as_ptr().read()) };
         actual_count += 1;
     }
+    unsafe { src.advance(actual_count) };
+    unsafe { dst.advance(actual_count) };
     actual_count
 }

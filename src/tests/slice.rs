@@ -1,4 +1,4 @@
-use crate::VecRingBuffer;
+use crate::{transfer, VecRingBuffer};
 
 #[test]
 fn push_pop_slice() {
@@ -36,15 +36,15 @@ fn move_slice() {
 
     assert_eq!(prod0.push_slice(&[0, 1, 2]), 3);
 
-    assert_eq!(prod1.move_from(&mut cons0, None), 3);
-    assert_eq!(prod1.move_from(&mut cons0, None), 0);
+    assert_eq!(transfer(&mut cons0, &mut prod1, None), 3);
+    assert_eq!(transfer(&mut cons0, &mut prod1, None), 0);
 
     assert_eq!(cons1.pop_slice(&mut tmp), 3);
     assert_eq!(tmp[0..3], [0, 1, 2]);
 
     assert_eq!(prod0.push_slice(&[3, 4, 5]), 3);
 
-    assert_eq!(prod1.move_from(&mut cons0, None), 3);
+    assert_eq!(transfer(&mut cons0, &mut prod1, None), 3);
 
     assert_eq!(cons1.pop_slice(&mut tmp), 3);
     assert_eq!(tmp[0..3], [3, 4, 5]);
@@ -52,8 +52,8 @@ fn move_slice() {
     assert_eq!(prod1.push_slice(&[6, 7, 8]), 3);
     assert_eq!(prod0.push_slice(&[9, 10]), 2);
 
-    assert_eq!(prod1.move_from(&mut cons0, None), 1);
-    assert_eq!(prod1.move_from(&mut cons0, None), 0);
+    assert_eq!(transfer(&mut cons0, &mut prod1, None), 1);
+    assert_eq!(transfer(&mut cons0, &mut prod1, None), 0);
 
     assert_eq!(cons1.pop_slice(&mut tmp), 4);
     assert_eq!(tmp[0..4], [6, 7, 8, 9]);
@@ -70,26 +70,26 @@ fn move_slice_count() {
 
     assert_eq!(prod0.push_slice(&[0, 1, 2]), 3);
 
-    assert_eq!(prod1.move_from(&mut cons0, Some(2)), 2);
+    assert_eq!(transfer(&mut cons0, &mut prod1, Some(2)), 2);
 
     assert_eq!(cons1.pop_slice(&mut tmp), 2);
     assert_eq!(tmp[0..2], [0, 1]);
 
-    assert_eq!(prod1.move_from(&mut cons0, Some(2)), 1);
+    assert_eq!(transfer(&mut cons0, &mut prod1, Some(2)), 1);
 
     assert_eq!(cons1.pop_slice(&mut tmp), 1);
     assert_eq!(tmp[0..1], [2]);
 
     assert_eq!(prod0.push_slice(&[3, 4, 5, 6]), 4);
 
-    assert_eq!(prod1.move_from(&mut cons0, Some(3)), 3);
+    assert_eq!(transfer(&mut cons0, &mut prod1, Some(3)), 3);
 
     assert_eq!(cons1.pop_slice(&mut tmp), 3);
     assert_eq!(tmp[0..3], [3, 4, 5]);
 
     assert_eq!(prod0.push_slice(&[7, 8, 9]), 3);
 
-    assert_eq!(prod1.move_from(&mut cons0, Some(5)), 4);
+    assert_eq!(transfer(&mut cons0, &mut prod1, Some(5)), 4);
 
     assert_eq!(cons1.pop_slice(&mut tmp), 4);
     assert_eq!(tmp[0..4], [6, 7, 8, 9]);

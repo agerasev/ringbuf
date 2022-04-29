@@ -14,7 +14,7 @@ fn push() {
         assert_eq!(right.len(), 0);
         left[0] = MaybeUninit::new(vs_20.0);
         left[1] = MaybeUninit::new(vs_20.1);
-        unsafe { prod.accept(2) };
+        unsafe { prod.advance(2) };
     }
     {
         let (left, right) = unsafe { prod.free_space_as_slices() };
@@ -32,7 +32,7 @@ fn push() {
         assert_eq!(right.len(), 2);
         left[0] = MaybeUninit::new(vs_11.0);
         right[0] = MaybeUninit::new(vs_11.1);
-        unsafe { prod.accept(2) };
+        unsafe { prod.advance(2) };
     }
     {
         let (left, right) = unsafe { prod.free_space_as_slices() };
@@ -62,7 +62,7 @@ fn pop_full() {
         for (i, x) in left.iter().enumerate() {
             assert_eq!(unsafe { x.assume_init() }, i as i32);
         }
-        unsafe { cons.accept(cap) };
+        unsafe { cons.advance(cap) };
     }
 
     assert_eq!(cons.len(), 0);
@@ -79,7 +79,7 @@ fn pop_empty() {
         let (left, right) = unsafe { cons.as_uninit_slices() };
         assert_eq!(left.len(), 0);
         assert_eq!(right.len(), 0);
-        unsafe { cons.accept(0) };
+        unsafe { cons.advance(0) };
     }
 }
 
@@ -102,7 +102,7 @@ fn pop() {
         assert_eq!(unsafe { left[0].assume_init() }, vs_20.0);
         assert_eq!(unsafe { left[1].assume_init() }, vs_20.1);
         assert_eq!(unsafe { left[2].assume_init() }, vs_20.2);
-        unsafe { cons.accept(2) };
+        unsafe { cons.advance(2) };
     }
     {
         let (left, right) = unsafe { cons.as_uninit_slices() };
@@ -122,7 +122,7 @@ fn pop() {
         assert_eq!(unsafe { left[0].assume_init() }, vs_20.2);
         assert_eq!(unsafe { right[0].assume_init() }, vs_11.0);
         assert_eq!(unsafe { right[1].assume_init() }, vs_11.1);
-        unsafe { cons.accept(2) };
+        unsafe { cons.advance(2) };
     }
     {
         let (left, right) = unsafe { cons.as_uninit_slices() };
@@ -143,7 +143,7 @@ fn push_return() {
         let (left, right) = unsafe { prod.free_space_as_slices() };
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
-        unsafe { prod.accept(0) };
+        unsafe { prod.advance(0) };
     }
 
     {
@@ -151,7 +151,7 @@ fn push_return() {
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
         left[0] = MaybeUninit::new(12);
-        unsafe { prod.accept(1) };
+        unsafe { prod.advance(1) };
     }
 
     {
@@ -159,7 +159,7 @@ fn push_return() {
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 0);
         left[0] = MaybeUninit::new(34);
-        unsafe { prod.accept(1) };
+        unsafe { prod.advance(1) };
     }
 
     assert_eq!(cons.pop().unwrap(), 12);
@@ -181,7 +181,7 @@ fn pop_return() {
         let (left, right) = unsafe { cons.as_uninit_slices() };
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
-        unsafe { cons.accept(0) };
+        unsafe { cons.advance(0) };
     }
 
     {
@@ -189,7 +189,7 @@ fn pop_return() {
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
         assert_eq!(unsafe { left[0].assume_init() }, 12);
-        unsafe { cons.accept(1) };
+        unsafe { cons.advance(1) };
     }
 
     {
@@ -197,7 +197,7 @@ fn pop_return() {
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 0);
         assert_eq!(unsafe { left[0].assume_init() }, 34);
-        unsafe { cons.accept(1) };
+        unsafe { cons.advance(1) };
     }
 
     assert_eq!(prod.len(), 0);
@@ -216,7 +216,7 @@ fn push_pop() {
         assert_eq!(right.len(), 0);
         left[0] = MaybeUninit::new(vs_20.0);
         left[1] = MaybeUninit::new(vs_20.1);
-        unsafe { prod.accept(2) };
+        unsafe { prod.advance(2) };
     }
     assert_eq!(prod.len(), 2);
     {
@@ -225,7 +225,7 @@ fn push_pop() {
         assert_eq!(right.len(), 0);
         assert_eq!(unsafe { left[0].assume_init() }, vs_20.0);
         assert_eq!(unsafe { left[1].assume_init() }, vs_20.1);
-        unsafe { cons.accept(2) };
+        unsafe { cons.advance(2) };
     }
     assert_eq!(prod.len(), 0);
 
@@ -236,7 +236,7 @@ fn push_pop() {
         assert_eq!(right.len(), 2);
         left[0] = MaybeUninit::new(vs_11.0);
         right[0] = MaybeUninit::new(vs_11.1);
-        unsafe { prod.accept(2) };
+        unsafe { prod.advance(2) };
     }
     assert_eq!(prod.len(), 2);
     {
@@ -245,7 +245,7 @@ fn push_pop() {
         assert_eq!(right.len(), 1);
         assert_eq!(unsafe { left[0].assume_init() }, vs_11.0);
         assert_eq!(unsafe { right[0].assume_init() }, vs_11.1);
-        unsafe { cons.accept(2) };
+        unsafe { cons.advance(2) };
     }
     assert_eq!(prod.len(), 0);
 }

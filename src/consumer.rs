@@ -8,7 +8,7 @@ use std::io::{self, Read, Write};
 
 use crate::{
     producer::Producer,
-    ring_buffer::{move_items, Container, RingBufferRef},
+    ring_buffer::{transfer, Container, RingBufferRef},
 };
 
 /// Consumer part of ring buffer.
@@ -84,7 +84,7 @@ where
         self.rb.occupied_slices()
     }
 
-    pub unsafe fn accept(&mut self, count: usize) {
+    pub unsafe fn advance(&mut self, count: usize) {
         self.rb.shift_head(count);
     }
 
@@ -123,7 +123,7 @@ where
         match left.iter().next() {
             Some(place) => {
                 let elem = unsafe { place.as_ptr().read() };
-                unsafe { self.accept(1) };
+                unsafe { self.advance(1) };
                 Some(elem)
             }
             None => None,
@@ -181,7 +181,7 @@ where
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns count of elements been moved.
-    pub fn move_to<Cd, Rd>(
+    pub fn transfer_to<Cd, Rd>(
         &mut self,
         other: &mut Producer<T, Cd, Rd>,
         count: Option<usize>,
@@ -190,7 +190,7 @@ where
         Cd: Container<T>,
         Rd: RingBufferRef<T, Cd>,
     {
-        move_items(self, other, count)
+        transfer(self, other, count)
     }
 }
 
@@ -241,7 +241,7 @@ where
                     right.len()
                 }
         };
-        unsafe { self.accept(count) };
+        unsafe { self.advance(count) };
         count
     }
 }
