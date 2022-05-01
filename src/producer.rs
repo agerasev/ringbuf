@@ -18,6 +18,8 @@ use core::cmp;
 use std::io::{self, Read, Write};
 
 /// Producer part of ring buffer.
+///
+/// Generic over item type, ring buffer container and ring buffer reference.
 pub struct GenericProducer<T, C, R>
 where
     C: Container<T>,
@@ -81,13 +83,26 @@ where
     }
 
     /// Provides a direct access to the ring buffer vacant memory.
+    /// Returns a pair of slices of uninitialized memory, the second one may be empty.
     ///
+    /// # Safety
+    ///
+    /// Vacant memory is uninitialized. Initialized elements must be put starting from the beginning of first slice.
+    /// When first slice is fully filled then elements must be put to the beginning of the second slice.
+    ///
+    /// *This method must be followed by `Self::advance` call with the number of elements being put previously as argument.*
+    /// *No other mutating calls allowed before that.*
     pub unsafe fn free_space_as_slices(
         &mut self,
     ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
         self.rb.vacant_slices()
     }
 
+    /// Moves `tail` counter by `count` places.
+    ///
+    /// # Safety
+    ///
+    /// First `count` elements in free space must be initialized.
     pub unsafe fn advance(&mut self, count: usize) {
         self.rb.advance_tail(count);
     }
@@ -229,7 +244,10 @@ where
     }
 }
 
+/// Producer that holds reference to `StaticRingBuffer`.
 pub type StaticProducer<'a, T, const N: usize> =
     GenericProducer<T, [MaybeUninit<T>; N], &'a StaticRingBuffer<T, N>>;
+
+/// Producer that holds `Arc<RingBuffer>`.
 #[cfg(feature = "alloc")]
 pub type Producer<T> = GenericProducer<T, Vec<MaybeUninit<T>>, Arc<RingBuffer<T>>>;

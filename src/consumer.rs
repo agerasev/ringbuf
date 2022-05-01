@@ -14,6 +14,8 @@ use alloc::{sync::Arc, vec::Vec};
 use std::io::{self, Read, Write};
 
 /// Consumer part of ring buffer.
+///
+/// Generic over item type, ring buffer container and ring buffer reference.
 pub struct GenericConsumer<T, C, R>
 where
     C: Container<T>,
@@ -76,21 +78,46 @@ where
         self.rb.vacant_len()
     }
 
+    /// Provides a direct access to the ring buffer occupied memory.
+    /// The difference from `Self::as_slices` is that this method provides slices of `MaybeUninit<T>`, so elements may be moved out of slices.  
+    ///
+    /// Returns a pair of slices of stored elements, the second one may be empty.
+    /// Elements with lower indices in slice are older. First slice contains older elements that second one.
+    ///
+    /// # Safety
+    ///
+    /// All elements are initialized. Elements must be removed starting from the beginning of first slice.
+    /// When all elements are removed from the first slice then elements must be removed from the beginning of the second slice.
+    ///
+    /// *This method must be followed by `Self::advance` call with the number of elements being removed previously as argument.*
+    /// *No other mutating calls allowed before that.*
     pub unsafe fn as_uninit_slices(&self) -> (&[MaybeUninit<T>], &[MaybeUninit<T>]) {
         let (left, right) = self.rb.occupied_slices();
         (left, right)
     }
+    /// Provides a direct mutable access to the ring buffer occupied memory.
+    ///
+    /// See `as_uninit_slices` for details.
+    ///
+    /// # Safety
+    ///
+    /// The same as for `as_uninit_slices` except that elements could be modified without being removed.
     pub unsafe fn as_mut_uninit_slices(
         &mut self,
     ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
         self.rb.occupied_slices()
     }
 
+    /// Moves `head` counter by `count` places.
+    ///
+    /// # Safety
+    ///
+    /// First `count` elements in occupied memory must be moved out or dropped.
     pub unsafe fn advance(&mut self, count: usize) {
         self.rb.advance_head(count);
     }
 
-    /// Returns a pair of slices which contain, in order, the contents of the `RingBuffer`.
+    /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
     ///
     /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*
     pub fn as_slices(&self) -> (&[T], &[T]) {
@@ -100,7 +127,7 @@ where
         }
     }
 
-    /// Returns a pair of slices which contain, in order, the contents of the `RingBuffer`.
+    /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
     ///
     /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*
     pub fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
