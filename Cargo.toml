@@ -19,12 +19,12 @@ alloc = []
 std = ["alloc"]
 bench = []
 
-#[[example]]
-#name = "simple"
-
-#[[example]]
-#name = "message"
-#required-features = ["std"]
-
 [dependencies]
 cache-padded = "1.2.0"
+
+[[example]]
+name = "simple"
+
+[[example]]
+name = "message"
+required-features = ["std"]
