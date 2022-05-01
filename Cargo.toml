@@ -17,7 +17,7 @@ license = "MIT/Apache-2.0"
 default = ["std", "alloc"]
 alloc = []
 std = ["alloc"]
-benchmark = []
+bench = []
 
 #[[example]]
 #name = "simple"

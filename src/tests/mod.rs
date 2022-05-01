@@ -15,3 +15,6 @@ mod slice;
 mod message;
 #[cfg(feature = "std")]
 mod read_write;
+
+#[cfg(feature = "bench")]
+mod bench;

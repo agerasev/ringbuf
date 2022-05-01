@@ -46,7 +46,7 @@ assert_eq!(cons.pop(), None);
 "##
 )]
 #![no_std]
-#![cfg_attr(feature = "benchmark", feature(test))]
+#![cfg_attr(feature = "bench", feature(test))]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -66,7 +66,5 @@ pub use ring_buffer::*;
 #[cfg(test)]
 mod tests;
 
-//#[cfg(feature = "benchmark")]
-//extern crate test;
-//#[cfg(feature = "benchmark")]
-//mod benchmark;
+#[cfg(feature = "bench")]
+extern crate test;
