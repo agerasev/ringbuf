@@ -13,6 +13,7 @@ use core::{
 #[cfg(feature = "alloc")]
 use alloc::{sync::Arc, vec::Vec};
 
+/// Abstract container for the ring buffer.
 pub trait Container<T>: AsRef<[MaybeUninit<T>]> + AsMut<[MaybeUninit<T>]> {}
 impl<T, C> Container<T> for C where C: AsRef<[MaybeUninit<T>]> + AsMut<[MaybeUninit<T>]> {}
 
@@ -22,7 +23,7 @@ struct Storage<T, C: Container<T>> {
     phantom: PhantomData<T>,
 }
 
-unsafe impl<T, C: Container<T>> Sync for Storage<T, C> {}
+unsafe impl<T, C: Container<T>> Sync for Storage<T, C> where T: Send {}
 
 impl<T, C: Container<T>> Storage<T, C> {
     fn new(mut container: C) -> Self {
@@ -33,29 +34,30 @@ impl<T, C: Container<T>> Storage<T, C> {
         }
     }
 
-    fn into_inner(self) -> C {
-        self.container.into_inner()
-    }
-
     fn len(&self) -> usize {
         self.len
     }
 
-    unsafe fn as_slice(&self) -> &[MaybeUninit<T>] {
-        (&*self.container.get()).as_ref()
-    }
-
-    #[warn(clippy::mut_from_ref)]
+    #[allow(clippy::mut_from_ref)]
     unsafe fn as_mut_slice(&self) -> &mut [MaybeUninit<T>] {
         (&mut *self.container.get()).as_mut()
     }
 }
 
+/// Reference to the ring buffer.
 pub trait RingBufferRef<T, C: Container<T>>: Deref<Target = GenericRingBuffer<T, C>> {}
 #[cfg(feature = "alloc")]
 impl<T, C: Container<T>> RingBufferRef<T, C> for Arc<GenericRingBuffer<T, C>> {}
 impl<'a, T, C: Container<T>> RingBufferRef<T, C> for &'a GenericRingBuffer<T, C> {}
 
+/// Ring buffer itself.
+///
+/// The structure consists of abstract container (something that could be referenced as contiguous array) and two counters: `head` and `tail`.
+/// When an element is extracted from the ring buffer it is taken from the head side. New elements are appended to the tail side.
+///
+/// The ring buffer does not take an extra space that means if its capacity is `N` then the container size is also `N` (not `N + 1`).
+/// This is achieved by using modulus of `2 * Self::capacity()` (instead of `Self::capacity()`) for `head` and `tail` arithmetics.
+/// It allows us to distinguish situations when the buffer is empty (`head == tail`) and when the buffer is full (`tail - head == Self::capacity()` modulo `2 * Self::capacity()`) without using an extra space in container.
 pub struct GenericRingBuffer<T, C: Container<T>> {
     data: Storage<T, C>,
     head: CachePadded<AtomicUsize>,
@@ -70,6 +72,12 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
         self.tail.load(Ordering::Acquire)
     }
 
+    /// Constructs ring buffer from container and counters.
+    ///
+    /// # Safety
+    ///
+    /// The items in container inside `head..tail` range must be initialized, items outside this range must be uninitialized.
+    /// `head` and `tail` values must be valid (see structure documentaton).
     pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
         Self {
             data: Storage::new(container),
@@ -79,7 +87,10 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
     }
 
     /// Splits ring buffer into producer and consumer.
+    ///
+    /// This method consumes the ring buffer and puts it on heap in `Arc`. If you don't want to use heap the see `split_static`.
     #[cfg(feature = "alloc")]
+    #[allow(clippy::type_complexity)]
     pub fn split(
         self,
     ) -> (
@@ -90,6 +101,9 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
         (GenericProducer::new(arc.clone()), GenericConsumer::new(arc))
     }
 
+    /// Splits ring buffer into producer and consumer without using heap.
+    ///
+    /// In this case producer and consumer stores a reference to the ring buffer, so you need to store the buffer somewhere.
     pub fn split_static(&mut self) -> (GenericProducer<T, C, &Self>, GenericConsumer<T, C, &Self>) {
         (GenericProducer::new(self), GenericConsumer::new(self))
     }
@@ -132,7 +146,7 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
     /// *Panics if `count` is greater than number of elements in the ring buffer.*
     ///
     /// Allowed to call only from **consumer** side.
-    pub unsafe fn shift_head(&self, count: usize) {
+    pub unsafe fn advance_head(&self, count: usize) {
         assert!(count <= self.occupied_len());
         self.head
             .store((self.head() + count) % self.modulus(), Ordering::Release);
@@ -147,7 +161,7 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
     /// *Panics if `count` is greater than number of vacant places in the ring buffer.*
     ///
     /// Allowed to call only from **producer** side.
-    pub unsafe fn shift_tail(&self, count: usize) {
+    pub unsafe fn advance_tail(&self, count: usize) {
         assert!(count <= self.vacant_len());
         self.tail
             .store((self.tail() + count) % self.modulus(), Ordering::Release);
@@ -222,7 +236,7 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
         for elem in left.iter_mut().chain(right.iter_mut()).take(count) {
             unsafe { ptr::drop_in_place(elem.as_mut_ptr()) };
         }
-        unsafe { self.shift_head(count) };
+        unsafe { self.advance_head(count) };
     }
 }
 
@@ -232,12 +246,16 @@ impl<T, C: Container<T>> Drop for GenericRingBuffer<T, C> {
     }
 }
 
+/// Stack-allocated ring buffer with static capacity.
 pub type StaticRingBuffer<T, const N: usize> = GenericRingBuffer<T, [MaybeUninit<T>; N]>;
+
+/// Heap-allocated ring buffer.
 #[cfg(feature = "alloc")]
 pub type RingBuffer<T> = GenericRingBuffer<T, Vec<MaybeUninit<T>>>;
 
 #[cfg(feature = "alloc")]
 impl<T> RingBuffer<T> {
+    /// Creates a new instance of a ring buffer.
     pub fn new(capacity: usize) -> Self {
         let mut data = Vec::new();
         data.resize_with(capacity, MaybeUninit::uninit);

@@ -80,6 +80,8 @@ where
         self.rb.vacant_len()
     }
 
+    /// Provides a direct access to the ring buffer vacant memory.
+    ///
     pub unsafe fn free_space_as_slices(
         &mut self,
     ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
@@ -87,7 +89,7 @@ where
     }
 
     pub unsafe fn advance(&mut self, count: usize) {
-        self.rb.shift_tail(count);
+        self.rb.advance_tail(count);
     }
 
     /// Appends an element to the ring buffer.

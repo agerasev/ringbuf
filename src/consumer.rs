@@ -87,7 +87,7 @@ where
     }
 
     pub unsafe fn advance(&mut self, count: usize) {
-        self.rb.shift_head(count);
+        self.rb.advance_head(count);
     }
 
     /// Returns a pair of slices which contain, in order, the contents of the `RingBuffer`.
