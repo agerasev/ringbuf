@@ -24,6 +24,7 @@ cache-padded = "1.2.0"
 
 [[example]]
 name = "simple"
+required-features = ["alloc"]
 
 [[example]]
 name = "message"
