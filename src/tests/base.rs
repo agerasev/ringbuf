@@ -1,13 +1,9 @@
 use crate::RingBuffer;
-use core::sync::atomic::Ordering;
 #[cfg(feature = "std")]
 use std::thread;
 
 fn head_tail<T>(rb: &RingBuffer<T>) -> (usize, usize) {
-    (
-        rb.head.load(Ordering::Acquire),
-        rb.tail.load(Ordering::Acquire),
-    )
+    (rb.head(), rb.tail())
 }
 
 #[test]
@@ -80,7 +76,7 @@ fn push_pop_one() {
     let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
 
-    let vcap = cap + 1;
+    let vcap = 2 * cap;
     let values = [12, 34, 56, 78, 90];
     assert_eq!(head_tail(&cons.rb), (0, 0));
 
@@ -102,7 +98,7 @@ fn push_pop_all() {
     let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
 
-    let vcap = cap + 1;
+    let vcap = 2 * cap;
     let values = [(12, 34, 13), (56, 78, 57), (90, 10, 91)];
     assert_eq!(head_tail(&cons.rb), (0, 0));
 
@@ -192,8 +188,6 @@ fn len_remaining() {
     assert_eq!(prod.remaining(), 2);
     assert_eq!(cons.remaining(), 2);
 
-    // now head is at 2, so tail will be at 0. This caught an overflow error
-    // when tail+1 < head because of the substraction of usize.
     assert_eq!(prod.push(789), Ok(()));
 
     assert_eq!(prod.len(), 1);

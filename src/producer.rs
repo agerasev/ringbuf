@@ -1,21 +1,52 @@
-use alloc::sync::Arc;
-use core::{
-    mem::{self, MaybeUninit},
-    ptr::copy_nonoverlapping,
-    slice,
-    sync::atomic::Ordering,
+use crate::{
+    consumer::GenericConsumer,
+    ring_buffer::{transfer, Container, RingBufferRef, StaticRingBuffer},
+    utils::write_slice,
 };
+use core::{marker::PhantomData, mem::MaybeUninit};
+
+#[cfg(feature = "alloc")]
+use crate::ring_buffer::RingBuffer;
+#[cfg(feature = "alloc")]
+use alloc::{sync::Arc, vec::Vec};
+
+#[cfg(feature = "std")]
+use crate::utils::slice_assume_init_mut;
+#[cfg(feature = "std")]
+use core::cmp;
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use crate::{consumer::Consumer, ring_buffer::*};
-
 /// Producer part of ring buffer.
-pub struct Producer<T> {
-    pub(crate) rb: Arc<RingBuffer<T>>,
+///
+/// Generic over item type, ring buffer container and ring buffer reference.
+pub struct GenericProducer<T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C>,
+{
+    pub(crate) rb: R,
+    _phantom: PhantomData<(T, C)>,
 }
 
-impl<T: Sized> Producer<T> {
+impl<T, C, R> GenericProducer<T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C>,
+{
+    pub(crate) fn new(rb: R) -> Self {
+        Self {
+            rb,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<T, C, R> GenericProducer<T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C>,
+{
     /// Returns capacity of the ring buffer.
     ///
     /// The capacity of the buffer is constant.
@@ -37,159 +68,57 @@ impl<T: Sized> Producer<T> {
         self.rb.is_full()
     }
 
-    /// The length of the data stored in the buffer.
+    /// The number of elements stored in the buffer.
     ///
-    /// Actual length may be equal to or less than the returned value.
+    /// Actual number may be equal to or less than the returned value.
     pub fn len(&self) -> usize {
-        self.rb.len()
+        self.rb.occupied_len()
     }
 
-    /// The remaining space in the buffer.
+    /// The number of remaining free places in the buffer.
     ///
-    /// Actual remaining space may be equal to or greater than the returning value.
+    /// Actual number may be equal to or greater than the returning value.
     pub fn remaining(&self) -> usize {
-        self.rb.remaining()
+        self.rb.vacant_len()
     }
 
-    /// Allows to write into ring buffer memory directly.
-    ///
-    /// *This function is unsafe because it gives access to possibly uninitialized memory*
-    ///
-    /// The method takes a function `f` as argument.
-    /// `f` takes two slices of ring buffer content (the second one or both of them may be empty).
-    /// First slice contains older elements.
-    ///
-    /// `f` should return number of elements been written.
-    /// *There is no checks for returned number - it remains on the developer's conscience.*
-    ///
-    /// The method **always** calls `f` even if ring buffer is full.
-    ///
-    /// The method returns number returned from `f`.
+    /// Provides a direct access to the ring buffer vacant memory.
+    /// Returns a pair of slices of uninitialized memory, the second one may be empty.
     ///
     /// # Safety
     ///
-    /// The method gives access to ring buffer underlying memory which may be uninitialized.
+    /// Vacant memory is uninitialized. Initialized elements must be put starting from the beginning of first slice.
+    /// When first slice is fully filled then elements must be put to the beginning of the second slice.
     ///
-    pub unsafe fn push_access<F>(&mut self, f: F) -> usize
-    where
-        F: FnOnce(&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) -> usize,
-    {
-        let head = self.rb.head.load(Ordering::Acquire);
-        let tail = self.rb.tail.load(Ordering::Acquire);
-        let len = self.rb.data.len();
-
-        let ranges = if tail >= head {
-            if head > 0 {
-                (tail..len, 0..(head - 1))
-            } else if tail < len - 1 {
-                (tail..(len - 1), 0..0)
-            } else {
-                (0..0, 0..0)
-            }
-        } else if tail < head - 1 {
-            (tail..(head - 1), 0..0)
-        } else {
-            (0..0, 0..0)
-        };
-
-        let ptr = self.rb.data.get_mut().as_mut_ptr();
-
-        let slices = (
-            slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
-            slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
-        );
-
-        let n = f(slices.0, slices.1);
-
-        if n > 0 {
-            let new_tail = (tail + n) % len;
-            self.rb.tail.store(new_tail, Ordering::Release);
-        }
-        n
+    /// *This method must be followed by `Self::advance` call with the number of elements being put previously as argument.*
+    /// *No other mutating calls allowed before that.*
+    pub unsafe fn free_space_as_slices(
+        &mut self,
+    ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+        self.rb.vacant_slices()
     }
 
-    /// Copies data from the slice to the ring buffer in byte-to-byte manner.
-    ///
-    /// The `elems` slice should contain **initialized** data before the method call.
-    /// After the call the copied part of data in `elems` should be interpreted as **un-initialized**.
-    ///
-    /// Returns the number of items been copied.
+    /// Moves `tail` counter by `count` places.
     ///
     /// # Safety
     ///
-    /// The method copies raw data into the ring buffer.
-    ///
-    /// *You should properly fill the slice and manage remaining elements after copy.*
-    ///
-    pub unsafe fn push_copy(&mut self, elems: &[MaybeUninit<T>]) -> usize {
-        self.push_access(|left, right| -> usize {
-            if elems.len() < left.len() {
-                copy_nonoverlapping(elems.as_ptr(), left.as_mut_ptr(), elems.len());
-                elems.len()
-            } else {
-                copy_nonoverlapping(elems.as_ptr(), left.as_mut_ptr(), left.len());
-                if elems.len() < left.len() + right.len() {
-                    copy_nonoverlapping(
-                        elems.as_ptr().add(left.len()),
-                        right.as_mut_ptr(),
-                        elems.len() - left.len(),
-                    );
-                    elems.len()
-                } else {
-                    copy_nonoverlapping(
-                        elems.as_ptr().add(left.len()),
-                        right.as_mut_ptr(),
-                        right.len(),
-                    );
-                    left.len() + right.len()
-                }
-            }
-        })
+    /// First `count` elements in free space must be initialized.
+    pub unsafe fn advance(&mut self, count: usize) {
+        self.rb.advance_tail(count);
     }
 
     /// Appends an element to the ring buffer.
-    /// On failure returns an error containing the element that hasn't been appended.
+    ///
+    /// On failure returns an `Err` containing the element that hasn't been appended.
     pub fn push(&mut self, elem: T) -> Result<(), T> {
-        let mut elem_mu = MaybeUninit::new(elem);
-        let n = unsafe {
-            self.push_access(|slice, _| {
-                if !slice.is_empty() {
-                    mem::swap(slice.get_unchecked_mut(0), &mut elem_mu);
-                    1
-                } else {
-                    0
-                }
-            })
-        };
-        match n {
-            0 => Err(unsafe { elem_mu.assume_init() }),
-            1 => Ok(()),
-            _ => unreachable!(),
-        }
-    }
-
-    /// Repeatedly calls the closure `f` and pushes elements returned from it to the ring buffer.
-    ///
-    /// The closure is called until it returns `None` or the ring buffer is full.
-    ///
-    /// The method returns number of elements been put into the buffer.
-    pub fn push_each<F: FnMut() -> Option<T>>(&mut self, mut f: F) -> usize {
-        unsafe {
-            self.push_access(|left, right| {
-                for (i, dst) in left.iter_mut().enumerate() {
-                    match f() {
-                        Some(e) => dst.as_mut_ptr().write(e),
-                        None => return i,
-                    };
-                }
-                for (i, dst) in right.iter_mut().enumerate() {
-                    match f() {
-                        Some(e) => dst.as_mut_ptr().write(e),
-                        None => return i + left.len(),
-                    };
-                }
-                left.len() + right.len()
-            })
+        let (left, _) = unsafe { self.free_space_as_slices() };
+        match left.iter_mut().next() {
+            Some(place) => {
+                unsafe { place.as_mut_ptr().write(elem) };
+                unsafe { self.advance(1) };
+                Ok(())
+            }
+            None => Err(elem),
         }
     }
 
@@ -197,8 +126,21 @@ impl<T: Sized> Producer<T> {
     /// Elements that haven't been added to the ring buffer remain in the iterator.
     ///
     /// Returns count of elements been appended to the ring buffer.
-    pub fn push_iter<I: Iterator<Item = T>>(&mut self, elems: &mut I) -> usize {
-        self.push_each(|| elems.next())
+    ///
+    /// *Inserted elements are commited to the ring buffer all at once in the end,*
+    /// *e.g. when buffer is full or iterator has ended.*
+    pub fn push_iter<I: Iterator<Item = T>>(&mut self, iter: &mut I) -> usize {
+        let (left, right) = unsafe { self.free_space_as_slices() };
+        let mut count = 0;
+        for place in left.iter_mut().chain(right.iter_mut()) {
+            match iter.next() {
+                Some(elem) => unsafe { place.as_mut_ptr().write(elem) },
+                None => break,
+            }
+            count += 1;
+        }
+        unsafe { self.advance(count) };
+        count
     }
 
     /// Removes at most `count` elements from the consumer and appends them to the producer.
@@ -206,23 +148,56 @@ impl<T: Sized> Producer<T> {
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns number of elements been moved.
-    pub fn move_from(&mut self, other: &mut Consumer<T>, count: Option<usize>) -> usize {
-        move_items(other, self, count)
+    pub fn transfer_from<Cs, Rs>(
+        &mut self,
+        other: &mut GenericConsumer<T, Cs, Rs>,
+        count: Option<usize>,
+    ) -> usize
+    where
+        Cs: Container<T>,
+        Rs: RingBufferRef<T, Cs>,
+    {
+        transfer(other, self, count)
     }
 }
 
-impl<T: Sized + Copy> Producer<T> {
+impl<T: Copy, C, R> GenericProducer<T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C>,
+{
     /// Appends elements from slice to the ring buffer.
     /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
     ///
     /// Returns count of elements been appended to the ring buffer.
     pub fn push_slice(&mut self, elems: &[T]) -> usize {
-        unsafe { self.push_copy(&*(elems as *const [T] as *const [MaybeUninit<T>])) }
+        let (left, right) = unsafe { self.free_space_as_slices() };
+        let count = if elems.len() < left.len() {
+            write_slice(&mut left[..elems.len()], elems);
+            elems.len()
+        } else {
+            let (left_elems, elems) = elems.split_at(left.len());
+            write_slice(left, left_elems);
+            left.len()
+                + if elems.len() < right.len() {
+                    write_slice(&mut right[..elems.len()], elems);
+                    elems.len()
+                } else {
+                    write_slice(right, &elems[..right.len()]);
+                    right.len()
+                }
+        };
+        unsafe { self.advance(count) };
+        count
     }
 }
 
 #[cfg(feature = "std")]
-impl Producer<u8> {
+impl<C, R> GenericProducer<u8, C, R>
+where
+    C: Container<u8>,
+    R: RingBufferRef<u8, C>,
+{
     /// Reads at most `count` bytes
     /// from [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) instance
     /// and appends them to the ring buffer.
@@ -232,49 +207,29 @@ impl Producer<u8> {
     /// `n == 0` means that either `read` returned zero or ring buffer is full.
     ///
     /// If `read` is failed or returned an invalid number then error is returned.
-    pub fn read_from(&mut self, reader: &mut dyn Read, count: Option<usize>) -> io::Result<usize> {
-        let mut err = None;
-        let n = unsafe {
-            self.push_access(|left, _| -> usize {
-                let left = match count {
-                    Some(c) => {
-                        if c < left.len() {
-                            &mut left[0..c]
-                        } else {
-                            left
-                        }
-                    }
-                    None => left,
-                };
-                match reader
-                    .read(&mut *(left as *mut [MaybeUninit<u8>] as *mut [u8]))
-                    .and_then(|n| {
-                        if n <= left.len() {
-                            Ok(n)
-                        } else {
-                            Err(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                "Read operation returned an invalid number",
-                            ))
-                        }
-                    }) {
-                    Ok(n) => n,
-                    Err(e) => {
-                        err = Some(e);
-                        0
-                    }
-                }
-            })
-        };
-        match err {
-            Some(e) => Err(e),
-            None => Ok(n),
-        }
+    // TODO: Add note about reading only one contiguous slice at once.
+    pub fn read_from<S: Read>(
+        &mut self,
+        reader: &mut S,
+        count: Option<usize>,
+    ) -> io::Result<usize> {
+        let (left, _) = unsafe { self.free_space_as_slices() };
+        let count = cmp::min(count.unwrap_or(left.len()), left.len());
+        let left_init = unsafe { slice_assume_init_mut(&mut left[..count]) };
+
+        let read_count = reader.read(left_init)?;
+        assert!(read_count <= count);
+        unsafe { self.advance(read_count) };
+        Ok(read_count)
     }
 }
 
 #[cfg(feature = "std")]
-impl Write for Producer<u8> {
+impl<C, R> Write for GenericProducer<u8, C, R>
+where
+    C: Container<u8>,
+    R: RingBufferRef<u8, C>,
+{
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         let n = self.push_slice(buffer);
         if n == 0 && !buffer.is_empty() {
@@ -288,3 +243,11 @@ impl Write for Producer<u8> {
         Ok(())
     }
 }
+
+/// Producer that holds reference to `StaticRingBuffer`.
+pub type StaticProducer<'a, T, const N: usize> =
+    GenericProducer<T, [MaybeUninit<T>; N], &'a StaticRingBuffer<T, N>>;
+
+/// Producer that holds `Arc<RingBuffer>`.
+#[cfg(feature = "alloc")]
+pub type Producer<T> = GenericProducer<T, Vec<MaybeUninit<T>>, Arc<RingBuffer<T>>>;

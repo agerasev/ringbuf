@@ -37,14 +37,14 @@ fn iter_mut() {
 }
 
 #[test]
-fn into_iter() {
+fn pop_iter() {
     let buf = RingBuffer::<i32>::new(2);
-    let (mut prod, cons) = buf.split();
+    let (mut prod, mut cons) = buf.split();
 
     prod.push(10).unwrap();
     prod.push(20).unwrap();
 
-    for (i, v) in cons.into_iter().enumerate() {
+    for (i, v) in cons.pop_iter().enumerate() {
         assert_eq!(10 * (i + 1) as i32, v);
     }
     assert!(prod.is_empty());

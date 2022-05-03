@@ -1,23 +1,48 @@
-use alloc::sync::Arc;
-use core::{
-    cmp::{self, min},
-    mem::{self, MaybeUninit},
-    ops::Range,
-    ptr::copy_nonoverlapping,
-    slice,
-    sync::atomic,
+use crate::{
+    producer::GenericProducer,
+    ring_buffer::{transfer, Container, RingBufferRef, StaticRingBuffer},
+    utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
+use core::{cmp, marker::PhantomData, mem::MaybeUninit};
+
+#[cfg(feature = "alloc")]
+use crate::ring_buffer::RingBuffer;
+#[cfg(feature = "alloc")]
+use alloc::{sync::Arc, vec::Vec};
+
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use crate::{producer::Producer, ring_buffer::*};
-
 /// Consumer part of ring buffer.
-pub struct Consumer<T> {
-    pub(crate) rb: Arc<RingBuffer<T>>,
+///
+/// Generic over item type, ring buffer container and ring buffer reference.
+pub struct GenericConsumer<T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C>,
+{
+    pub(crate) rb: R,
+    _phantom: PhantomData<(T, C)>,
 }
 
-impl<T: Sized> Consumer<T> {
+impl<T, C, R> GenericConsumer<T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C>,
+{
+    pub(crate) fn new(rb: R) -> Self {
+        Self {
+            rb,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<T, C, R> GenericConsumer<T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C>,
+{
     /// Returns capacity of the ring buffer.
     ///
     /// The capacity of the buffer is constant.
@@ -27,274 +52,108 @@ impl<T: Sized> Consumer<T> {
 
     /// Checks if the ring buffer is empty.
     ///
-    /// *The result may become irrelevant at any time because of concurring activity of the producer.*
+    /// The result is relevant until you push items to the producer.
     pub fn is_empty(&self) -> bool {
         self.rb.is_empty()
     }
 
     /// Checks if the ring buffer is full.
     ///
-    /// The result is relevant until you remove items from the consumer.
+    /// *The result may become irrelevant at any time because of concurring activity of the consumer.*
     pub fn is_full(&self) -> bool {
         self.rb.is_full()
     }
 
-    /// The length of the data stored in the buffer
+    /// The number of elements stored in the buffer.
     ///
-    /// Actual length may be equal to or greater than the returned value.
+    /// Actual number may be equal to or greater than the returned value.
     pub fn len(&self) -> usize {
-        self.rb.len()
+        self.rb.occupied_len()
     }
 
-    /// The remaining space in the buffer.
+    /// The number of remaining free places in the buffer.
     ///
-    /// Actual remaining space may be equal to or less than the returning value.
+    /// Actual number may be equal to or less than the returning value.
     pub fn remaining(&self) -> usize {
-        self.rb.remaining()
+        self.rb.vacant_len()
     }
 
-    fn get_ranges(&self) -> (Range<usize>, Range<usize>) {
-        let head = self.rb.head.load(atomic::Ordering::Acquire);
-        let tail = self.rb.tail.load(atomic::Ordering::Acquire);
-        let len = self.rb.data.len();
-
-        match head.cmp(&tail) {
-            cmp::Ordering::Less => (head..tail, 0..0),
-            cmp::Ordering::Greater => (head..len, 0..tail),
-            cmp::Ordering::Equal => (0..0, 0..0),
-        }
+    /// Provides a direct access to the ring buffer occupied memory.
+    /// The difference from `Self::as_slices` is that this method provides slices of `MaybeUninit<T>`, so elements may be moved out of slices.  
+    ///
+    /// Returns a pair of slices of stored elements, the second one may be empty.
+    /// Elements with lower indices in slice are older. First slice contains older elements that second one.
+    ///
+    /// # Safety
+    ///
+    /// All elements are initialized. Elements must be removed starting from the beginning of first slice.
+    /// When all elements are removed from the first slice then elements must be removed from the beginning of the second slice.
+    ///
+    /// *This method must be followed by `Self::advance` call with the number of elements being removed previously as argument.*
+    /// *No other mutating calls allowed before that.*
+    pub unsafe fn as_uninit_slices(&self) -> (&[MaybeUninit<T>], &[MaybeUninit<T>]) {
+        let (left, right) = self.rb.occupied_slices();
+        (left, right)
+    }
+    /// Provides a direct mutable access to the ring buffer occupied memory.
+    ///
+    /// See `as_uninit_slices` for details.
+    ///
+    /// # Safety
+    ///
+    /// The same as for `as_uninit_slices` except that elements could be modified without being removed.
+    pub unsafe fn as_mut_uninit_slices(
+        &mut self,
+    ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+        self.rb.occupied_slices()
     }
 
-    /// Returns a pair of slices which contain, in order, the contents of the `RingBuffer`.
+    /// Moves `head` counter by `count` places.
+    ///
+    /// # Safety
+    ///
+    /// First `count` elements in occupied memory must be moved out or dropped.
+    pub unsafe fn advance(&mut self, count: usize) {
+        self.rb.advance_head(count);
+    }
+
+    /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
     ///
     /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*
     pub fn as_slices(&self) -> (&[T], &[T]) {
-        let ranges = self.get_ranges();
-
         unsafe {
-            let ptr = self.rb.data.get_ref().as_ptr();
-
-            let left = slice::from_raw_parts(ptr.add(ranges.0.start), ranges.0.len());
-            let right = slice::from_raw_parts(ptr.add(ranges.1.start), ranges.1.len());
-
-            (
-                &*(left as *const [MaybeUninit<T>] as *const [T]),
-                &*(right as *const [MaybeUninit<T>] as *const [T]),
-            )
+            let (left, right) = self.as_uninit_slices();
+            (slice_assume_init_ref(left), slice_assume_init_ref(right))
         }
     }
 
-    /// Returns a pair of slices which contain, in order, the contents of the `RingBuffer`.
+    /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
     ///
     /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*
     pub fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
-        let ranges = self.get_ranges();
-
         unsafe {
-            let ptr = self.rb.data.get_mut().as_mut_ptr();
-
-            let left = slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len());
-            let right = slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len());
-
-            (
-                &mut *(left as *mut [MaybeUninit<T>] as *mut [T]),
-                &mut *(right as *mut [MaybeUninit<T>] as *mut [T]),
-            )
+            let (left, right) = self.as_mut_uninit_slices();
+            (slice_assume_init_mut(left), slice_assume_init_mut(right))
         }
-    }
-
-    /// Gives immutable access to the elements contained by the ring buffer without removing them.
-    ///
-    /// The method takes a function `f` as argument.
-    /// `f` takes two slices of ring buffer contents (the second one or both of them may be empty).
-    /// First slice contains older elements.
-    ///
-    /// *The slices may not include elements pushed to the buffer by concurring producer after the method call.*
-    ///
-    /// *Marked deprecated in favor of `as_slices`.*
-    #[deprecated(since = "0.2.7", note = "please use `as_slices` instead")]
-    pub fn access<F: FnOnce(&[T], &[T])>(&self, f: F) {
-        let (left, right) = self.as_slices();
-        f(left, right);
-    }
-
-    /// Gives mutable access to the elements contained by the ring buffer without removing them.
-    ///
-    /// The method takes a function `f` as argument.
-    /// `f` takes two slices of ring buffer contents (the second one or both of them may be empty).
-    /// First slice contains older elements.
-    ///
-    /// *The iteration may not include elements pushed to the buffer by concurring producer after the method call.*
-    ///
-    /// *Marked deprecated in favor of `as_mut_slices`.*
-    #[deprecated(since = "0.2.7", note = "please use `as_mut_slices` instead")]
-    pub fn access_mut<F: FnOnce(&mut [T], &mut [T])>(&mut self, f: F) {
-        let (left, right) = self.as_mut_slices();
-        f(left, right);
-    }
-
-    /// Allows to read from ring buffer memory directly.
-    ///
-    /// *This function is unsafe because it gives access to possibly uninitialized memory*
-    ///
-    /// The method takes a function `f` as argument.
-    /// `f` takes two slices of ring buffer content (the second one or both of them may be empty).
-    /// First slice contains older elements.
-    ///
-    /// `f` should return number of elements been read.
-    /// *There is no checks for returned number - it remains on the developer's conscience.*
-    ///
-    /// The method **always** calls `f` even if ring buffer is empty.
-    ///
-    /// The method returns number returned from `f`.
-    ///
-    /// # Safety
-    ///
-    /// The method gives access to ring buffer underlying memory which may be uninitialized.
-    ///
-    /// *It's up to you to copy or drop appropriate elements if you use this function.*
-    ///
-    pub unsafe fn pop_access<F>(&mut self, f: F) -> usize
-    where
-        F: FnOnce(&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) -> usize,
-    {
-        let head = self.rb.head.load(atomic::Ordering::Acquire);
-        let tail = self.rb.tail.load(atomic::Ordering::Acquire);
-        let len = self.rb.data.len();
-
-        let ranges = match head.cmp(&tail) {
-            cmp::Ordering::Less => (head..tail, 0..0),
-            cmp::Ordering::Greater => (head..len, 0..tail),
-            cmp::Ordering::Equal => (0..0, 0..0),
-        };
-
-        let ptr = self.rb.data.get_mut().as_mut_ptr();
-
-        let slices = (
-            slice::from_raw_parts_mut(ptr.wrapping_add(ranges.0.start), ranges.0.len()),
-            slice::from_raw_parts_mut(ptr.wrapping_add(ranges.1.start), ranges.1.len()),
-        );
-
-        let n = f(slices.0, slices.1);
-
-        if n > 0 {
-            let new_head = (head + n) % len;
-            self.rb.head.store(new_head, atomic::Ordering::Release);
-        }
-        n
-    }
-
-    /// Copies data from the ring buffer to the slice in byte-to-byte manner.
-    ///
-    /// The `elems` slice should contain **un-initialized** data before the method call.
-    /// After the call the copied part of data in `elems` should be interpreted as **initialized**.
-    /// The remaining part is still **un-initialized**.
-    ///
-    /// Returns the number of items been copied.
-    ///
-    /// # Safety
-    ///
-    /// The method copies raw data from the ring buffer.
-    ///
-    /// *You should manage copied elements after call, otherwise you may get a memory leak.*
-    ///
-    pub unsafe fn pop_copy(&mut self, elems: &mut [MaybeUninit<T>]) -> usize {
-        self.pop_access(|left, right| {
-            if elems.len() < left.len() {
-                copy_nonoverlapping(left.as_ptr(), elems.as_mut_ptr(), elems.len());
-                elems.len()
-            } else {
-                copy_nonoverlapping(left.as_ptr(), elems.as_mut_ptr(), left.len());
-                if elems.len() < left.len() + right.len() {
-                    copy_nonoverlapping(
-                        right.as_ptr(),
-                        elems.as_mut_ptr().add(left.len()),
-                        elems.len() - left.len(),
-                    );
-                    elems.len()
-                } else {
-                    copy_nonoverlapping(
-                        right.as_ptr(),
-                        elems.as_mut_ptr().add(left.len()),
-                        right.len(),
-                    );
-                    left.len() + right.len()
-                }
-            }
-        })
     }
 
     /// Removes latest element from the ring buffer and returns it.
     /// Returns `None` if the ring buffer is empty.
     pub fn pop(&mut self) -> Option<T> {
-        let mut elem_mu = MaybeUninit::uninit();
-        let n = unsafe {
-            self.pop_access(|slice, _| {
-                if !slice.is_empty() {
-                    mem::swap(slice.get_unchecked_mut(0), &mut elem_mu);
-                    1
-                } else {
-                    0
-                }
-            })
-        };
-        match n {
-            0 => None,
-            1 => Some(unsafe { elem_mu.assume_init() }),
-            _ => unreachable!(),
+        let (left, _) = unsafe { self.as_uninit_slices() };
+        match left.iter().next() {
+            Some(place) => {
+                let elem = unsafe { place.as_ptr().read() };
+                unsafe { self.advance(1) };
+                Some(elem)
+            }
+            None => None,
         }
     }
 
-    /// Repeatedly calls the closure `f` passing elements removed from the ring buffer to it.
-    ///
-    /// The closure is called until it returns `false` or the ring buffer is empty.
-    ///
-    /// The method returns number of elements been removed from the buffer.
-    pub fn pop_each<F: FnMut(T) -> bool>(&mut self, mut f: F, count: Option<usize>) -> usize {
-        unsafe {
-            self.pop_access(|left, right| {
-                let lb = match count {
-                    Some(n) => min(n, left.len()),
-                    None => left.len(),
-                };
-                for (i, dst) in left[0..lb].iter_mut().enumerate() {
-                    if !f(dst.as_ptr().read()) {
-                        return i + 1;
-                    }
-                }
-                if lb < left.len() {
-                    return lb;
-                }
-
-                let rb = match count {
-                    Some(n) => min(n - lb, right.len()),
-                    None => right.len(),
-                };
-                for (i, dst) in right[0..rb].iter_mut().enumerate() {
-                    if !f(dst.as_ptr().read()) {
-                        return lb + i + 1;
-                    }
-                }
-                lb + rb
-            })
-        }
-    }
-
-    /// Iterate immutably over the elements contained by the ring buffer without removing them.
-    ///
-    /// *The iteration may not include elements pushed to the buffer by concurring producer after the method call.*
-    ///
-    /// *Marked deprecated in favor of `iter`.*
-    #[deprecated(since = "0.2.7", note = "please use `iter` instead")]
-    pub fn for_each<F: FnMut(&T)>(&self, mut f: F) {
-        let (left, right) = self.as_slices();
-
-        for c in left.iter() {
-            f(c);
-        }
-        for c in right.iter() {
-            f(c);
-        }
+    /// Returns iterator that removes elements one by one from the ring buffer.
+    pub fn pop_iter(&mut self) -> PopIterator<'_, T, C, R> {
+        PopIterator { consumer: self }
     }
 
     /// Returns a front-to-back iterator.
@@ -302,23 +161,6 @@ impl<T: Sized> Consumer<T> {
         let (left, right) = self.as_slices();
 
         left.iter().chain(right.iter())
-    }
-
-    /// Iterate mutably over the elements contained by the ring buffer without removing them.
-    ///
-    /// *The iteration may not include elements pushed to the buffer by concurring producer after the method call.*
-    ///
-    /// *Marked deprecated in favor of `iter_mut`.*
-    #[deprecated(since = "0.2.7", note = "please use `iter_mut` instead")]
-    pub fn for_each_mut<F: FnMut(&mut T)>(&mut self, mut f: F) {
-        let (left, right) = self.as_mut_slices();
-
-        for c in left.iter_mut() {
-            f(c);
-        }
-        for c in right.iter_mut() {
-            f(c);
-        }
     }
 
     /// Returns a front-to-back iterator that returns mutable references.
@@ -334,49 +176,29 @@ impl<T: Sized> Consumer<T> {
     ///
     /// Returns the number of deleted items.
     ///
-    ///
-    /// ```rust
-    /// # extern crate ringbuf;
-    /// # use ringbuf::RingBuffer;
-    /// # fn main() {
-    /// let rb = RingBuffer::<i32>::new(8);
-    /// let (mut prod, mut cons) = rb.split();
-    ///
-    /// assert_eq!(prod.push_iter(&mut (0..8)), 8);
-    ///
-    /// assert_eq!(cons.discard(4), 4);
-    /// assert_eq!(cons.discard(8), 4);
-    /// assert_eq!(cons.discard(8), 0);
-    /// # }
-    /// ```
-    pub fn discard(&mut self, n: usize) -> usize {
-        unsafe {
-            self.pop_access(|left, right| {
-                let (mut cnt, mut rem) = (0, n);
-                let left_elems = if rem <= left.len() {
-                    cnt += rem;
-                    left.get_unchecked_mut(0..rem)
-                } else {
-                    cnt += left.len();
-                    left
-                };
-                rem = n - cnt;
+    #[cfg_attr(
+        feature = "alloc",
+        doc = r##"
+```rust
+# extern crate ringbuf;
+# use ringbuf::RingBuffer;
+# fn main() {
+let rb = RingBuffer::<i32>::new(8);
+let (mut prod, mut cons) = rb.split();
 
-                let right_elems = if rem <= right.len() {
-                    cnt += rem;
-                    right.get_unchecked_mut(0..rem)
-                } else {
-                    cnt += right.len();
-                    right
-                };
+assert_eq!(prod.push_iter(&mut (0..8)), 8);
 
-                for e in left_elems.iter_mut().chain(right_elems.iter_mut()) {
-                    e.as_mut_ptr().drop_in_place();
-                }
-
-                cnt
-            })
-        }
+assert_eq!(cons.skip(4), 4);
+assert_eq!(cons.skip(8), 4);
+assert_eq!(cons.skip(8), 0);
+# }
+```
+"##
+    )]
+    pub fn skip(&mut self, count: usize) -> usize {
+        let actual_count = cmp::min(count, self.len());
+        self.rb.skip(actual_count);
+        actual_count
     }
 
     /// Removes at most `count` elements from the consumer and appends them to the producer.
@@ -384,31 +206,75 @@ impl<T: Sized> Consumer<T> {
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns count of elements been moved.
-    pub fn move_to(&mut self, other: &mut Producer<T>, count: Option<usize>) -> usize {
-        move_items(self, other, count)
+    pub fn transfer_to<Cd, Rd>(
+        &mut self,
+        other: &mut GenericProducer<T, Cd, Rd>,
+        count: Option<usize>,
+    ) -> usize
+    where
+        Cd: Container<T>,
+        Rd: RingBufferRef<T, Cd>,
+    {
+        transfer(self, other, count)
     }
 }
 
-impl<T: Sized> Iterator for Consumer<T> {
+pub struct PopIterator<'a, T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C>,
+{
+    consumer: &'a mut GenericConsumer<T, C, R>,
+}
+
+impl<'a, T, C, R> Iterator for PopIterator<'a, T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C>,
+{
     type Item = T;
-
     fn next(&mut self) -> Option<T> {
-        self.pop()
+        self.consumer.pop()
     }
 }
 
-impl<T: Sized + Copy> Consumer<T> {
+impl<T: Copy, C, R> GenericConsumer<T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C>,
+{
     /// Removes first elements from the ring buffer and writes them into a slice.
     /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
     ///
     /// On success returns count of elements been removed from the ring buffer.
     pub fn pop_slice(&mut self, elems: &mut [T]) -> usize {
-        unsafe { self.pop_copy(&mut *(elems as *mut [T] as *mut [MaybeUninit<T>])) }
+        let (left, right) = unsafe { self.as_uninit_slices() };
+        let count = if elems.len() < left.len() {
+            unsafe { write_uninit_slice(elems, &left[..elems.len()]) };
+            elems.len()
+        } else {
+            let (left_elems, elems) = elems.split_at_mut(left.len());
+            unsafe { write_uninit_slice(left_elems, left) };
+            left.len()
+                + if elems.len() < right.len() {
+                    unsafe { write_uninit_slice(elems, &right[..elems.len()]) };
+                    elems.len()
+                } else {
+                    unsafe { write_uninit_slice(&mut elems[..right.len()], right) };
+                    right.len()
+                }
+        };
+        unsafe { self.advance(count) };
+        count
     }
 }
 
 #[cfg(feature = "std")]
-impl Consumer<u8> {
+impl<C, R> GenericConsumer<u8, C, R>
+where
+    C: Container<u8>,
+    R: RingBufferRef<u8, C>,
+{
     /// Removes at most first `count` bytes from the ring buffer and writes them into
     /// a [`Write`](https://doc.rust-lang.org/std/io/trait.Write.html) instance.
     /// If `count` is `None` then as much as possible bytes will be written.
@@ -416,54 +282,30 @@ impl Consumer<u8> {
     /// Returns `Ok(n)` if `write` succeeded. `n` is number of bytes been written.
     /// `n == 0` means that either `write` returned zero or ring buffer is empty.
     ///
-    /// If `write` is failed or returned an invalid number then error is returned.
-    pub fn write_into(
+    /// If `write` is failed then original error is returned.
+    // TODO: Add note about writing only one contiguous slice at once.
+    pub fn write_into<S: Write>(
         &mut self,
-        writer: &mut dyn Write,
+        writer: &mut S,
         count: Option<usize>,
     ) -> io::Result<usize> {
-        let mut err = None;
-        let n = unsafe {
-            self.pop_access(|left, _| -> usize {
-                let left = match count {
-                    Some(c) => {
-                        if c < left.len() {
-                            &mut left[0..c]
-                        } else {
-                            left
-                        }
-                    }
-                    None => left,
-                };
-                match writer
-                    .write(&*(left as *const [MaybeUninit<u8>] as *const [u8]))
-                    .and_then(|n| {
-                        if n <= left.len() {
-                            Ok(n)
-                        } else {
-                            Err(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                "Write operation returned an invalid number",
-                            ))
-                        }
-                    }) {
-                    Ok(n) => n,
-                    Err(e) => {
-                        err = Some(e);
-                        0
-                    }
-                }
-            })
-        };
-        match err {
-            Some(e) => Err(e),
-            None => Ok(n),
-        }
+        let (left, _) = unsafe { self.as_uninit_slices() };
+        let count = cmp::min(count.unwrap_or(left.len()), left.len());
+        let left_init = unsafe { slice_assume_init_ref(&left[..count]) };
+
+        let write_count = writer.write(left_init)?;
+        assert!(write_count <= count);
+        unsafe { self.advance(write_count) };
+        Ok(write_count)
     }
 }
 
 #[cfg(feature = "std")]
-impl Read for Consumer<u8> {
+impl<C, R> Read for GenericConsumer<u8, C, R>
+where
+    C: Container<u8>,
+    R: RingBufferRef<u8, C>,
+{
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         let n = self.pop_slice(buffer);
         if n == 0 && !buffer.is_empty() {
@@ -473,3 +315,8 @@ impl Read for Consumer<u8> {
         }
     }
 }
+
+pub type StaticConsumer<'a, T, const N: usize> =
+    GenericConsumer<T, [MaybeUninit<T>; N], &'a StaticRingBuffer<T, N>>;
+#[cfg(feature = "alloc")]
+pub type Consumer<T> = GenericConsumer<T, Vec<MaybeUninit<T>>, Arc<RingBuffer<T>>>;

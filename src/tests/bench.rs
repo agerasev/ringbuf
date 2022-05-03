@@ -1,4 +1,4 @@
-use super::*;
+use crate::ring_buffer::RingBuffer;
 
 use test::Bencher;
 
