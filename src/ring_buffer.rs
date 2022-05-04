@@ -67,13 +67,6 @@ pub struct GenericRingBuffer<T, C: Container<T>> {
 }
 
 impl<T, C: Container<T>> GenericRingBuffer<T, C> {
-    pub(crate) fn head(&self) -> usize {
-        self.head.load(Ordering::Acquire)
-    }
-    pub(crate) fn tail(&self) -> usize {
-        self.tail.load(Ordering::Acquire)
-    }
-
     /// Constructs ring buffer from container and counters.
     ///
     /// # Safety
@@ -115,48 +108,68 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
     /// This value does not change.
     #[inline]
     pub fn capacity(&self) -> usize {
-        self.data.len().get()
+        self.data_len().get()
     }
-    #[inline]
+}
+
+pub(crate) trait AbstractRingBuffer<T> {
+    fn data_len(&self) -> NonZeroUsize;
+    unsafe fn data(&self) -> &mut [MaybeUninit<T>];
+
+    fn head(&self) -> usize;
+    fn tail(&self) -> usize;
+
     fn modulus(&self) -> NonZeroUsize {
-        unsafe { NonZeroUsize::new_unchecked(2 * self.capacity()) }
+        unsafe { NonZeroUsize::new_unchecked(2 * self.data_len().get()) }
     }
 
     /// The number of elements stored in the buffer at the moment.
-    pub fn occupied_len(&self) -> usize {
+    fn occupied_len(&self) -> usize {
         let mod_ = self.modulus();
         (mod_.get() + self.tail() - self.head()) % mod_
     }
     /// The number of vacant places in the buffer at the moment.
-    pub fn vacant_len(&self) -> usize {
+    fn vacant_len(&self) -> usize {
         let mod_ = self.modulus();
-        (mod_.get() + self.head() - self.tail() - self.capacity()) % mod_
+        (mod_.get() + self.head() - self.tail() - self.data_len().get()) % mod_
     }
 
     /// Checks if the ring buffer is empty.
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.head() == self.tail()
     }
 
     /// Checks if the ring buffer is full.
-    pub fn is_full(&self) -> bool {
-        self.occupied_len() > self.capacity()
+    fn is_full(&self) -> bool {
+        self.occupied_len() > self.data_len().get()
+    }
+}
+
+impl<T, C: Container<T>> AbstractRingBuffer<T> for GenericRingBuffer<T, C> {
+    #[inline]
+    fn data_len(&self) -> NonZeroUsize {
+        self.data.len()
+    }
+    unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
+        self.data.as_mut_slice()
     }
 
-    /// Move ring buffer **head** pointer by `count` elements forward.
-    ///
-    /// # Safety
-    ///
-    /// First `count` elements in occupied area must be initialized before this call.
-    ///
-    /// *In debug mode panics if `count` is greater than number of elements in the ring buffer.*
-    ///
-    /// Allowed to call only from **consumer** side.
-    pub unsafe fn advance_head(&self, count: usize) {
-        debug_assert!(count <= self.occupied_len());
-        self.head
-            .store((self.head() + count) % self.modulus(), Ordering::Release);
+    fn head(&self) -> usize {
+        self.head.load(Ordering::Acquire)
     }
+    fn tail(&self) -> usize {
+        self.tail.load(Ordering::Acquire)
+    }
+}
+
+impl<T, C: Container<T>> Drop for GenericRingBuffer<T, C> {
+    fn drop(&mut self) {
+        AbstractConsumer::skip(self, None);
+    }
+}
+
+pub(crate) trait AbstractProducer<T>: AbstractRingBuffer<T> {
+    unsafe fn set_tail(&self, value: usize);
 
     /// Move ring buffer **tail** pointer by `count` elements forward.
     ///
@@ -167,40 +180,9 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
     /// *In debug mode panics if `count` is greater than number of vacant places in the ring buffer.*
     ///
     /// Allowed to call only from **producer** side.
-    pub unsafe fn advance_tail(&self, count: usize) {
+    unsafe fn advance_tail(&self, count: usize) {
         debug_assert!(count <= self.vacant_len());
-        self.tail
-            .store((self.tail() + count) % self.modulus(), Ordering::Release);
-    }
-
-    /// Returns a pair of slices which contain, in order, the occupied cells in the ring buffer.
-    ///
-    /// All elements in slices are guaranteed to be *initialized*.
-    ///
-    /// *The slices may not include elements pushed to the buffer by the concurring producer right after this call.*
-    ///
-    /// # Safety
-    ///
-    /// Allowed to call only from **consumer** side.
-    pub unsafe fn occupied_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
-        let head = self.head();
-        let tail = self.tail();
-        let len = self.data.len();
-
-        let (head_div, head_mod) = (head / len, head % len);
-        let (tail_div, tail_mod) = (tail / len, tail % len);
-
-        let ranges = if head_div == tail_div {
-            (head_mod..tail_mod, 0..0)
-        } else {
-            (head_mod..len.get(), 0..tail_mod)
-        };
-
-        let ptr = self.data.as_mut_slice().as_mut_ptr();
-        (
-            slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
-            slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
-        )
+        self.set_tail((self.tail() + count) % self.modulus());
     }
 
     /// Returns a pair of slices which contain, in order, the vacant cells in the ring buffer.
@@ -212,10 +194,10 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
     /// # Safety
     ///
     /// Allowed to call only from **producer** side.
-    pub unsafe fn vacant_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+    unsafe fn vacant_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
         let head = self.head();
         let tail = self.tail();
-        let len = self.data.len();
+        let len = self.data_len();
 
         let (head_div, head_mod) = (head / len, head % len);
         let (tail_div, tail_mod) = (tail / len, tail % len);
@@ -226,27 +208,71 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
             (tail_mod..head_mod, 0..0)
         };
 
-        let ptr = self.data.as_mut_slice().as_mut_ptr();
+        let ptr = self.data().as_mut_ptr();
         (
             slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
             slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
         )
     }
 
-    pub unsafe fn read_head(&self) -> T {
+    unsafe fn write_tail(&self, elem: T) {
         debug_assert!(!self.is_full());
-        self.data
-            .as_mut_slice()
-            .get_unchecked(self.head() % self.data.len())
-            .assume_init_read()
+        self.data()
+            .get_unchecked_mut(self.tail() % self.data_len())
+            .write(elem);
+    }
+}
+
+pub(crate) trait AbstractConsumer<T>: AbstractRingBuffer<T> {
+    unsafe fn set_head(&self, value: usize);
+
+    /// Move ring buffer **head** pointer by `count` elements forward.
+    ///
+    /// # Safety
+    ///
+    /// First `count` elements in occupied area must be initialized before this call.
+    ///
+    /// *In debug mode panics if `count` is greater than number of elements in the ring buffer.*
+    unsafe fn advance_head(&self, count: usize) {
+        debug_assert!(count <= self.occupied_len());
+        self.set_head((self.head() + count) % self.modulus());
     }
 
-    pub unsafe fn write_tail(&self, elem: T) {
+    /// Returns a pair of slices which contain, in order, the occupied cells in the ring buffer.
+    ///
+    /// All elements in slices are guaranteed to be *initialized*.
+    ///
+    /// *The slices may not include elements pushed to the buffer by the concurring producer right after this call.*
+    ///
+    /// # Safety
+    ///
+    /// Allowed to call only from **consumer** side.
+    unsafe fn occupied_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+        let head = self.head();
+        let tail = self.tail();
+        let len = self.data_len();
+
+        let (head_div, head_mod) = (head / len, head % len);
+        let (tail_div, tail_mod) = (tail / len, tail % len);
+
+        let ranges = if head_div == tail_div {
+            (head_mod..tail_mod, 0..0)
+        } else {
+            (head_mod..len.get(), 0..tail_mod)
+        };
+
+        let ptr = self.data().as_mut_ptr();
+        (
+            slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
+            slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
+        )
+    }
+
+    unsafe fn read_head(&self) -> T {
         debug_assert!(!self.is_full());
-        self.data
-            .as_mut_slice()
-            .get_unchecked_mut(self.tail() % self.data.len())
-            .write(elem);
+        self.data()
+            .get_unchecked(self.head() % self.data_len())
+            .assume_init_read()
     }
 
     /// Removes exactly `count` elements from the head of ring buffer and drops them.
@@ -255,7 +281,7 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
     /// Returns the number of actually removed items. If `count` is not `None` the it is equal to `count`.
     ///
     /// *In debug mode panics if `count` is greater than number of elements stored in the buffer.*
-    pub fn skip(&self, count: Option<usize>) -> usize {
+    fn skip(&self, count: Option<usize>) -> usize {
         let (left, right) = unsafe { self.occupied_slices() };
         let count = count.unwrap_or(left.len() + right.len());
         debug_assert!(count <= left.len() + right.len());
@@ -267,9 +293,15 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
     }
 }
 
-impl<T, C: Container<T>> Drop for GenericRingBuffer<T, C> {
-    fn drop(&mut self) {
-        self.skip(None);
+impl<T, C: Container<T>> AbstractProducer<T> for GenericRingBuffer<T, C> {
+    unsafe fn set_tail(&self, value: usize) {
+        self.tail.store(value, Ordering::Release);
+    }
+}
+
+impl<T, C: Container<T>> AbstractConsumer<T> for GenericRingBuffer<T, C> {
+    unsafe fn set_head(&self, value: usize) {
+        self.head.store(value, Ordering::Release);
     }
 }
 

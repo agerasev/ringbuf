@@ -1,6 +1,8 @@
 use crate::{
     producer::GenericProducer,
-    ring_buffer::{transfer, Container, RingBufferRef, StaticRingBuffer},
+    ring_buffer::{
+        transfer, AbstractConsumer, AbstractRingBuffer, Container, RingBufferRef, StaticRingBuffer,
+    },
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
 use core::{cmp, marker::PhantomData, mem::MaybeUninit};
@@ -21,7 +23,7 @@ where
     C: Container<T>,
     R: RingBufferRef<T, C>,
 {
-    pub(crate) rb: R,
+    pub(crate) ring_buffer: R,
     _phantom: PhantomData<(T, C)>,
 }
 
@@ -30,9 +32,9 @@ where
     C: Container<T>,
     R: RingBufferRef<T, C>,
 {
-    pub(crate) fn new(rb: R) -> Self {
+    pub(crate) fn new(ring_buffer: R) -> Self {
         Self {
-            rb,
+            ring_buffer,
             _phantom: PhantomData,
         }
     }
@@ -47,35 +49,35 @@ where
     ///
     /// The capacity of the buffer is constant.
     pub fn capacity(&self) -> usize {
-        self.rb.capacity()
+        self.ring_buffer.capacity()
     }
 
     /// Checks if the ring buffer is empty.
     ///
     /// The result is relevant until you push items to the producer.
     pub fn is_empty(&self) -> bool {
-        self.rb.is_empty()
+        self.ring_buffer.is_empty()
     }
 
     /// Checks if the ring buffer is full.
     ///
     /// *The result may become irrelevant at any time because of concurring activity of the consumer.*
     pub fn is_full(&self) -> bool {
-        self.rb.is_full()
+        self.ring_buffer.is_full()
     }
 
     /// The number of elements stored in the buffer.
     ///
     /// Actual number may be equal to or greater than the returned value.
     pub fn len(&self) -> usize {
-        self.rb.occupied_len()
+        self.ring_buffer.occupied_len()
     }
 
     /// The number of remaining free places in the buffer.
     ///
     /// Actual number may be equal to or less than the returning value.
     pub fn remaining(&self) -> usize {
-        self.rb.vacant_len()
+        self.ring_buffer.vacant_len()
     }
 
     /// Provides a direct access to the ring buffer occupied memory.
@@ -92,7 +94,7 @@ where
     /// *This method must be followed by `Self::advance` call with the number of elements being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
     pub unsafe fn as_uninit_slices(&self) -> (&[MaybeUninit<T>], &[MaybeUninit<T>]) {
-        let (left, right) = self.rb.occupied_slices();
+        let (left, right) = self.ring_buffer.occupied_slices();
         (left, right)
     }
     /// Provides a direct mutable access to the ring buffer occupied memory.
@@ -105,7 +107,7 @@ where
     pub unsafe fn as_mut_uninit_slices(
         &mut self,
     ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
-        self.rb.occupied_slices()
+        self.ring_buffer.occupied_slices()
     }
 
     /// Moves `head` counter by `count` places.
@@ -114,7 +116,7 @@ where
     ///
     /// First `count` elements in occupied memory must be moved out or dropped.
     pub unsafe fn advance(&mut self, count: usize) {
-        self.rb.advance_head(count);
+        self.ring_buffer.advance_head(count);
     }
 
     /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
@@ -141,7 +143,7 @@ where
     /// Returns `None` if the ring buffer is empty.
     pub fn pop(&mut self) -> Option<T> {
         if !self.is_empty() {
-            let elem = unsafe { self.rb.read_head() };
+            let elem = unsafe { self.ring_buffer.read_head() };
             unsafe { self.advance(1) };
             Some(elem)
         } else {
@@ -181,8 +183,8 @@ where
 # extern crate ringbuf;
 # use ringbuf::RingBuffer;
 # fn main() {
-let rb = RingBuffer::<i32>::new(8);
-let (mut prod, mut cons) = rb.split();
+let ring_buffer = RingBuffer::<i32>::new(8);
+let (mut prod, mut cons) = ring_buffer.split();
 
 assert_eq!(prod.push_iter(&mut (0..8)), 8);
 
@@ -194,7 +196,7 @@ assert_eq!(cons.skip(8), 0);
 "##
     )]
     pub fn skip(&mut self, count: usize) -> usize {
-        self.rb.skip(Some(cmp::min(count, self.len())))
+        self.ring_buffer.skip(Some(cmp::min(count, self.len())))
     }
 
     /// Removes all items from the buffer and safely drops them.
@@ -203,7 +205,7 @@ assert_eq!(cons.skip(8), 0);
     ///
     /// Returns the number of deleted items.
     pub fn clear(&mut self) -> usize {
-        self.rb.skip(None)
+        self.ring_buffer.skip(None)
     }
 
     /// Removes at most `count` elements from the consumer and appends them to the producer.

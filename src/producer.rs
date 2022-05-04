@@ -1,9 +1,11 @@
 use crate::{
     consumer::GenericConsumer,
-    ring_buffer::{transfer, Container, RingBufferRef, StaticRingBuffer},
+    ring_buffer::{
+        transfer, AbstractProducer, AbstractRingBuffer, Container, RingBufferRef, StaticRingBuffer,
+    },
     utils::write_slice,
 };
-use core::{marker::PhantomData, mem::MaybeUninit};
+use core::{marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize};
 
 #[cfg(feature = "alloc")]
 use crate::ring_buffer::RingBuffer;
@@ -25,7 +27,9 @@ where
     C: Container<T>,
     R: RingBufferRef<T, C>,
 {
-    pub(crate) rb: R,
+    pub(crate) ring_buffer: R,
+    head: usize,
+    tail: usize,
     _phantom: PhantomData<(T, C)>,
 }
 
@@ -34,11 +38,54 @@ where
     C: Container<T>,
     R: RingBufferRef<T, C>,
 {
-    pub(crate) fn new(rb: R) -> Self {
+    pub(crate) fn new(ring_buffer: R) -> Self {
         Self {
-            rb,
+            ring_buffer,
+            head: ring_buffer.head(),
+            tail: ring_buffer.tail(),
             _phantom: PhantomData,
         }
+    }
+
+    pub(crate) fn acquire_head(&mut self) {
+        self.head = self.ring_buffer.head()
+    }
+    pub(crate) fn release_tail(&mut self) {
+        self.ring_buffer.set_tail(self.tail);
+    }
+}
+
+impl<T, C, R> AbstractRingBuffer<T> for GenericProducer<T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C>,
+{
+    #[inline]
+    fn data_len(&self) -> NonZeroUsize {
+        self.ring_buffer.data_len()
+    }
+    #[inline]
+    unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
+        self.ring_buffer.data()
+    }
+
+    #[inline]
+    fn head(&self) -> usize {
+        self.head
+    }
+    #[inline]
+    fn tail(&self) -> usize {
+        self.tail
+    }
+}
+
+impl<T, C, R> AbstractProducer<T> for GenericProducer<T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C>,
+{
+    unsafe fn set_tail(&mut self, value: usize) {
+        self.tail = value;
     }
 }
 
@@ -50,36 +97,38 @@ where
     /// Returns capacity of the ring buffer.
     ///
     /// The capacity of the buffer is constant.
+    #[inline]
     pub fn capacity(&self) -> usize {
-        self.rb.capacity()
+        self.ring_buffer.capacity()
     }
 
     /// Checks if the ring buffer is empty.
     ///
     /// The result is relevant until you push items to the producer.
+    #[inline]
     pub fn is_empty(&self) -> bool {
-        self.rb.is_empty()
+        AbstractRingBuffer::is_empty(self)
     }
 
     /// Checks if the ring buffer is full.
     ///
     /// *The result may become irrelevant at any time because of concurring activity of the consumer.*
     pub fn is_full(&self) -> bool {
-        self.rb.is_full()
+        AbstractRingBuffer::is_full(self)
     }
 
     /// The number of elements stored in the buffer.
     ///
     /// Actual number may be equal to or less than the returned value.
     pub fn len(&self) -> usize {
-        self.rb.occupied_len()
+        self.occupied_len()
     }
 
     /// The number of remaining free places in the buffer.
     ///
     /// Actual number may be equal to or greater than the returning value.
     pub fn remaining(&self) -> usize {
-        self.rb.vacant_len()
+        self.vacant_len()
     }
 
     /// Provides a direct access to the ring buffer vacant memory.
@@ -95,7 +144,7 @@ where
     pub unsafe fn free_space_as_slices(
         &mut self,
     ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
-        self.rb.vacant_slices()
+        self.vacant_slices()
     }
 
     /// Moves `tail` counter by `count` places.
@@ -104,20 +153,23 @@ where
     ///
     /// First `count` elements in free space must be initialized.
     pub unsafe fn advance(&mut self, count: usize) {
-        self.rb.advance_tail(count);
+        self.advance_tail(count);
     }
 
     /// Appends an element to the ring buffer.
     ///
     /// On failure returns an `Err` containing the element that hasn't been appended.
     pub fn push(&mut self, elem: T) -> Result<(), T> {
-        if !self.is_full() {
-            unsafe { self.rb.write_tail(elem) };
-            unsafe { self.advance(1) };
+        self.acquire_head();
+        let result = if !self.is_full() {
+            unsafe { self.write_tail(elem) };
+            unsafe { self.advance_tail(1) };
             Ok(())
         } else {
             Err(elem)
-        }
+        };
+        self.release_tail();
+        result
     }
 
     /// Appends elements from an iterator to the ring buffer.
@@ -128,7 +180,8 @@ where
     /// *Inserted elements are commited to the ring buffer all at once in the end,*
     /// *e.g. when buffer is full or iterator has ended.*
     pub fn push_iter<I: Iterator<Item = T>>(&mut self, iter: &mut I) -> usize {
-        let (left, right) = unsafe { self.free_space_as_slices() };
+        self.acquire_head();
+        let (left, right) = unsafe { self.vacant_slices() };
         let mut count = 0;
         for place in left.iter_mut().chain(right.iter_mut()) {
             match iter.next() {
@@ -137,7 +190,8 @@ where
             }
             count += 1;
         }
-        unsafe { self.advance(count) };
+        unsafe { self.advance_tail(count) };
+        self.release_tail();
         count
     }
 
@@ -169,7 +223,8 @@ where
     ///
     /// Returns count of elements been appended to the ring buffer.
     pub fn push_slice(&mut self, elems: &[T]) -> usize {
-        let (left, right) = unsafe { self.free_space_as_slices() };
+        self.acquire_head();
+        let (left, right) = unsafe { self.vacant_slices() };
         let count = if elems.len() < left.len() {
             write_slice(&mut left[..elems.len()], elems);
             elems.len()
@@ -185,7 +240,8 @@ where
                     right.len()
                 }
         };
-        unsafe { self.advance(count) };
+        unsafe { self.advance_tail(count) };
+        self.release_tail();
         count
     }
 }
@@ -211,13 +267,15 @@ where
         reader: &mut S,
         count: Option<usize>,
     ) -> io::Result<usize> {
-        let (left, _) = unsafe { self.free_space_as_slices() };
+        self.acquire_head();
+        let (left, _) = unsafe { self.vacant_slices() };
         let count = cmp::min(count.unwrap_or(left.len()), left.len());
         let left_init = unsafe { slice_assume_init_mut(&mut left[..count]) };
 
         let read_count = reader.read(left_init)?;
         assert!(read_count <= count);
-        unsafe { self.advance(read_count) };
+        unsafe { self.advance_tail(read_count) };
+        self.release_tail();
         Ok(read_count)
     }
 }
