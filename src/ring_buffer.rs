@@ -5,6 +5,7 @@ use core::{
     convert::{AsMut, AsRef},
     marker::PhantomData,
     mem::MaybeUninit,
+    num::NonZeroUsize,
     ops::Deref,
     ptr, slice,
     sync::atomic::{AtomicUsize, Ordering},
@@ -18,7 +19,7 @@ pub trait Container<T>: AsRef<[MaybeUninit<T>]> + AsMut<[MaybeUninit<T>]> {}
 impl<T, C> Container<T> for C where C: AsRef<[MaybeUninit<T>]> + AsMut<[MaybeUninit<T>]> {}
 
 struct Storage<T, C: Container<T>> {
-    len: usize,
+    len: NonZeroUsize,
     container: UnsafeCell<C>,
     phantom: PhantomData<T>,
 }
@@ -28,13 +29,14 @@ unsafe impl<T, C: Container<T>> Sync for Storage<T, C> where T: Send {}
 impl<T, C: Container<T>> Storage<T, C> {
     fn new(mut container: C) -> Self {
         Self {
-            len: container.as_mut().len(),
+            len: NonZeroUsize::new(container.as_mut().len()).unwrap(),
             container: UnsafeCell::new(container),
             phantom: PhantomData,
         }
     }
 
-    fn len(&self) -> usize {
+    #[inline]
+    fn len(&self) -> NonZeroUsize {
         self.len
     }
 
@@ -111,30 +113,34 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
     /// The capacity of the ring buffer.
     ///
     /// This value does not change.
+    #[inline]
     pub fn capacity(&self) -> usize {
-        self.data.len()
+        self.data.len().get()
     }
-    fn modulus(&self) -> usize {
-        2 * self.capacity()
+    #[inline]
+    fn modulus(&self) -> NonZeroUsize {
+        unsafe { NonZeroUsize::new_unchecked(2 * self.capacity()) }
     }
 
     /// The number of elements stored in the buffer at the moment.
     pub fn occupied_len(&self) -> usize {
-        (self.modulus() + self.tail() - self.head()) % self.modulus()
+        let mod_ = self.modulus();
+        (mod_.get() + self.tail() - self.head()) % mod_
     }
     /// The number of vacant places in the buffer at the moment.
     pub fn vacant_len(&self) -> usize {
-        (self.modulus() + self.head() - self.tail() - self.capacity()) % self.modulus()
+        let mod_ = self.modulus();
+        (mod_.get() + self.head() - self.tail() - self.capacity()) % mod_
     }
 
     /// Checks if the ring buffer is empty.
     pub fn is_empty(&self) -> bool {
-        self.occupied_len() == 0
+        self.head() == self.tail()
     }
 
     /// Checks if the ring buffer is full.
     pub fn is_full(&self) -> bool {
-        self.vacant_len() == 0
+        self.occupied_len() > self.capacity()
     }
 
     /// Move ring buffer **head** pointer by `count` elements forward.
@@ -143,11 +149,11 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
     ///
     /// First `count` elements in occupied area must be initialized before this call.
     ///
-    /// *Panics if `count` is greater than number of elements in the ring buffer.*
+    /// *In debug mode panics if `count` is greater than number of elements in the ring buffer.*
     ///
     /// Allowed to call only from **consumer** side.
     pub unsafe fn advance_head(&self, count: usize) {
-        assert!(count <= self.occupied_len());
+        debug_assert!(count <= self.occupied_len());
         self.head
             .store((self.head() + count) % self.modulus(), Ordering::Release);
     }
@@ -158,11 +164,11 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
     ///
     /// First `count` elements in vacant area must be deinitialized (dropped) before this call.
     ///
-    /// *Panics if `count` is greater than number of vacant places in the ring buffer.*
+    /// *In debug mode panics if `count` is greater than number of vacant places in the ring buffer.*
     ///
     /// Allowed to call only from **producer** side.
     pub unsafe fn advance_tail(&self, count: usize) {
-        assert!(count <= self.vacant_len());
+        debug_assert!(count <= self.vacant_len());
         self.tail
             .store((self.tail() + count) % self.modulus(), Ordering::Release);
     }
@@ -187,7 +193,7 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
         let ranges = if head_div == tail_div {
             (head_mod..tail_mod, 0..0)
         } else {
-            (head_mod..len, 0..tail_mod)
+            (head_mod..len.get(), 0..tail_mod)
         };
 
         let ptr = self.data.as_mut_slice().as_mut_ptr();
@@ -215,7 +221,7 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
         let (tail_div, tail_mod) = (tail / len, tail % len);
 
         let ranges = if head_div == tail_div {
-            (tail_mod..len, 0..head_mod)
+            (tail_mod..len.get(), 0..head_mod)
         } else {
             (tail_mod..head_mod, 0..0)
         };
@@ -227,26 +233,49 @@ impl<T, C: Container<T>> GenericRingBuffer<T, C> {
         )
     }
 
+    pub unsafe fn read_head(&self) -> T {
+        debug_assert!(!self.is_full());
+        self.data
+            .as_mut_slice()
+            .get_unchecked(self.head() % self.data.len())
+            .assume_init_read()
+    }
+
+    pub unsafe fn write_tail(&self, elem: T) {
+        debug_assert!(!self.is_full());
+        self.data
+            .as_mut_slice()
+            .get_unchecked_mut(self.tail() % self.data.len())
+            .write(elem);
+    }
+
     /// Removes exactly `count` elements from the head of ring buffer and drops them.
+    /// If `count` is `None` then remove as much as possible.
     ///
-    /// *Panics if `count` is greater than number of elements stored in the buffer.*
-    pub fn skip(&self, count: usize) {
+    /// Returns the number of actually removed items. If `count` is not `None` the it is equal to `count`.
+    ///
+    /// *In debug mode panics if `count` is greater than number of elements stored in the buffer.*
+    pub fn skip(&self, count: Option<usize>) -> usize {
         let (left, right) = unsafe { self.occupied_slices() };
-        assert!(count <= left.len() + right.len());
+        let count = count.unwrap_or(left.len() + right.len());
+        debug_assert!(count <= left.len() + right.len());
         for elem in left.iter_mut().chain(right.iter_mut()).take(count) {
             unsafe { ptr::drop_in_place(elem.as_mut_ptr()) };
         }
         unsafe { self.advance_head(count) };
+        count
     }
 }
 
 impl<T, C: Container<T>> Drop for GenericRingBuffer<T, C> {
     fn drop(&mut self) {
-        self.skip(self.occupied_len());
+        self.skip(None);
     }
 }
 
 /// Stack-allocated ring buffer with static capacity.
+///
+/// Capacity must be greater that zero.
 pub type StaticRingBuffer<T, const N: usize> = GenericRingBuffer<T, [MaybeUninit<T>; N]>;
 
 /// Heap-allocated ring buffer.
@@ -256,6 +285,8 @@ pub type RingBuffer<T> = GenericRingBuffer<T, Vec<MaybeUninit<T>>>;
 #[cfg(feature = "alloc")]
 impl<T> RingBuffer<T> {
     /// Creates a new instance of a ring buffer.
+    ///
+    /// *Panics if `capacity` is zero.*
     pub fn new(capacity: usize) -> Self {
         let mut data = Vec::new();
         data.resize_with(capacity, MaybeUninit::uninit);

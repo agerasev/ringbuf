@@ -140,14 +140,12 @@ where
     /// Removes latest element from the ring buffer and returns it.
     /// Returns `None` if the ring buffer is empty.
     pub fn pop(&mut self) -> Option<T> {
-        let (left, _) = unsafe { self.as_uninit_slices() };
-        match left.iter().next() {
-            Some(place) => {
-                let elem = unsafe { place.as_ptr().read() };
-                unsafe { self.advance(1) };
-                Some(elem)
-            }
-            None => None,
+        if !self.is_empty() {
+            let elem = unsafe { self.rb.read_head() };
+            unsafe { self.advance(1) };
+            Some(elem)
+        } else {
+            None
         }
     }
 
@@ -196,9 +194,16 @@ assert_eq!(cons.skip(8), 0);
 "##
     )]
     pub fn skip(&mut self, count: usize) -> usize {
-        let actual_count = cmp::min(count, self.len());
-        self.rb.skip(actual_count);
-        actual_count
+        self.rb.skip(Some(cmp::min(count, self.len())))
+    }
+
+    /// Removes all items from the buffer and safely drops them.
+    ///
+    /// If there is concurring producer activity then the buffer may be not empty after this call.
+    ///
+    /// Returns the number of deleted items.
+    pub fn clear(&mut self) -> usize {
+        self.rb.skip(None)
     }
 
     /// Removes at most `count` elements from the consumer and appends them to the producer.

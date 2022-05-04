@@ -68,3 +68,5 @@ mod tests;
 
 #[cfg(feature = "bench")]
 extern crate test;
+#[cfg(feature = "bench")]
+mod benchmarks;

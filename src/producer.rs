@@ -111,14 +111,12 @@ where
     ///
     /// On failure returns an `Err` containing the element that hasn't been appended.
     pub fn push(&mut self, elem: T) -> Result<(), T> {
-        let (left, _) = unsafe { self.free_space_as_slices() };
-        match left.iter_mut().next() {
-            Some(place) => {
-                unsafe { place.as_mut_ptr().write(elem) };
-                unsafe { self.advance(1) };
-                Ok(())
-            }
-            None => Err(elem),
+        if !self.is_full() {
+            unsafe { self.rb.write_tail(elem) };
+            unsafe { self.advance(1) };
+            Ok(())
+        } else {
+            Err(elem)
         }
     }
 

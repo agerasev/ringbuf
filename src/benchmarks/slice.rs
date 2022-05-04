@@ -5,17 +5,6 @@ use test::Bencher;
 const RB_SIZE: usize = 0x400;
 
 #[bench]
-fn single_item(b: &mut Bencher) {
-    let buf = RingBuffer::<u64>::new(RB_SIZE);
-    let (mut prod, mut cons) = buf.split();
-    prod.push_slice(&[1; RB_SIZE / 2]);
-    b.iter(|| {
-        prod.push(1).unwrap();
-        cons.pop().unwrap();
-    });
-}
-
-#[bench]
 fn slice_x10(b: &mut Bencher) {
     let buf = RingBuffer::<u64>::new(RB_SIZE);
     let (mut prod, mut cons) = buf.split();
