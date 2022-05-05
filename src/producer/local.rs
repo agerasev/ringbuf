@@ -1,14 +1,11 @@
 use crate::{
-    consumer::GenericConsumer,
-    ring_buffer::{transfer, Container, RingBufferRef, StaticRingBuffer},
+    consumer::LocalConsumer,
+    counter::{Counter, LocalTailCounter},
+    ring_buffer::{Container, Storage},
+    transfer::transfer_local,
     utils::write_slice,
 };
-use core::{marker::PhantomData, mem::MaybeUninit};
-
-#[cfg(feature = "alloc")]
-use crate::ring_buffer::RingBuffer;
-#[cfg(feature = "alloc")]
-use alloc::{sync::Arc, vec::Vec};
+use core::{mem::MaybeUninit, slice};
 
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
@@ -20,66 +17,44 @@ use std::io::{self, Read, Write};
 /// Producer part of ring buffer.
 ///
 /// Generic over item type, ring buffer container and ring buffer reference.
-pub struct GenericProducer<T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C>,
-{
-    pub(crate) rb: R,
-    _phantom: PhantomData<(T, C)>,
+pub struct LocalProducer<'a, T, C: Container<T>> {
+    storage: &'a Storage<T, C>,
+    counter: LocalTailCounter<'a>,
 }
 
-impl<T, C, R> GenericProducer<T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C>,
-{
-    pub(crate) fn new(rb: R) -> Self {
-        Self {
-            rb,
-            _phantom: PhantomData,
-        }
+impl<'a, T, C: Container<T>> LocalProducer<'a, T, C> {
+    pub(crate) fn new(storage: &'a Storage<T, C>, counter: LocalTailCounter<'a>) -> Self {
+        Self { storage, counter }
     }
-}
 
-impl<T, C, R> GenericProducer<T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C>,
-{
     /// Returns capacity of the ring buffer.
     ///
     /// The capacity of the buffer is constant.
+    #[inline]
     pub fn capacity(&self) -> usize {
-        self.rb.capacity()
+        self.counter.len().get()
     }
 
     /// Checks if the ring buffer is empty.
-    ///
-    /// The result is relevant until you push items to the producer.
+    #[inline]
     pub fn is_empty(&self) -> bool {
-        self.rb.is_empty()
+        self.counter.is_empty()
     }
 
     /// Checks if the ring buffer is full.
-    ///
-    /// *The result may become irrelevant at any time because of concurring activity of the consumer.*
+    #[inline]
     pub fn is_full(&self) -> bool {
-        self.rb.is_full()
+        self.counter.is_full()
     }
 
     /// The number of elements stored in the buffer.
-    ///
-    /// Actual number may be equal to or less than the returned value.
     pub fn len(&self) -> usize {
-        self.rb.occupied_len()
+        self.counter.occupied_len()
     }
 
     /// The number of remaining free places in the buffer.
-    ///
-    /// Actual number may be equal to or greater than the returning value.
     pub fn remaining(&self) -> usize {
-        self.rb.vacant_len()
+        self.counter.vacant_len()
     }
 
     /// Provides a direct access to the ring buffer vacant memory.
@@ -95,7 +70,12 @@ where
     pub unsafe fn free_space_as_slices(
         &mut self,
     ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
-        self.rb.vacant_slices()
+        let ranges = self.counter.vacant_ranges();
+        let ptr = self.storage.as_mut_slice().as_mut_ptr();
+        (
+            slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
+            slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
+        )
     }
 
     /// Moves `tail` counter by `count` places.
@@ -104,21 +84,24 @@ where
     ///
     /// First `count` elements in free space must be initialized.
     pub unsafe fn advance(&mut self, count: usize) {
-        self.rb.advance_tail(count);
+        self.counter.advance_tail(count);
     }
 
     /// Appends an element to the ring buffer.
     ///
     /// On failure returns an `Err` containing the element that hasn't been appended.
     pub fn push(&mut self, elem: T) -> Result<(), T> {
-        let (left, _) = unsafe { self.free_space_as_slices() };
-        match left.iter_mut().next() {
-            Some(place) => {
-                unsafe { place.as_mut_ptr().write(elem) };
-                unsafe { self.advance(1) };
-                Ok(())
-            }
-            None => Err(elem),
+        if !self.is_full() {
+            unsafe {
+                self.free_space_as_slices()
+                    .0
+                    .get_unchecked_mut(0)
+                    .write(elem)
+            };
+            unsafe { self.advance(1) };
+            Ok(())
+        } else {
+            Err(elem)
         }
     }
 
@@ -126,9 +109,6 @@ where
     /// Elements that haven't been added to the ring buffer remain in the iterator.
     ///
     /// Returns count of elements been appended to the ring buffer.
-    ///
-    /// *Inserted elements are commited to the ring buffer all at once in the end,*
-    /// *e.g. when buffer is full or iterator has ended.*
     pub fn push_iter<I: Iterator<Item = T>>(&mut self, iter: &mut I) -> usize {
         let (left, right) = unsafe { self.free_space_as_slices() };
         let mut count = 0;
@@ -148,26 +128,18 @@ where
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns number of elements been moved.
-    pub fn transfer_from<Cs, Rs>(
+    pub fn transfer_from<'b, Cs: Container<T>>(
         &mut self,
-        other: &mut GenericConsumer<T, Cs, Rs>,
+        other: &mut LocalConsumer<'b, T, Cs>,
         count: Option<usize>,
-    ) -> usize
-    where
-        Cs: Container<T>,
-        Rs: RingBufferRef<T, Cs>,
-    {
-        transfer(other, self, count)
+    ) -> usize {
+        transfer_local(other, self, count)
     }
 }
 
-impl<T: Copy, C, R> GenericProducer<T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C>,
-{
+impl<'a, T: Copy, C: Container<T>> LocalProducer<'a, T, C> {
     /// Appends elements from slice to the ring buffer.
-    /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
+    /// Elements should be `Copy`.
     ///
     /// Returns count of elements been appended to the ring buffer.
     pub fn push_slice(&mut self, elems: &[T]) -> usize {
@@ -193,21 +165,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<C, R> GenericProducer<u8, C, R>
-where
-    C: Container<u8>,
-    R: RingBufferRef<u8, C>,
-{
-    /// Reads at most `count` bytes
-    /// from [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) instance
-    /// and appends them to the ring buffer.
-    /// If `count` is `None` then as much as possible bytes will be read.
-    ///
-    /// Returns `Ok(n)` if `read` succeeded. `n` is number of bytes been read.
-    /// `n == 0` means that either `read` returned zero or ring buffer is full.
-    ///
-    /// If `read` is failed or returned an invalid number then error is returned.
-    // TODO: Add note about reading only one contiguous slice at once.
+impl<'a, C: Container<u8>> LocalProducer<'a, u8, C> {
     pub fn read_from<S: Read>(
         &mut self,
         reader: &mut S,
@@ -225,11 +183,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<C, R> Write for GenericProducer<u8, C, R>
-where
-    C: Container<u8>,
-    R: RingBufferRef<u8, C>,
-{
+impl<'a, C: Container<u8>> Write for LocalProducer<'a, u8, C> {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         let n = self.push_slice(buffer);
         if n == 0 && !buffer.is_empty() {
@@ -243,11 +197,3 @@ where
         Ok(())
     }
 }
-
-/// Producer that holds reference to `StaticRingBuffer`.
-pub type StaticProducer<'a, T, const N: usize> =
-    GenericProducer<T, [MaybeUninit<T>; N], &'a StaticRingBuffer<T, N>>;
-
-/// Producer that holds `Arc<RingBuffer>`.
-#[cfg(feature = "alloc")]
-pub type Producer<T> = GenericProducer<T, Vec<MaybeUninit<T>>, Arc<RingBuffer<T>>>;

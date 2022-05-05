@@ -9,6 +9,7 @@ fn push() {
 
     let vs_20 = (123, 456);
     {
+        let mut prod = prod.acquire();
         let (left, right) = unsafe { prod.free_space_as_slices() };
         assert_eq!(left.len(), 3);
         assert_eq!(right.len(), 0);
@@ -17,6 +18,7 @@ fn push() {
         unsafe { prod.advance(2) };
     }
     {
+        let mut prod = prod.acquire();
         let (left, right) = unsafe { prod.free_space_as_slices() };
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 0);
@@ -27,6 +29,7 @@ fn push() {
 
     let vs_11 = (123, 456);
     {
+        let mut prod = prod.acquire();
         let (left, right) = unsafe { prod.free_space_as_slices() };
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 2);
@@ -35,6 +38,7 @@ fn push() {
         unsafe { prod.advance(2) };
     }
     {
+        let mut prod = prod.acquire();
         let (left, right) = unsafe { prod.free_space_as_slices() };
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 0);
@@ -56,6 +60,7 @@ fn pop_full() {
     assert_eq!(prod.push(0), Err(0));
 
     {
+        let mut cons = cons.acquire();
         let (left, right) = unsafe { cons.as_uninit_slices() };
         assert_eq!(left.len(), cap);
         assert_eq!(right.len(), 0);
@@ -76,6 +81,7 @@ fn pop_empty() {
     let (_, mut cons) = buf.split();
 
     {
+        let mut cons = cons.acquire();
         let (left, right) = unsafe { cons.as_uninit_slices() };
         assert_eq!(left.len(), 0);
         assert_eq!(right.len(), 0);
@@ -96,6 +102,7 @@ fn pop() {
     assert_eq!(prod.push(0), Err(0));
     assert_eq!(prod.len(), 3);
     {
+        let mut cons = cons.acquire();
         let (left, right) = unsafe { cons.as_uninit_slices() };
         assert_eq!(left.len(), 3);
         assert_eq!(right.len(), 0);
@@ -105,6 +112,7 @@ fn pop() {
         unsafe { cons.advance(2) };
     }
     {
+        let cons = cons.acquire();
         let (left, right) = unsafe { cons.as_uninit_slices() };
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 0);
@@ -116,6 +124,7 @@ fn pop() {
     assert_eq!(prod.push(vs_11.1), Ok(()));
     assert_eq!(prod.push(0), Err(0));
     {
+        let mut cons = cons.acquire();
         let (left, right) = unsafe { cons.as_uninit_slices() };
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 2);
@@ -125,6 +134,7 @@ fn pop() {
         unsafe { cons.advance(2) };
     }
     {
+        let cons = cons.acquire();
         let (left, right) = unsafe { cons.as_uninit_slices() };
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 0);
@@ -140,6 +150,7 @@ fn push_return() {
     let (mut prod, mut cons) = buf.split();
 
     {
+        let mut prod = prod.acquire();
         let (left, right) = unsafe { prod.free_space_as_slices() };
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
@@ -147,6 +158,7 @@ fn push_return() {
     }
 
     {
+        let mut prod = prod.acquire();
         let (left, right) = unsafe { prod.free_space_as_slices() };
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
@@ -155,6 +167,7 @@ fn push_return() {
     }
 
     {
+        let mut prod = prod.acquire();
         let (left, right) = unsafe { prod.free_space_as_slices() };
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 0);
@@ -178,6 +191,7 @@ fn pop_return() {
     assert_eq!(prod.push(0), Err(0));
 
     {
+        let mut cons = cons.acquire();
         let (left, right) = unsafe { cons.as_uninit_slices() };
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
@@ -185,6 +199,7 @@ fn pop_return() {
     }
 
     {
+        let mut cons = cons.acquire();
         let (left, right) = unsafe { cons.as_uninit_slices() };
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
@@ -193,6 +208,7 @@ fn pop_return() {
     }
 
     {
+        let mut cons = cons.acquire();
         let (left, right) = unsafe { cons.as_uninit_slices() };
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 0);
@@ -211,6 +227,7 @@ fn push_pop() {
 
     let vs_20 = (123, 456);
     {
+        let mut prod = prod.acquire();
         let (left, right) = unsafe { prod.free_space_as_slices() };
         assert_eq!(left.len(), 3);
         assert_eq!(right.len(), 0);
@@ -220,6 +237,7 @@ fn push_pop() {
     }
     assert_eq!(prod.len(), 2);
     {
+        let mut cons = cons.acquire();
         let (left, right) = unsafe { cons.as_uninit_slices() };
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
@@ -231,6 +249,7 @@ fn push_pop() {
 
     let vs_11 = (123, 456);
     {
+        let mut prod = prod.acquire();
         let (left, right) = unsafe { prod.free_space_as_slices() };
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 2);
@@ -240,6 +259,7 @@ fn push_pop() {
     }
     assert_eq!(prod.len(), 2);
     {
+        let mut cons = cons.acquire();
         let (left, right) = unsafe { cons.as_uninit_slices() };
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 1);
