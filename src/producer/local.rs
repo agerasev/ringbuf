@@ -78,14 +78,6 @@ impl<'a, T, C: Container<T>> LocalProducer<'a, T, C> {
         )
     }
 
-    unsafe fn write(&self, elem: T) {
-        debug_assert!(!self.is_full());
-        self.storage
-            .as_mut_slice()
-            .get_unchecked_mut(self.counter.tail() % self.counter.len())
-            .write(elem);
-    }
-
     /// Moves `tail` counter by `count` places.
     ///
     /// # Safety
@@ -100,7 +92,12 @@ impl<'a, T, C: Container<T>> LocalProducer<'a, T, C> {
     /// On failure returns an `Err` containing the element that hasn't been appended.
     pub fn push(&mut self, elem: T) -> Result<(), T> {
         if !self.is_full() {
-            unsafe { self.write(elem) };
+            unsafe {
+                self.free_space_as_slices()
+                    .0
+                    .get_unchecked_mut(0)
+                    .write(elem)
+            };
             unsafe { self.advance(1) };
             Ok(())
         } else {

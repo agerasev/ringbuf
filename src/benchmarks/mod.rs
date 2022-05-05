@@ -1,2 +1,2 @@
 mod base;
-//mod slice;
+mod slice;

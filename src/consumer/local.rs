@@ -23,14 +23,6 @@ impl<'a, T, C: Container<T>> LocalConsumer<'a, T, C> {
         Self { storage, counter }
     }
 
-    unsafe fn read(&self) -> T {
-        debug_assert!(!self.counter.is_empty());
-        self.storage
-            .as_slice()
-            .get_unchecked(self.counter.head() % self.counter.len())
-            .assume_init_read()
-    }
-
     /// Checks if the ring buffer is empty.
     pub fn is_empty(&self) -> bool {
         self.counter.is_empty()
@@ -119,7 +111,12 @@ impl<'a, T, C: Container<T>> LocalConsumer<'a, T, C> {
     /// Returns `None` if the ring buffer is empty.
     pub fn pop(&mut self) -> Option<T> {
         if !self.is_empty() {
-            let elem = unsafe { self.read() };
+            let elem = unsafe {
+                self.as_uninit_slices()
+                    .0
+                    .get_unchecked(0)
+                    .assume_init_read()
+            };
             unsafe { self.advance(1) };
             Some(elem)
         } else {

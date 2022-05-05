@@ -2,7 +2,29 @@ use crate::RingBuffer;
 
 use test::{black_box, Bencher};
 
-const RB_SIZE: usize = 0x100;
+const RB_SIZE: usize = 256;
+
+#[bench]
+fn acquire(b: &mut Bencher) {
+    let buf = RingBuffer::<u64>::new(RB_SIZE);
+    let (mut prod, mut cons) = buf.split();
+    prod.push_slice(&[1; RB_SIZE / 2]);
+    b.iter(|| {
+        black_box(prod.acquire());
+        black_box(cons.acquire());
+    });
+}
+
+#[bench]
+fn acquire_advance(b: &mut Bencher) {
+    let buf = RingBuffer::<u64>::new(RB_SIZE);
+    let (mut prod, mut cons) = buf.split();
+    prod.push_slice(&[1; RB_SIZE / 2]);
+    b.iter(|| {
+        unsafe { prod.acquire().advance(1) };
+        unsafe { cons.acquire().advance(1) };
+    });
+}
 
 #[bench]
 fn get_occupied_slices(b: &mut Bencher) {
@@ -11,8 +33,10 @@ fn get_occupied_slices(b: &mut Bencher) {
     prod.push_slice(&[0; 3 * RB_SIZE / 4]);
     cons.skip(RB_SIZE);
     prod.push_slice(&[1; RB_SIZE / 2]);
+    let mut cons_l = cons.acquire();
     b.iter(|| {
-        black_box(unsafe { cons.as_mut_uninit_slices() });
+        black_box(unsafe { cons_l.as_mut_uninit_slices() });
+        black_box(&mut cons_l);
     });
 }
 
@@ -23,19 +47,10 @@ fn get_vacant_slices(b: &mut Bencher) {
     prod.push_slice(&[0; 1 * RB_SIZE / 4]);
     cons.skip(RB_SIZE);
     prod.push_slice(&[1; RB_SIZE / 2]);
+    let mut prod_l = prod.acquire();
     b.iter(|| {
-        black_box(unsafe { prod.free_space_as_slices() });
-    });
-}
-
-#[bench]
-fn advance(b: &mut Bencher) {
-    let buf = RingBuffer::<u64>::new(RB_SIZE);
-    let (mut prod, mut cons) = buf.split();
-    prod.push_slice(&[1; RB_SIZE / 2]);
-    b.iter(|| {
-        unsafe { prod.advance(1) };
-        unsafe { cons.advance(1) };
+        black_box(unsafe { prod_l.free_space_as_slices() });
+        black_box(&mut prod_l);
     });
 }
 
@@ -46,6 +61,6 @@ fn push_pop(b: &mut Bencher) {
     prod.push_slice(&[1; RB_SIZE / 2]);
     b.iter(|| {
         prod.push(1).unwrap();
-        cons.pop().unwrap();
+        black_box(cons.pop().unwrap());
     });
 }
