@@ -8,7 +8,7 @@ fn iter() {
     prod.push(10).unwrap();
     prod.push(20).unwrap();
 
-    let sum: i32 = cons.iter().sum();
+    let sum: i32 = cons.acquire().iter().sum();
 
     let first = cons.pop().expect("First element not available");
     let second = cons.pop().expect("Second element not available");
@@ -24,11 +24,11 @@ fn iter_mut() {
     prod.push(10).unwrap();
     prod.push(20).unwrap();
 
-    for v in cons.iter_mut() {
+    for v in cons.acquire().iter_mut() {
         *v *= 2;
     }
 
-    let sum: i32 = cons.iter().sum();
+    let sum: i32 = cons.acquire().iter().sum();
 
     let first = cons.pop().expect("First element not available");
     let second = cons.pop().expect("Second element not available");

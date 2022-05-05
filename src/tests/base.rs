@@ -2,10 +2,6 @@ use crate::RingBuffer;
 #[cfg(feature = "std")]
 use std::thread;
 
-fn head_tail<T>(rb: &RingBuffer<T>) -> (usize, usize) {
-    (rb.head(), rb.tail())
-}
-
 #[test]
 fn capacity() {
     let cap = 13;
@@ -46,16 +42,16 @@ fn push() {
     let buf = RingBuffer::<i32>::new(cap);
     let (mut prod, _) = buf.split();
 
-    assert_eq!(head_tail(&prod.rb), (0, 0));
+    assert_eq!((prod.head(), prod.tail()), (0, 0));
 
     assert_eq!(prod.push(123), Ok(()));
-    assert_eq!(head_tail(&prod.rb), (0, 1));
+    assert_eq!((prod.head(), prod.tail()), (0, 1));
 
     assert_eq!(prod.push(234), Ok(()));
-    assert_eq!(head_tail(&prod.rb), (0, 2));
+    assert_eq!((prod.head(), prod.tail()), (0, 2));
 
     assert_eq!(prod.push(345), Err(345));
-    assert_eq!(head_tail(&prod.rb), (0, 2));
+    assert_eq!((prod.head(), prod.tail()), (0, 2));
 }
 
 #[test]
@@ -64,10 +60,10 @@ fn pop_empty() {
     let buf = RingBuffer::<i32>::new(cap);
     let (_, mut cons) = buf.split();
 
-    assert_eq!(head_tail(&cons.rb), (0, 0));
+    assert_eq!((cons.head(), cons.tail()), (0, 0));
 
     assert_eq!(cons.pop(), None);
-    assert_eq!(head_tail(&cons.rb), (0, 0));
+    assert_eq!((cons.head(), cons.tail()), (0, 0));
 }
 
 #[test]
@@ -78,17 +74,17 @@ fn push_pop_one() {
 
     let vcap = 2 * cap;
     let values = [12, 34, 56, 78, 90];
-    assert_eq!(head_tail(&cons.rb), (0, 0));
+    assert_eq!((cons.head(), cons.tail()), (0, 0));
 
     for (i, v) in values.iter().enumerate() {
         assert_eq!(prod.push(*v), Ok(()));
-        assert_eq!(head_tail(&cons.rb), (i % vcap, (i + 1) % vcap));
+        assert_eq!((cons.head(), cons.tail()), (i % vcap, (i + 1) % vcap));
 
         assert_eq!(cons.pop().unwrap(), *v);
-        assert_eq!(head_tail(&cons.rb), ((i + 1) % vcap, (i + 1) % vcap));
+        assert_eq!((cons.head(), cons.tail()), ((i + 1) % vcap, (i + 1) % vcap));
 
         assert_eq!(cons.pop(), None);
-        assert_eq!(head_tail(&cons.rb), ((i + 1) % vcap, (i + 1) % vcap));
+        assert_eq!((cons.head(), cons.tail()), ((i + 1) % vcap, (i + 1) % vcap));
     }
 }
 
@@ -100,33 +96,42 @@ fn push_pop_all() {
 
     let vcap = 2 * cap;
     let values = [(12, 34, 13), (56, 78, 57), (90, 10, 91)];
-    assert_eq!(head_tail(&cons.rb), (0, 0));
+    assert_eq!((cons.head(), cons.tail()), (0, 0));
 
     for (i, v) in values.iter().enumerate() {
         assert_eq!(prod.push(v.0), Ok(()));
-        assert_eq!(head_tail(&cons.rb), (cap * i % vcap, (cap * i + 1) % vcap));
+        assert_eq!(
+            (cons.head(), cons.tail()),
+            (cap * i % vcap, (cap * i + 1) % vcap)
+        );
 
         assert_eq!(prod.push(v.1), Ok(()));
-        assert_eq!(head_tail(&cons.rb), (cap * i % vcap, (cap * i + 2) % vcap));
+        assert_eq!(
+            (cons.head(), cons.tail()),
+            (cap * i % vcap, (cap * i + 2) % vcap)
+        );
 
         assert_eq!(prod.push(v.2).unwrap_err(), v.2);
-        assert_eq!(head_tail(&cons.rb), (cap * i % vcap, (cap * i + 2) % vcap));
+        assert_eq!(
+            (cons.head(), cons.tail()),
+            (cap * i % vcap, (cap * i + 2) % vcap)
+        );
 
         assert_eq!(cons.pop().unwrap(), v.0);
         assert_eq!(
-            head_tail(&cons.rb),
+            (cons.head(), cons.tail()),
             ((cap * i + 1) % vcap, (cap * i + 2) % vcap)
         );
 
         assert_eq!(cons.pop().unwrap(), v.1);
         assert_eq!(
-            head_tail(&cons.rb),
+            (cons.head(), cons.tail()),
             ((cap * i + 2) % vcap, (cap * i + 2) % vcap)
         );
 
         assert_eq!(cons.pop(), None);
         assert_eq!(
-            head_tail(&cons.rb),
+            (cons.head(), cons.tail()),
             ((cap * i + 2) % vcap, (cap * i + 2) % vcap)
         );
     }
