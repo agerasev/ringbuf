@@ -1,7 +1,7 @@
 #[cfg(feature = "alloc")]
 mod access;
 #[cfg(feature = "alloc")]
-mod base;
+mod basic;
 #[cfg(feature = "alloc")]
 mod drop;
 #[cfg(feature = "alloc")]
@@ -15,3 +15,6 @@ mod slice;
 mod message;
 #[cfg(feature = "std")]
 mod read_write;
+
+#[cfg(feature = "async")]
+mod async_;

@@ -1,7 +1,6 @@
 use crate::{
-    counter::{Counter, LocalHeadCounter},
     producer::LocalProducer,
-    ring_buffer::{Container, Storage},
+    ring_buffer::{Counter, HeadCounter},
     transfer::transfer_local,
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
@@ -13,14 +12,14 @@ use std::io::{self, Read, Write};
 /// Consumer part of ring buffer.
 ///
 /// Generic over item type, ring buffer container and ring buffer reference.
-pub struct LocalConsumer<'a, T, C: Container<T>> {
-    storage: &'a Storage<T, C>,
-    counter: LocalHeadCounter<'a>,
+pub struct LocalConsumer<'a, T> {
+    data: &'a mut [MaybeUninit<T>],
+    counter: HeadCounter<'a>,
 }
 
-impl<'a, T, C: Container<T>> LocalConsumer<'a, T, C> {
-    pub(crate) fn new(storage: &'a Storage<T, C>, counter: LocalHeadCounter<'a>) -> Self {
-        Self { storage, counter }
+impl<'a, T> LocalConsumer<'a, T> {
+    pub(crate) fn new(data: &'a mut [MaybeUninit<T>], counter: HeadCounter<'a>) -> Self {
+        Self { data, counter }
     }
 
     /// Checks if the ring buffer is empty.
@@ -58,7 +57,7 @@ impl<'a, T, C: Container<T>> LocalConsumer<'a, T, C> {
     /// *No other mutating calls allowed before that.*
     pub unsafe fn as_uninit_slices(&self) -> (&[MaybeUninit<T>], &[MaybeUninit<T>]) {
         let ranges = self.counter.occupied_ranges();
-        let ptr = self.storage.as_slice().as_ptr();
+        let ptr = self.data.as_ptr();
         (
             slice::from_raw_parts(ptr.add(ranges.0.start), ranges.0.len()),
             slice::from_raw_parts(ptr.add(ranges.1.start), ranges.1.len()),
@@ -75,7 +74,7 @@ impl<'a, T, C: Container<T>> LocalConsumer<'a, T, C> {
         &mut self,
     ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
         let ranges = self.counter.occupied_ranges();
-        let ptr = self.storage.as_mut_slice().as_mut_ptr();
+        let ptr = self.data.as_mut_ptr();
         (
             slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
             slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
@@ -125,7 +124,7 @@ impl<'a, T, C: Container<T>> LocalConsumer<'a, T, C> {
     }
 
     /// Returns iterator that removes elements one by one from the ring buffer.
-    pub fn pop_iter(&mut self) -> LocalPopIterator<'a, '_, T, C> {
+    pub fn pop_iter(&mut self) -> LocalPopIterator<'a, '_, T> {
         LocalPopIterator { consumer: self }
     }
 
@@ -176,27 +175,27 @@ impl<'a, T, C: Container<T>> LocalConsumer<'a, T, C> {
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns count of elements been moved.
-    pub fn transfer_to<'b, Cd: Container<T>>(
+    pub fn transfer_to<'b>(
         &mut self,
-        other: &mut LocalProducer<'b, T, Cd>,
+        other: &mut LocalProducer<'b, T>,
         count: Option<usize>,
     ) -> usize {
         transfer_local(self, other, count)
     }
 }
 
-pub struct LocalPopIterator<'a, 'b: 'a, T, C: Container<T>> {
-    consumer: &'b mut LocalConsumer<'a, T, C>,
+pub struct LocalPopIterator<'a, 'b: 'a, T> {
+    consumer: &'b mut LocalConsumer<'a, T>,
 }
 
-impl<'a, 'b: 'a, T, C: Container<T>> Iterator for LocalPopIterator<'a, 'b, T, C> {
+impl<'a, 'b: 'a, T> Iterator for LocalPopIterator<'a, 'b, T> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
         self.consumer.pop()
     }
 }
 
-impl<'a, T: Copy, C: Container<T>> LocalConsumer<'a, T, C> {
+impl<'a, T: Copy> LocalConsumer<'a, T> {
     /// Removes first elements from the ring buffer and writes them into a slice.
     /// Elements should be `Copy`.
     ///
@@ -224,7 +223,7 @@ impl<'a, T: Copy, C: Container<T>> LocalConsumer<'a, T, C> {
 }
 
 #[cfg(feature = "std")]
-impl<'a, C: Container<u8>> LocalConsumer<'a, u8, C> {
+impl<'a> LocalConsumer<'a, u8> {
     pub fn write_into<S: Write>(
         &mut self,
         writer: &mut S,
@@ -242,7 +241,7 @@ impl<'a, C: Container<u8>> LocalConsumer<'a, u8, C> {
 }
 
 #[cfg(feature = "std")]
-impl<'a, C: Container<u8>> Read for LocalConsumer<'a, u8, C> {
+impl<'a> Read for LocalConsumer<'a, u8> {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         let n = self.pop_slice(buffer);
         if n == 0 && !buffer.is_empty() {

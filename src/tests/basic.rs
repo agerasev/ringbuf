@@ -1,4 +1,4 @@
-use crate::RingBuffer;
+use crate::{AbstractRingBuffer, RingBuffer};
 #[cfg(feature = "std")]
 use std::thread;
 
@@ -6,7 +6,7 @@ use std::thread;
 fn capacity() {
     let cap = 13;
     let buf = RingBuffer::<i32>::new(cap);
-    assert_eq!(buf.capacity(), cap);
+    assert_eq!(buf.capacity().get(), cap);
 }
 #[test]
 fn split_capacity() {

@@ -14,13 +14,15 @@ categories = ["concurrency", "data-structures", "no-std"]
 license = "MIT/Apache-2.0"
 
 [features]
-default = ["std", "alloc"]
+default = ["alloc", "std"]
 alloc = []
 std = ["alloc"]
+async = ["futures"]
 bench = []
 
 [dependencies]
 cache-padded = "1.2.0"
+futures = { version = "0.3", optional = true, default-features = false }
 
 [[example]]
 name = "simple"

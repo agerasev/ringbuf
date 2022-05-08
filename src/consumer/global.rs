@@ -1,8 +1,7 @@
 use super::LocalConsumer;
 use crate::{
-    counter::Counter,
     producer::GlobalProducer,
-    ring_buffer::{Container, RingBufferRef},
+    ring_buffer::{AbstractRingBuffer, Counter, RingBufferRef},
     transfer::transfer,
 };
 use core::marker::PhantomData;
@@ -13,19 +12,19 @@ use std::io::{self, Read, Write};
 /// Consumer part of ring buffer.
 ///
 /// Generic over item type, ring buffer container and ring buffer reference.
-pub struct GlobalConsumer<T, C, R>
+pub struct GlobalConsumer<T, B, R>
 where
-    C: Container<T>,
-    R: RingBufferRef<T, C>,
+    B: AbstractRingBuffer<T>,
+    R: RingBufferRef<T, B>,
 {
     ring_buffer: R,
-    _phantom: PhantomData<(T, C)>,
+    _phantom: PhantomData<(T, B)>,
 }
 
-impl<T, C, R> GlobalConsumer<T, C, R>
+impl<T, B, R> GlobalConsumer<T, B, R>
 where
-    C: Container<T>,
-    R: RingBufferRef<T, C>,
+    B: AbstractRingBuffer<T>,
+    R: RingBufferRef<T, B>,
 {
     pub(crate) fn new(ring_buffer: R) -> Self {
         Self {
@@ -34,54 +33,57 @@ where
         }
     }
 
-    pub fn acquire(&mut self) -> LocalConsumer<'_, T, C> {
-        LocalConsumer::new(&self.ring_buffer.storage, unsafe {
-            self.ring_buffer.counter.acquire_head()
-        })
+    pub fn acquire(&mut self) -> LocalConsumer<'_, T> {
+        unsafe {
+            LocalConsumer::new(
+                self.ring_buffer.data(),
+                self.ring_buffer.counter().acquire_head(),
+            )
+        }
     }
 
     #[cfg(all(test, feature = "alloc"))]
     pub(crate) fn head(&self) -> usize {
-        self.ring_buffer.counter.head()
+        self.ring_buffer.counter().head()
     }
     #[cfg(all(test, feature = "alloc"))]
     pub(crate) fn tail(&self) -> usize {
-        self.ring_buffer.counter.tail()
+        self.ring_buffer.counter().tail()
     }
 
     /// Returns capacity of the ring buffer.
     ///
     /// The capacity of the buffer is constant.
     pub fn capacity(&self) -> usize {
-        self.ring_buffer.capacity()
+        self.ring_buffer.capacity().get()
     }
 
     /// Checks if the ring buffer is empty.
     ///
     /// The result is relevant until you push items to the producer.
     pub fn is_empty(&self) -> bool {
-        self.ring_buffer.counter.is_empty()
+        self.ring_buffer.counter().is_empty()
     }
 
     /// Checks if the ring buffer is full.
     ///
     /// *The result may become irrelevant at any time because of concurring activity of the consumer.*
     pub fn is_full(&self) -> bool {
-        self.ring_buffer.counter.is_full()
+        self.ring_buffer.counter().is_full()
     }
 
     /// The number of elements stored in the buffer.
     ///
     /// Actual number may be equal to or greater than the returned value.
     pub fn len(&self) -> usize {
-        self.ring_buffer.counter.occupied_len()
+        self.ring_buffer.counter().occupied_len()
     }
 
     /// The number of remaining free places in the buffer.
     ///
     /// Actual number may be equal to or less than the returning value.
     pub fn remaining(&self) -> usize {
-        self.ring_buffer.counter.vacant_len()
+        self.ring_buffer.counter().vacant_len()
     }
 
     /// Removes latest element from the ring buffer and returns it.
@@ -91,7 +93,7 @@ where
     }
 
     /// Returns iterator that removes elements one by one from the ring buffer.
-    pub fn pop_iter(&mut self) -> PopIterator<T, C, R> {
+    pub fn pop_iter(&mut self) -> PopIterator<T, B, R> {
         PopIterator { consumer: self }
     }
 
@@ -138,31 +140,31 @@ assert_eq!(cons.skip(8), 0);
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns count of elements been moved.
-    pub fn transfer_to<Cd, Rd>(
+    pub fn transfer_to<Bd, Rd>(
         &mut self,
-        other: &mut GlobalProducer<T, Cd, Rd>,
+        other: &mut GlobalProducer<T, Bd, Rd>,
         count: Option<usize>,
     ) -> usize
     where
-        Cd: Container<T>,
-        Rd: RingBufferRef<T, Cd>,
+        Bd: AbstractRingBuffer<T>,
+        Rd: RingBufferRef<T, Bd>,
     {
         transfer(self, other, count)
     }
 }
 
-pub struct PopIterator<'a, T, C, R>
+pub struct PopIterator<'a, T, B, R>
 where
-    C: Container<T>,
-    R: RingBufferRef<T, C>,
+    B: AbstractRingBuffer<T>,
+    R: RingBufferRef<T, B>,
 {
-    consumer: &'a mut GlobalConsumer<T, C, R>,
+    consumer: &'a mut GlobalConsumer<T, B, R>,
 }
 
-impl<'a, T, C, R> Iterator for PopIterator<'a, T, C, R>
+impl<'a, T, B, R> Iterator for PopIterator<'a, T, B, R>
 where
-    C: Container<T>,
-    R: RingBufferRef<T, C>,
+    B: AbstractRingBuffer<T>,
+    R: RingBufferRef<T, B>,
 {
     type Item = T;
     fn next(&mut self) -> Option<T> {
@@ -170,10 +172,10 @@ where
     }
 }
 
-impl<T: Copy, C, R> GlobalConsumer<T, C, R>
+impl<T: Copy, B, R> GlobalConsumer<T, B, R>
 where
-    C: Container<T>,
-    R: RingBufferRef<T, C>,
+    B: AbstractRingBuffer<T>,
+    R: RingBufferRef<T, B>,
 {
     /// Removes first elements from the ring buffer and writes them into a slice.
     /// Elements should be `Copy`.
@@ -185,10 +187,10 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<C, R> GlobalConsumer<u8, C, R>
+impl<B, R> GlobalConsumer<u8, B, R>
 where
-    C: Container<u8>,
-    R: RingBufferRef<u8, C>,
+    B: AbstractRingBuffer<u8>,
+    R: RingBufferRef<u8, B>,
 {
     /// Removes at most first `count` bytes from the ring buffer and writes them into a `Write` instance.
     /// If `count` is `None` then as much as possible bytes will be written.
@@ -208,10 +210,10 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<C, R> Read for GlobalConsumer<u8, C, R>
+impl<B, R> Read for GlobalConsumer<u8, B, R>
 where
-    C: Container<u8>,
-    R: RingBufferRef<u8, C>,
+    B: AbstractRingBuffer<u8>,
+    R: RingBufferRef<u8, B>,
 {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         self.acquire().read(buffer)

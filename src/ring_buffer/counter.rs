@@ -5,7 +5,7 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-pub(crate) trait Counter {
+pub trait Counter {
     fn len(&self) -> NonZeroUsize;
     fn head(&self) -> usize;
     fn tail(&self) -> usize;
@@ -38,7 +38,7 @@ pub(crate) trait Counter {
     }
 }
 
-pub(crate) struct LocalCounter {
+pub struct LocalCounter {
     pub len: NonZeroUsize,
     pub head: usize,
     pub tail: usize,
@@ -56,49 +56,49 @@ impl Counter for LocalCounter {
     }
 }
 
-pub(crate) struct LocalHeadCounter<'a> {
+pub struct HeadCounter<'a> {
     global: &'a GlobalCounter,
     local: LocalCounter,
 }
-impl<'a> Drop for LocalHeadCounter<'a> {
+impl<'a> Drop for HeadCounter<'a> {
     fn drop(&mut self) {
         self.global.store_head(self.local.head);
     }
 }
-impl<'a> Deref for LocalHeadCounter<'a> {
+impl<'a> Deref for HeadCounter<'a> {
     type Target = LocalCounter;
     fn deref(&self) -> &LocalCounter {
         &self.local
     }
 }
-impl<'a> DerefMut for LocalHeadCounter<'a> {
+impl<'a> DerefMut for HeadCounter<'a> {
     fn deref_mut(&mut self) -> &mut LocalCounter {
         &mut self.local
     }
 }
 
-pub(crate) struct LocalTailCounter<'a> {
+pub struct TailCounter<'a> {
     global: &'a GlobalCounter,
     local: LocalCounter,
 }
-impl<'a> Drop for LocalTailCounter<'a> {
+impl<'a> Drop for TailCounter<'a> {
     fn drop(&mut self) {
         self.global.store_tail(self.local.tail);
     }
 }
-impl<'a> Deref for LocalTailCounter<'a> {
+impl<'a> Deref for TailCounter<'a> {
     type Target = LocalCounter;
     fn deref(&self) -> &LocalCounter {
         &self.local
     }
 }
-impl<'a> DerefMut for LocalTailCounter<'a> {
+impl<'a> DerefMut for TailCounter<'a> {
     fn deref_mut(&mut self) -> &mut LocalCounter {
         &mut self.local
     }
 }
 
-impl<'a> LocalHeadCounter<'a> {
+impl<'a> HeadCounter<'a> {
     /// Returns a pair of slices which contain, in order, the occupied cells in the ring buffer.
     ///
     /// All elements in slices are guaranteed to be *initialized*.
@@ -131,7 +131,7 @@ impl<'a> LocalHeadCounter<'a> {
     }
 }
 
-impl<'a> LocalTailCounter<'a> {
+impl<'a> TailCounter<'a> {
     /// Returns a pair of slices which contain, in order, the vacant cells in the ring buffer.
     ///
     /// All elements in slices are guaranteed to be *un-initialized*.
@@ -165,7 +165,7 @@ impl<'a> LocalTailCounter<'a> {
     }
 }
 
-pub(crate) struct GlobalCounter {
+pub struct GlobalCounter {
     len: NonZeroUsize,
     head: CachePadded<AtomicUsize>,
     tail: CachePadded<AtomicUsize>,
@@ -200,8 +200,8 @@ impl GlobalCounter {
         self.tail.store(value, Ordering::Release)
     }
 
-    pub unsafe fn acquire_head(&self) -> LocalHeadCounter<'_> {
-        LocalHeadCounter {
+    pub unsafe fn acquire_head(&self) -> HeadCounter<'_> {
+        HeadCounter {
             local: LocalCounter {
                 len: self.len(),
                 head: self.head(),
@@ -211,8 +211,8 @@ impl GlobalCounter {
         }
     }
 
-    pub unsafe fn acquire_tail(&self) -> LocalTailCounter<'_> {
-        LocalTailCounter {
+    pub unsafe fn acquire_tail(&self) -> TailCounter<'_> {
+        TailCounter {
             local: LocalCounter {
                 len: self.len(),
                 head: self.head(),

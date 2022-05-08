@@ -1,7 +1,6 @@
 use crate::{
     consumer::LocalConsumer,
-    counter::{Counter, LocalTailCounter},
-    ring_buffer::{Container, Storage},
+    ring_buffer::{Counter, TailCounter},
     transfer::transfer_local,
     utils::write_slice,
 };
@@ -17,14 +16,14 @@ use std::io::{self, Read, Write};
 /// Producer part of ring buffer.
 ///
 /// Generic over item type, ring buffer container and ring buffer reference.
-pub struct LocalProducer<'a, T, C: Container<T>> {
-    storage: &'a Storage<T, C>,
-    counter: LocalTailCounter<'a>,
+pub struct LocalProducer<'a, T> {
+    data: &'a mut [MaybeUninit<T>],
+    counter: TailCounter<'a>,
 }
 
-impl<'a, T, C: Container<T>> LocalProducer<'a, T, C> {
-    pub(crate) fn new(storage: &'a Storage<T, C>, counter: LocalTailCounter<'a>) -> Self {
-        Self { storage, counter }
+impl<'a, T> LocalProducer<'a, T> {
+    pub(crate) fn new(data: &'a mut [MaybeUninit<T>], counter: TailCounter<'a>) -> Self {
+        Self { data, counter }
     }
 
     /// Returns capacity of the ring buffer.
@@ -71,7 +70,7 @@ impl<'a, T, C: Container<T>> LocalProducer<'a, T, C> {
         &mut self,
     ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
         let ranges = self.counter.vacant_ranges();
-        let ptr = self.storage.as_mut_slice().as_mut_ptr();
+        let ptr = self.data.as_mut_ptr();
         (
             slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
             slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
@@ -128,16 +127,16 @@ impl<'a, T, C: Container<T>> LocalProducer<'a, T, C> {
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns number of elements been moved.
-    pub fn transfer_from<'b, Cs: Container<T>>(
+    pub fn transfer_from<'b>(
         &mut self,
-        other: &mut LocalConsumer<'b, T, Cs>,
+        other: &mut LocalConsumer<'b, T>,
         count: Option<usize>,
     ) -> usize {
         transfer_local(other, self, count)
     }
 }
 
-impl<'a, T: Copy, C: Container<T>> LocalProducer<'a, T, C> {
+impl<'a, T: Copy> LocalProducer<'a, T> {
     /// Appends elements from slice to the ring buffer.
     /// Elements should be `Copy`.
     ///
@@ -165,7 +164,7 @@ impl<'a, T: Copy, C: Container<T>> LocalProducer<'a, T, C> {
 }
 
 #[cfg(feature = "std")]
-impl<'a, C: Container<u8>> LocalProducer<'a, u8, C> {
+impl<'a> LocalProducer<'a, u8> {
     pub fn read_from<S: Read>(
         &mut self,
         reader: &mut S,
@@ -183,7 +182,7 @@ impl<'a, C: Container<u8>> LocalProducer<'a, u8, C> {
 }
 
 #[cfg(feature = "std")]
-impl<'a, C: Container<u8>> Write for LocalProducer<'a, u8, C> {
+impl<'a> Write for LocalProducer<'a, u8> {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         let n = self.push_slice(buffer);
         if n == 0 && !buffer.is_empty() {
