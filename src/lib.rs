@@ -2,11 +2,11 @@
 //!
 //! # Overview
 //!
-//! `RingBuffer` is the initial structure representing ring buffer itself.
-//! Ring buffer can be splitted into pair of `Producer` and `Consumer`.
+//! `HeapRingBuffer` is the initial structure representing ring buffer itself.
+//! Ring buffer can be splitted into pair of `HeapProducer` and `HeapConsumer`.
 //!
-//! `Producer` and `Consumer` are used to append/remove elements to/from the ring buffer accordingly. They can be safely sent between threads.
-//! Operations with `Producer` and `Consumer` are lock-free - they succeed or fail immediately without blocking or waiting.
+//! `HeapProducer` and `HeapConsumer` are used to append/remove elements to/from the ring buffer accordingly. They can be safely sent between threads.
+//! Operations with `HeapProducer` and `HeapConsumer` are lock-free - they succeed or fail immediately without blocking or waiting.
 //!
 //! Elements can be effectively appended/removed one by one or many at once.
 //! Also data could be loaded/stored directly into/from [`Read`]/[`Write`] instances.
@@ -25,9 +25,9 @@
 
 ```rust
 # extern crate ringbuf;
-use ringbuf::RingBuffer;
+use ringbuf::HeapRingBuffer;
 # fn main() {
-let rb = RingBuffer::<i32>::new(2);
+let rb = HeapRingBuffer::<i32>::new(2);
 let (mut prod, mut cons) = rb.split();
 
 prod.push(0).unwrap();

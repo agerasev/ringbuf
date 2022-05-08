@@ -1,22 +1,22 @@
-use super::GlobalProducer;
+use super::Producer;
 use crate::ring_buffer::{AbstractAsyncRingBuffer, RingBufferRef};
 
-pub struct GlobalAsyncProducer<T, B, R>
+pub struct AsyncProducer<T, B, R>
 where
     B: AbstractAsyncRingBuffer<T>,
     R: RingBufferRef<T, B>,
 {
-    basic: GlobalProducer<T, B, R>,
+    basic: Producer<T, B, R>,
 }
 
-impl<T, B, R> GlobalAsyncProducer<T, B, R>
+impl<T, B, R> AsyncProducer<T, B, R>
 where
     B: AbstractAsyncRingBuffer<T>,
     R: RingBufferRef<T, B>,
 {
     pub unsafe fn new(ring_buffer: R) -> Self {
         Self {
-            basic: GlobalProducer::new(ring_buffer),
+            basic: Producer::new(ring_buffer),
         }
     }
 }

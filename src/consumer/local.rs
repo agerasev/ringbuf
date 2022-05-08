@@ -9,7 +9,7 @@ use core::{cmp, mem::MaybeUninit, ptr, slice};
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-/// Consumer part of ring buffer.
+/// HeapConsumer part of ring buffer.
 ///
 /// Generic over item type, ring buffer container and ring buffer reference.
 pub struct LocalConsumer<'a, T> {
@@ -152,7 +152,7 @@ impl<'a, T> LocalConsumer<'a, T> {
         unsafe { self.advance(count) };
     }
 
-    /// Removes at most `n` and at least `min(n, Consumer::len())` items from the buffer and safely drops them.
+    /// Removes at most `n` and at least `min(n, HeapConsumer::len())` items from the buffer and safely drops them.
     ///
     /// Returns the number of deleted items.
     pub fn skip(&mut self, count: usize) -> usize {

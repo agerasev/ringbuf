@@ -1,10 +1,10 @@
-use crate::RingBuffer;
+use crate::HeapRingBuffer;
 use alloc::rc::Rc;
 
 #[test]
 fn skip() {
     // Initialize ringbuffer, prod and cons
-    let rb = RingBuffer::<i8>::new(10);
+    let rb = HeapRingBuffer::<i8>::new(10);
     let (mut prod, mut cons) = rb.split();
     let mut i = 0;
 
@@ -53,7 +53,7 @@ fn skip_drop() {
 
     static N: usize = 10;
 
-    let rb = RingBuffer::<Rc<()>>::new(N);
+    let rb = HeapRingBuffer::<Rc<()>>::new(N);
     let (mut prod, mut cons) = rb.split();
 
     for _ in 0..N {

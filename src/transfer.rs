@@ -1,11 +1,11 @@
 use crate::{
-    consumer::{GlobalConsumer, LocalConsumer},
-    producer::{GlobalProducer, LocalProducer},
+    consumer::{Consumer, LocalConsumer},
+    producer::{LocalProducer, Producer},
     ring_buffer::{AbstractRingBuffer, RingBufferRef},
 };
 
 /// Moves at most `count` items from the `src` consumer to the `dst` producer.
-/// Consumer and producer may be of different buffers as well as of the same one.
+/// HeapConsumer and producer may be of different buffers as well as of the same one.
 ///
 /// `count` is the number of items being moved, if `None` - as much as possible items will be moved.
 ///
@@ -36,8 +36,8 @@ pub fn transfer_local<'a, 'b, T>(
 }
 
 pub fn transfer<T, Bs, Bd, Rs, Rd>(
-    src: &mut GlobalConsumer<T, Bs, Rs>,
-    dst: &mut GlobalProducer<T, Bd, Rd>,
+    src: &mut Consumer<T, Bs, Rs>,
+    dst: &mut Producer<T, Bd, Rd>,
     count: Option<usize>,
 ) -> usize
 where

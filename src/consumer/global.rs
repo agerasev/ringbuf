@@ -1,6 +1,6 @@
 use super::LocalConsumer;
 use crate::{
-    producer::GlobalProducer,
+    producer::Producer,
     ring_buffer::{AbstractRingBuffer, Counter, RingBufferRef},
     transfer::transfer,
 };
@@ -9,10 +9,10 @@ use core::marker::PhantomData;
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-/// Consumer part of ring buffer.
+/// HeapConsumer part of ring buffer.
 ///
 /// Generic over item type, ring buffer container and ring buffer reference.
-pub struct GlobalConsumer<T, B, R>
+pub struct Consumer<T, B, R>
 where
     B: AbstractRingBuffer<T>,
     R: RingBufferRef<T, B>,
@@ -21,7 +21,7 @@ where
     _phantom: PhantomData<(T, B)>,
 }
 
-impl<T, B, R> GlobalConsumer<T, B, R>
+impl<T, B, R> Consumer<T, B, R>
 where
     B: AbstractRingBuffer<T>,
     R: RingBufferRef<T, B>,
@@ -97,9 +97,9 @@ where
         PopIterator { consumer: self }
     }
 
-    /// Removes at most `n` and at least `min(n, Consumer::len())` items from the buffer and safely drops them.
+    /// Removes at most `n` and at least `min(n, HeapConsumer::len())` items from the buffer and safely drops them.
     ///
-    /// If there is no concurring producer activity then exactly `min(n, Consumer::len())` items are removed.
+    /// If there is no concurring producer activity then exactly `min(n, HeapConsumer::len())` items are removed.
     ///
     /// Returns the number of deleted items.
     ///
@@ -108,9 +108,9 @@ where
         doc = r##"
 ```rust
 # extern crate ringbuf;
-# use ringbuf::RingBuffer;
+# use ringbuf::HeapRingBuffer;
 # fn main() {
-let ring_buffer = RingBuffer::<i32>::new(8);
+let ring_buffer = HeapRingBuffer::<i32>::new(8);
 let (mut prod, mut cons) = ring_buffer.split();
 
 assert_eq!(prod.push_iter(&mut (0..8)), 8);
@@ -142,7 +142,7 @@ assert_eq!(cons.skip(8), 0);
     /// On success returns count of elements been moved.
     pub fn transfer_to<Bd, Rd>(
         &mut self,
-        other: &mut GlobalProducer<T, Bd, Rd>,
+        other: &mut Producer<T, Bd, Rd>,
         count: Option<usize>,
     ) -> usize
     where
@@ -158,7 +158,7 @@ where
     B: AbstractRingBuffer<T>,
     R: RingBufferRef<T, B>,
 {
-    consumer: &'a mut GlobalConsumer<T, B, R>,
+    consumer: &'a mut Consumer<T, B, R>,
 }
 
 impl<'a, T, B, R> Iterator for PopIterator<'a, T, B, R>
@@ -172,7 +172,7 @@ where
     }
 }
 
-impl<T: Copy, B, R> GlobalConsumer<T, B, R>
+impl<T: Copy, B, R> Consumer<T, B, R>
 where
     B: AbstractRingBuffer<T>,
     R: RingBufferRef<T, B>,
@@ -187,7 +187,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<B, R> GlobalConsumer<u8, B, R>
+impl<B, R> Consumer<u8, B, R>
 where
     B: AbstractRingBuffer<u8>,
     R: RingBufferRef<u8, B>,
@@ -210,7 +210,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<B, R> Read for GlobalConsumer<u8, B, R>
+impl<B, R> Read for Consumer<u8, B, R>
 where
     B: AbstractRingBuffer<u8>,
     R: RingBufferRef<u8, B>,

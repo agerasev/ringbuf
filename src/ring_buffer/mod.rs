@@ -19,14 +19,14 @@ use alloc::vec::Vec;
 /// Stack-allocated ring buffer with static capacity.
 ///
 /// Capacity must be greater that zero.
-pub type StaticRingBuffer<T, const N: usize> = BasicRingBuffer<T, [MaybeUninit<T>; N]>;
+pub type StaticRingBuffer<T, const N: usize> = RingBuffer<T, [MaybeUninit<T>; N]>;
 
 /// Heap-allocated ring buffer.
 #[cfg(feature = "alloc")]
-pub type RingBuffer<T> = BasicRingBuffer<T, Vec<MaybeUninit<T>>>;
+pub type HeapRingBuffer<T> = RingBuffer<T, Vec<MaybeUninit<T>>>;
 
 #[cfg(feature = "alloc")]
-impl<T> RingBuffer<T> {
+impl<T> HeapRingBuffer<T> {
     /// Creates a new instance of a ring buffer.
     ///
     /// *Panics if `capacity` is zero.*

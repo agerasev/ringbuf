@@ -1,17 +1,17 @@
-use crate::{AbstractRingBuffer, RingBuffer};
+use crate::{AbstractRingBuffer, HeapRingBuffer};
 #[cfg(feature = "std")]
 use std::thread;
 
 #[test]
 fn capacity() {
     let cap = 13;
-    let buf = RingBuffer::<i32>::new(cap);
+    let buf = HeapRingBuffer::<i32>::new(cap);
     assert_eq!(buf.capacity().get(), cap);
 }
 #[test]
 fn split_capacity() {
     let cap = 13;
-    let buf = RingBuffer::<i32>::new(cap);
+    let buf = HeapRingBuffer::<i32>::new(cap);
     let (prod, cons) = buf.split();
 
     assert_eq!(prod.capacity(), cap);
@@ -21,7 +21,7 @@ fn split_capacity() {
 #[cfg(feature = "std")]
 #[test]
 fn split_threads() {
-    let buf = RingBuffer::<i32>::new(10);
+    let buf = HeapRingBuffer::<i32>::new(10);
     let (prod, cons) = buf.split();
 
     let pjh = thread::spawn(move || {
@@ -39,7 +39,7 @@ fn split_threads() {
 #[test]
 fn push() {
     let cap = 2;
-    let buf = RingBuffer::<i32>::new(cap);
+    let buf = HeapRingBuffer::<i32>::new(cap);
     let (mut prod, _) = buf.split();
 
     assert_eq!((prod.head(), prod.tail()), (0, 0));
@@ -57,7 +57,7 @@ fn push() {
 #[test]
 fn pop_empty() {
     let cap = 2;
-    let buf = RingBuffer::<i32>::new(cap);
+    let buf = HeapRingBuffer::<i32>::new(cap);
     let (_, mut cons) = buf.split();
 
     assert_eq!((cons.head(), cons.tail()), (0, 0));
@@ -69,7 +69,7 @@ fn pop_empty() {
 #[test]
 fn push_pop_one() {
     let cap = 2;
-    let buf = RingBuffer::<i32>::new(cap);
+    let buf = HeapRingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
 
     let vcap = 2 * cap;
@@ -91,7 +91,7 @@ fn push_pop_one() {
 #[test]
 fn push_pop_all() {
     let cap = 2;
-    let buf = RingBuffer::<i32>::new(cap);
+    let buf = HeapRingBuffer::<i32>::new(cap);
     let (mut prod, mut cons) = buf.split();
 
     let vcap = 2 * cap;
@@ -139,7 +139,7 @@ fn push_pop_all() {
 
 #[test]
 fn empty_full() {
-    let buf = RingBuffer::<i32>::new(1);
+    let buf = HeapRingBuffer::<i32>::new(1);
     let (mut prod, cons) = buf.split();
 
     assert!(prod.is_empty());
@@ -157,7 +157,7 @@ fn empty_full() {
 
 #[test]
 fn len_remaining() {
-    let buf = RingBuffer::<i32>::new(2);
+    let buf = HeapRingBuffer::<i32>::new(2);
     let (mut prod, mut cons) = buf.split();
 
     assert_eq!(prod.len(), 0);

@@ -1,7 +1,7 @@
 use crate::{
-    consumer::GlobalAsyncConsumer,
-    producer::GlobalAsyncProducer,
-    ring_buffer::{AbstractRingBuffer, BasicRingBuffer, Container, GlobalCounter},
+    consumer::AsyncConsumer,
+    producer::AsyncProducer,
+    ring_buffer::{AbstractRingBuffer, Container, GlobalCounter, RingBuffer},
 };
 use core::{
     future::Future,
@@ -24,12 +24,12 @@ pub trait AbstractAsyncRingBuffer<T>: AbstractRingBuffer<T> {
     unsafe fn wakers(&self) -> &Wakers;
 }
 
-pub struct BasicAsyncRingBuffer<T, C: Container<T>> {
-    basic: BasicRingBuffer<T, C>,
+pub struct AsyncRingBuffer<T, C: Container<T>> {
+    basic: RingBuffer<T, C>,
     wakers: Wakers,
 }
 
-impl<T, C: Container<T>> AbstractRingBuffer<T> for BasicAsyncRingBuffer<T, C> {
+impl<T, C: Container<T>> AbstractRingBuffer<T> for AsyncRingBuffer<T, C> {
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
         self.basic.capacity()
@@ -44,17 +44,17 @@ impl<T, C: Container<T>> AbstractRingBuffer<T> for BasicAsyncRingBuffer<T, C> {
     }
 }
 
-impl<T, C: Container<T>> AbstractAsyncRingBuffer<T> for BasicAsyncRingBuffer<T, C> {
+impl<T, C: Container<T>> AbstractAsyncRingBuffer<T> for AsyncRingBuffer<T, C> {
     #[inline]
     unsafe fn wakers(&self) -> &Wakers {
         &self.wakers
     }
 }
 
-impl<T, C: Container<T>> BasicAsyncRingBuffer<T, C> {
+impl<T, C: Container<T>> AsyncRingBuffer<T, C> {
     pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
         Self {
-            basic: BasicRingBuffer::from_raw_parts(container, head, tail),
+            basic: RingBuffer::from_raw_parts(container, head, tail),
             wakers: Wakers::default(),
         }
     }
@@ -63,29 +63,16 @@ impl<T, C: Container<T>> BasicAsyncRingBuffer<T, C> {
     pub fn split(
         self,
     ) -> (
-        GlobalAsyncProducer<T, Self, Arc<Self>>,
-        GlobalAsyncConsumer<T, Self, Arc<Self>>,
+        AsyncProducer<T, Self, Arc<Self>>,
+        AsyncConsumer<T, Self, Arc<Self>>,
     ) {
         let arc = Arc::new(self);
-        unsafe {
-            (
-                GlobalAsyncProducer::new(arc.clone()),
-                GlobalAsyncConsumer::new(arc),
-            )
-        }
+        unsafe { (AsyncProducer::new(arc.clone()), AsyncConsumer::new(arc)) }
     }
 
     pub fn split_static(
         &mut self,
-    ) -> (
-        GlobalAsyncProducer<T, Self, &Self>,
-        GlobalAsyncConsumer<T, Self, &Self>,
-    ) {
-        unsafe {
-            (
-                GlobalAsyncProducer::new(self),
-                GlobalAsyncConsumer::new(self),
-            )
-        }
+    ) -> (AsyncProducer<T, Self, &Self>, AsyncConsumer<T, Self, &Self>) {
+        unsafe { (AsyncProducer::new(self), AsyncConsumer::new(self)) }
     }
 }

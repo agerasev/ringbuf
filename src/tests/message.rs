@@ -1,4 +1,4 @@
-use crate::RingBuffer;
+use crate::HeapRingBuffer;
 use alloc::{string::String, vec::Vec};
 use std::{
     io::{self, Read, Write},
@@ -20,7 +20,7 @@ This book fully embraces the potential of Rust to empower its users. It's a frie
 #[test]
 #[cfg_attr(miri, ignore)]
 fn push_pop_slice() {
-    let buf = RingBuffer::<u8>::new(7);
+    let buf = HeapRingBuffer::<u8>::new(7);
     let (mut prod, mut cons) = buf.split();
 
     let smsg = THE_BOOK_FOREWORD;
@@ -70,7 +70,7 @@ fn push_pop_slice() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn read_from_write_into() {
-    let buf = RingBuffer::<u8>::new(7);
+    let buf = HeapRingBuffer::<u8>::new(7);
     let (mut prod, mut cons) = buf.split();
 
     let smsg = THE_BOOK_FOREWORD;
@@ -114,7 +114,7 @@ fn read_from_write_into() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn read_write() {
-    let buf = RingBuffer::<u8>::new(7);
+    let buf = HeapRingBuffer::<u8>::new(7);
     let (mut prod, mut cons) = buf.split();
 
     let smsg = THE_BOOK_FOREWORD;

@@ -1,5 +1,5 @@
 use super::{Container, GlobalCounter, Storage};
-use crate::{consumer::GlobalConsumer, producer::GlobalProducer};
+use crate::{consumer::Consumer, producer::Producer};
 use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Deref};
 
 #[cfg(feature = "alloc")]
@@ -25,12 +25,12 @@ pub trait AbstractRingBuffer<T> {
 /// The ring buffer does not take an extra space that means if its capacity is `N` then the container size is also `N` (not `N + 1`).
 /// This is achieved by using modulus of `2 * Self::capacity()` (instead of `Self::capacity()`) for `head` and `tail` arithmetics.
 /// It allows us to distinguish situations when the buffer is empty (`head == tail`) and when the buffer is full (`tail - head == Self::capacity()` modulo `2 * Self::capacity()`) without using an extra space in container.
-pub struct BasicRingBuffer<T, C: Container<T>> {
+pub struct RingBuffer<T, C: Container<T>> {
     storage: Storage<T, C>,
     counter: GlobalCounter,
 }
 
-impl<T, C: Container<T>> AbstractRingBuffer<T> for BasicRingBuffer<T, C> {
+impl<T, C: Container<T>> AbstractRingBuffer<T> for RingBuffer<T, C> {
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
         self.storage.len()
@@ -47,7 +47,7 @@ impl<T, C: Container<T>> AbstractRingBuffer<T> for BasicRingBuffer<T, C> {
     }
 }
 
-impl<T, C: Container<T>> BasicRingBuffer<T, C> {
+impl<T, C: Container<T>> RingBuffer<T, C> {
     /// Constructs ring buffer from container and counters.
     ///
     /// # Safety
@@ -67,32 +67,22 @@ impl<T, C: Container<T>> BasicRingBuffer<T, C> {
     /// This method consumes the ring buffer and puts it on heap in `Arc`. If you don't want to use heap the see `split_static`.
     #[cfg(feature = "alloc")]
     #[allow(clippy::type_complexity)]
-    pub fn split(
-        self,
-    ) -> (
-        GlobalProducer<T, Self, Arc<Self>>,
-        GlobalConsumer<T, Self, Arc<Self>>,
-    ) {
+    pub fn split(self) -> (Producer<T, Self, Arc<Self>>, Consumer<T, Self, Arc<Self>>) {
         let arc = Arc::new(self);
-        unsafe { (GlobalProducer::new(arc.clone()), GlobalConsumer::new(arc)) }
+        unsafe { (Producer::new(arc.clone()), Consumer::new(arc)) }
     }
 
     /// Splits ring buffer into producer and consumer without using the heap.
     ///
     /// In this case producer and consumer stores a reference to the ring buffer, so you need to store the buffer somewhere.
-    pub fn split_static(
-        &mut self,
-    ) -> (
-        GlobalProducer<T, Self, &Self>,
-        GlobalConsumer<T, Self, &Self>,
-    ) {
-        unsafe { (GlobalProducer::new(self), GlobalConsumer::new(self)) }
+    pub fn split_static(&mut self) -> (Producer<T, Self, &Self>, Consumer<T, Self, &Self>) {
+        unsafe { (Producer::new(self), Consumer::new(self)) }
     }
 }
 
-impl<T, C: Container<T>> Drop for BasicRingBuffer<T, C> {
+impl<T, C: Container<T>> Drop for RingBuffer<T, C> {
     fn drop(&mut self) {
-        unsafe { GlobalConsumer::<T, Self, &Self>::new(self) }
+        unsafe { Consumer::<T, Self, &Self>::new(self) }
             .acquire()
             .clear();
     }

@@ -11,12 +11,12 @@ pub use local::*;
 use crate::ring_buffer::StaticRingBuffer;
 
 #[cfg(feature = "alloc")]
-use crate::ring_buffer::RingBuffer;
+use crate::ring_buffer::HeapRingBuffer;
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
 
 pub type StaticConsumer<'a, T, const N: usize> =
-    GlobalConsumer<T, StaticRingBuffer<T, N>, &'a StaticRingBuffer<T, N>>;
+    Consumer<T, StaticRingBuffer<T, N>, &'a StaticRingBuffer<T, N>>;
 
 #[cfg(feature = "alloc")]
-pub type Consumer<T> = GlobalConsumer<T, RingBuffer<T>, Arc<RingBuffer<T>>>;
+pub type HeapConsumer<T> = Consumer<T, HeapRingBuffer<T>, Arc<HeapRingBuffer<T>>>;

@@ -1,22 +1,22 @@
-use super::GlobalConsumer;
+use super::Consumer;
 use crate::ring_buffer::{AbstractAsyncRingBuffer, RingBufferRef};
 
-pub struct GlobalAsyncConsumer<T, B, R>
+pub struct AsyncConsumer<T, B, R>
 where
     B: AbstractAsyncRingBuffer<T>,
     R: RingBufferRef<T, B>,
 {
-    basic: GlobalConsumer<T, B, R>,
+    basic: Consumer<T, B, R>,
 }
 
-impl<T, B, R> GlobalAsyncConsumer<T, B, R>
+impl<T, B, R> AsyncConsumer<T, B, R>
 where
     B: AbstractAsyncRingBuffer<T>,
     R: RingBufferRef<T, B>,
 {
     pub unsafe fn new(ring_buffer: R) -> Self {
         Self {
-            basic: GlobalConsumer::new(ring_buffer),
+            basic: Consumer::new(ring_buffer),
         }
     }
 }

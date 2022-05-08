@@ -11,14 +11,14 @@ pub use local::*;
 use crate::ring_buffer::StaticRingBuffer;
 
 #[cfg(feature = "alloc")]
-use crate::ring_buffer::RingBuffer;
+use crate::ring_buffer::HeapRingBuffer;
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
 
 /// Producer that holds reference to `StaticRingBuffer`.
 pub type StaticProducer<'a, T, const N: usize> =
-    GlobalProducer<T, StaticRingBuffer<T, N>, &'a StaticRingBuffer<T, N>>;
+    Producer<T, StaticRingBuffer<T, N>, &'a StaticRingBuffer<T, N>>;
 
-/// Producer that holds `Arc<RingBuffer>`.
+/// Producer that holds `Arc<HeapRingBuffer>`.
 #[cfg(feature = "alloc")]
-pub type Producer<T> = GlobalProducer<T, RingBuffer<T>, Arc<RingBuffer<T>>>;
+pub type HeapProducer<T> = Producer<T, HeapRingBuffer<T>, Arc<HeapRingBuffer<T>>>;

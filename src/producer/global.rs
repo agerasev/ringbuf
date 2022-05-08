@@ -1,6 +1,6 @@
 use super::LocalProducer;
 use crate::{
-    consumer::GlobalConsumer,
+    consumer::Consumer,
     ring_buffer::{AbstractRingBuffer, Counter, RingBufferRef},
     transfer::transfer,
 };
@@ -12,7 +12,7 @@ use std::io::{self, Read, Write};
 /// Producer part of ring buffer.
 ///
 /// Generic over item type, ring buffer container and ring buffer reference.
-pub struct GlobalProducer<T, B, R>
+pub struct Producer<T, B, R>
 where
     B: AbstractRingBuffer<T>,
     R: RingBufferRef<T, B>,
@@ -21,7 +21,7 @@ where
     _phantom: PhantomData<(T, B)>,
 }
 
-impl<T, B, R> GlobalProducer<T, B, R>
+impl<T, B, R> Producer<T, B, R>
 where
     B: AbstractRingBuffer<T>,
     R: RingBufferRef<T, B>,
@@ -114,7 +114,7 @@ where
     /// On success returns number of elements been moved.
     pub fn transfer_from<Bs, Rs>(
         &mut self,
-        other: &mut GlobalConsumer<T, Bs, Rs>,
+        other: &mut Consumer<T, Bs, Rs>,
         count: Option<usize>,
     ) -> usize
     where
@@ -125,7 +125,7 @@ where
     }
 }
 
-impl<T: Copy, B, R> GlobalProducer<T, B, R>
+impl<T: Copy, B, R> Producer<T, B, R>
 where
     B: AbstractRingBuffer<T>,
     R: RingBufferRef<T, B>,
@@ -140,7 +140,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<B, R> GlobalProducer<u8, B, R>
+impl<B, R> Producer<u8, B, R>
 where
     B: AbstractRingBuffer<u8>,
     R: RingBufferRef<u8, B>,
@@ -163,7 +163,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<B, R> Write for GlobalProducer<u8, B, R>
+impl<B, R> Write for Producer<u8, B, R>
 where
     B: AbstractRingBuffer<u8>,
     R: RingBufferRef<u8, B>,
