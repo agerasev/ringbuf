@@ -14,7 +14,7 @@ categories = ["concurrency", "data-structures", "no-std"]
 license = "MIT/Apache-2.0"
 
 [features]
-default = ["alloc", "std"]
+default = ["alloc", "std", "async"]
 alloc = []
 std = ["alloc"]
 async = ["futures"]

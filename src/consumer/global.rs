@@ -26,7 +26,7 @@ where
     B: AbstractRingBuffer<T>,
     R: RingBufferRef<T, B>,
 {
-    pub(crate) fn new(ring_buffer: R) -> Self {
+    pub unsafe fn new(ring_buffer: R) -> Self {
         Self {
             ring_buffer,
             _phantom: PhantomData,

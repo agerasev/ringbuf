@@ -36,10 +36,12 @@ impl<T, C: Container<T>> AbstractRingBuffer<T> for BasicRingBuffer<T, C> {
         self.storage.len()
     }
 
+    #[inline]
     unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
         self.storage.as_slice()
     }
 
+    #[inline]
     fn counter(&self) -> &GlobalCounter {
         &self.counter
     }
@@ -72,7 +74,7 @@ impl<T, C: Container<T>> BasicRingBuffer<T, C> {
         GlobalConsumer<T, Self, Arc<Self>>,
     ) {
         let arc = Arc::new(self);
-        (GlobalProducer::new(arc.clone()), GlobalConsumer::new(arc))
+        unsafe { (GlobalProducer::new(arc.clone()), GlobalConsumer::new(arc)) }
     }
 
     /// Splits ring buffer into producer and consumer without using the heap.
@@ -84,13 +86,13 @@ impl<T, C: Container<T>> BasicRingBuffer<T, C> {
         GlobalProducer<T, Self, &Self>,
         GlobalConsumer<T, Self, &Self>,
     ) {
-        (GlobalProducer::new(self), GlobalConsumer::new(self))
+        unsafe { (GlobalProducer::new(self), GlobalConsumer::new(self)) }
     }
 }
 
 impl<T, C: Container<T>> Drop for BasicRingBuffer<T, C> {
     fn drop(&mut self) {
-        GlobalConsumer::<T, Self, &Self>::new(self)
+        unsafe { GlobalConsumer::<T, Self, &Self>::new(self) }
             .acquire()
             .clear();
     }
