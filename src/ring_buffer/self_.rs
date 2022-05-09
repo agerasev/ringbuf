@@ -5,6 +5,9 @@ use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Deref};
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
 
+#[cfg(feature = "async")]
+use crate::{consumer::AsyncConsumer, counter::AsyncCounter, producer::AsyncProducer};
+
 /// Ring buffer itself.
 ///
 /// The structure consists of abstract container (something that could be referenced as contiguous array) and two counters: `head` and `tail`.
@@ -64,6 +67,26 @@ impl<T, C: Container<T>, S: Counter> RingBuffer<T, C, S> {
     /// In this case producer and consumer stores a reference to the ring buffer, so you need to store the buffer somewhere.
     pub fn split_static(&mut self) -> (Producer<T, C, S, &Self>, Consumer<T, C, S, &Self>) {
         unsafe { (Producer::new(self), Consumer::new(self)) }
+    }
+}
+#[cfg(all(feature = "alloc", feature = "async"))]
+impl<T, C: Container<T>> RingBuffer<T, C, AsyncCounter> {
+    #[cfg(feature = "alloc")]
+    #[allow(clippy::type_complexity)]
+    pub fn split_async(
+        self,
+    ) -> (
+        AsyncProducer<T, C, Arc<Self>>,
+        AsyncConsumer<T, C, Arc<Self>>,
+    ) {
+        let arc = Arc::new(self);
+        unsafe { (AsyncProducer::new(arc.clone()), AsyncConsumer::new(arc)) }
+    }
+
+    pub fn split_static_async(
+        &mut self,
+    ) -> (AsyncProducer<T, C, &Self>, AsyncConsumer<T, C, &Self>) {
+        unsafe { (AsyncProducer::new(self), AsyncConsumer::new(self)) }
     }
 }
 

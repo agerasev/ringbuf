@@ -3,6 +3,7 @@ name = "ringbuf"
 version = "0.3.0"
 authors = ["Alexey Gerasev <alexey.gerasev@gmail.com>"]
 edition = "2021"
+resolver = "2"
 
 description = "Lock-free SPSC FIFO ring buffer with direct access to inner data"
 documentation = "https://docs.rs/ringbuf"
@@ -14,7 +15,7 @@ categories = ["concurrency", "data-structures", "no-std"]
 license = "MIT/Apache-2.0"
 
 [features]
-default = ["alloc", "std"]
+default = ["alloc", "std", "async"]
 alloc = []
 std = ["alloc"]
 async = ["futures"]
@@ -23,6 +24,9 @@ bench = []
 [dependencies]
 cache-padded = "1.2.0"
 futures = { version = "0.3", optional = true, default-features = false }
+
+[dev-dependencies]
+futures = { version = "0.3", features = ["executor", "thread-pool"] }
 
 [[example]]
 name = "simple"

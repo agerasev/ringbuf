@@ -1,34 +1,43 @@
 use super::Producer;
-use crate::ring_buffer::{AbstractAsyncRingBuffer, RingBufferRef};
+use crate::{
+    counter::AsyncCounter,
+    ring_buffer::{Container, RingBufferRef},
+};
 use core::{
     future::Future,
-    mem::MaybeUninit,
-    num::NonZeroUsize,
-    ops::DerefMut,
     pin::Pin,
     task::{Context, Poll, Waker},
 };
 
-pub struct AsyncProducer<T, B, R>
+pub struct AsyncProducer<T, C, R>
 where
-    B: AbstractAsyncRingBuffer<T>,
-    R: RingBufferRef<T, B>,
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
 {
-    pub(crate) basic: Producer<T, B, R>,
+    pub(crate) base: Producer<T, C, AsyncCounter, R>,
 }
 
-impl<T, B, R> AsyncProducer<T, B, R>
+impl<T, C, R> AsyncProducer<T, C, R>
 where
-    B: AbstractAsyncRingBuffer<T>,
-    R: RingBufferRef<T, B>,
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
 {
     pub unsafe fn new(ring_buffer: R) -> Self {
         Self {
-            basic: Producer::new(ring_buffer),
+            base: Producer::new(ring_buffer),
         }
     }
 
-    pub fn push(&mut self, item: T) -> PushFuture<'_, T, B, R> {
+    fn register_waker(&self, waker: &Waker) {
+        self.base
+            .ring_buffer
+            .counter()
+            .wakers()
+            .head
+            .register(waker);
+    }
+
+    pub fn push(&mut self, item: T) -> PushFuture<'_, T, C, R> {
         PushFuture {
             owner: self,
             item: Some(item),
@@ -36,45 +45,38 @@ where
     }
 }
 
-pub struct PushFuture<'a, T, B, R>
+pub struct PushFuture<'a, T, C, R>
 where
-    B: AbstractAsyncRingBuffer<T>,
-    R: RingBufferRef<T, B>,
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
 {
-    pub owner: &'a mut AsyncProducer<T, B, R>,
-    pub item: Option<T>,
+    owner: &'a mut AsyncProducer<T, C, R>,
+    item: Option<T>,
 }
 
-impl<'a, T, B, R> Unpin for PushFuture<'a, T, B, R>
+impl<'a, T, C, R> Unpin for PushFuture<'a, T, C, R>
 where
-    B: AbstractAsyncRingBuffer<T>,
-    R: RingBufferRef<T, B>,
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
 {
 }
 
-impl<'a, T, B, R> Future for PushFuture<'a, T, B, R>
+impl<'a, T, C, R> Future for PushFuture<'a, T, C, R>
 where
-    B: AbstractAsyncRingBuffer<T>,
-    R: RingBufferRef<T, B>,
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
 {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.item.take() {
-            None => Poll::Ready(()),
-            Some(item) => match self.owner.basic.push(item) {
-                Err(item) => {
-                    self.item.replace(item);
-                    unsafe { self.owner.basic.ring_buffer.wakers() }
-                        .pop
-                        .register(cx.waker());
-                    Poll::Pending
-                }
-                Ok(()) => {
-                    unsafe { self.owner.basic.ring_buffer.wakers() }.push.wake();
-                    Poll::Ready(())
-                }
-            },
+        let item = self.item.take().unwrap();
+        self.owner.register_waker(cx.waker());
+        match self.owner.base.push(item) {
+            Err(item) => {
+                self.item.replace(item);
+                Poll::Pending
+            }
+            Ok(()) => Poll::Ready(()),
         }
     }
 }
