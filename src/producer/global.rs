@@ -17,7 +17,7 @@ where
     B: AbstractRingBuffer<T>,
     R: RingBufferRef<T, B>,
 {
-    ring_buffer: R,
+    pub(crate) ring_buffer: R,
     _phantom: PhantomData<(T, B)>,
 }
 
@@ -40,15 +40,6 @@ where
                 self.ring_buffer.counter().acquire_tail(),
             )
         }
-    }
-
-    #[cfg(all(test, feature = "alloc"))]
-    pub(crate) fn head(&self) -> usize {
-        self.ring_buffer.counter().head()
-    }
-    #[cfg(all(test, feature = "alloc"))]
-    pub(crate) fn tail(&self) -> usize {
-        self.ring_buffer.counter().tail()
     }
 
     /// Returns capacity of the ring buffer.
