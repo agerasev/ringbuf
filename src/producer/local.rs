@@ -1,6 +1,6 @@
 use crate::{
     consumer::LocalConsumer,
-    ring_buffer::{Counter, TailCounter},
+    counter::{Counter, LocalTailCounter},
     transfer::transfer_local,
     utils::write_slice,
 };
@@ -16,13 +16,13 @@ use std::io::{self, Read, Write};
 /// Producer part of ring buffer.
 ///
 /// Generic over item type, ring buffer container and ring buffer reference.
-pub struct LocalProducer<'a, T> {
+pub struct LocalProducer<'a, T, S: Counter> {
     data: &'a mut [MaybeUninit<T>],
-    counter: TailCounter<'a>,
+    counter: LocalTailCounter<'a, S>,
 }
 
-impl<'a, T> LocalProducer<'a, T> {
-    pub(crate) fn new(data: &'a mut [MaybeUninit<T>], counter: TailCounter<'a>) -> Self {
+impl<'a, T, S: Counter> LocalProducer<'a, T, S> {
+    pub(crate) fn new(data: &'a mut [MaybeUninit<T>], counter: LocalTailCounter<'a, S>) -> Self {
         Self { data, counter }
     }
 
@@ -127,16 +127,16 @@ impl<'a, T> LocalProducer<'a, T> {
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns number of elements been moved.
-    pub fn transfer_from<'b>(
+    pub fn transfer_from<'b, Sc: Counter>(
         &mut self,
-        other: &mut LocalConsumer<'b, T>,
+        consumer: &mut LocalConsumer<'b, T, Sc>,
         count: Option<usize>,
     ) -> usize {
-        transfer_local(other, self, count)
+        transfer_local(consumer, self, count)
     }
 }
 
-impl<'a, T: Copy> LocalProducer<'a, T> {
+impl<'a, T: Copy, S: Counter> LocalProducer<'a, T, S> {
     /// Appends elements from slice to the ring buffer.
     /// Elements should be `Copy`.
     ///
@@ -164,10 +164,10 @@ impl<'a, T: Copy> LocalProducer<'a, T> {
 }
 
 #[cfg(feature = "std")]
-impl<'a> LocalProducer<'a, u8> {
-    pub fn read_from<S: Read>(
+impl<'a, S: Counter> LocalProducer<'a, u8, S> {
+    pub fn read_from<P: Read>(
         &mut self,
-        reader: &mut S,
+        reader: &mut P,
         count: Option<usize>,
     ) -> io::Result<usize> {
         let (left, _) = unsafe { self.free_space_as_slices() };
@@ -182,7 +182,7 @@ impl<'a> LocalProducer<'a, u8> {
 }
 
 #[cfg(feature = "std")]
-impl<'a> Write for LocalProducer<'a, u8> {
+impl<'a, S: Counter> Write for LocalProducer<'a, u8, S> {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         let n = self.push_slice(buffer);
         if n == 0 && !buffer.is_empty() {

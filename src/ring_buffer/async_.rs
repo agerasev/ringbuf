@@ -1,8 +1,5 @@
-use crate::{
-    consumer::AsyncConsumer,
-    producer::AsyncProducer,
-    ring_buffer::{AbstractRingBuffer, Container, GlobalCounter, RingBuffer},
-};
+use super::{AbstractRingBuffer, Container, RingBuffer};
+use crate::{consumer::AsyncConsumer, counter::GlobalCounter, producer::AsyncProducer};
 use core::{
     future::Future,
     mem::MaybeUninit,

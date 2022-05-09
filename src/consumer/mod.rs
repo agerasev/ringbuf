@@ -8,15 +8,16 @@ pub use async_::*;
 pub use global::*;
 pub use local::*;
 
-use crate::ring_buffer::StaticRingBuffer;
+use crate::{counter::AtomicCounter, ring_buffer::StaticRingBuffer};
+use core::mem::MaybeUninit;
 
 #[cfg(feature = "alloc")]
 use crate::ring_buffer::HeapRingBuffer;
 #[cfg(feature = "alloc")]
-use alloc::sync::Arc;
+use alloc::{sync::Arc, vec::Vec};
 
 pub type StaticConsumer<'a, T, const N: usize> =
-    Consumer<T, StaticRingBuffer<T, N>, &'a StaticRingBuffer<T, N>>;
+    Consumer<T, [MaybeUninit<T>; N], AtomicCounter, &'a StaticRingBuffer<T, N>>;
 
 #[cfg(feature = "alloc")]
-pub type HeapConsumer<T> = Consumer<T, HeapRingBuffer<T>, Arc<HeapRingBuffer<T>>>;
+pub type HeapConsumer<T> = Consumer<T, Vec<MaybeUninit<T>>, AtomicCounter, Arc<HeapRingBuffer<T>>>;

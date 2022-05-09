@@ -1,7 +1,8 @@
 use super::LocalProducer;
 use crate::{
     consumer::Consumer,
-    ring_buffer::{AbstractRingBuffer, Counter, RingBufferRef},
+    counter::Counter,
+    ring_buffer::{Container, RingBufferRef},
     transfer::transfer,
 };
 use core::marker::PhantomData;
@@ -12,19 +13,21 @@ use std::io::{self, Read, Write};
 /// Producer part of ring buffer.
 ///
 /// Generic over item type, ring buffer container and ring buffer reference.
-pub struct Producer<T, B, R>
+pub struct Producer<T, C, S, R>
 where
-    B: AbstractRingBuffer<T>,
-    R: RingBufferRef<T, B>,
+    C: Container<T>,
+    S: Counter,
+    R: RingBufferRef<T, C, S>,
 {
     pub(crate) ring_buffer: R,
-    _phantom: PhantomData<(T, B)>,
+    _phantom: PhantomData<(T, C, S)>,
 }
 
-impl<T, B, R> Producer<T, B, R>
+impl<T, C, S, R> Producer<T, C, S, R>
 where
-    B: AbstractRingBuffer<T>,
-    R: RingBufferRef<T, B>,
+    C: Container<T>,
+    S: Counter,
+    R: RingBufferRef<T, C, S>,
 {
     pub unsafe fn new(ring_buffer: R) -> Self {
         Self {
@@ -33,7 +36,7 @@ where
         }
     }
 
-    pub fn acquire(&mut self) -> LocalProducer<'_, T> {
+    pub fn acquire(&mut self) -> LocalProducer<'_, T, S> {
         unsafe {
             LocalProducer::new(
                 self.ring_buffer.data(),
@@ -103,23 +106,25 @@ where
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns number of elements been moved.
-    pub fn transfer_from<Bs, Rs>(
+    pub fn transfer_from<Cc, Sc, Rc>(
         &mut self,
-        other: &mut Consumer<T, Bs, Rs>,
+        consumer: &mut Consumer<T, Cc, Sc, Rc>,
         count: Option<usize>,
     ) -> usize
     where
-        Bs: AbstractRingBuffer<T>,
-        Rs: RingBufferRef<T, Bs>,
+        Cc: Container<T>,
+        Sc: Counter,
+        Rc: RingBufferRef<T, Cc, Sc>,
     {
-        transfer(other, self, count)
+        transfer(consumer, self, count)
     }
 }
 
-impl<T: Copy, B, R> Producer<T, B, R>
+impl<T: Copy, C, S, R> Producer<T, C, S, R>
 where
-    B: AbstractRingBuffer<T>,
-    R: RingBufferRef<T, B>,
+    C: Container<T>,
+    S: Counter,
+    R: RingBufferRef<T, C, S>,
 {
     /// Appends elements from slice to the ring buffer.
     /// Elements should be `Copy`.
@@ -131,10 +136,11 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<B, R> Producer<u8, B, R>
+impl<C, S, R> Producer<u8, C, S, R>
 where
-    B: AbstractRingBuffer<u8>,
-    R: RingBufferRef<u8, B>,
+    C: Container<u8>,
+    S: Counter,
+    R: RingBufferRef<u8, C, S>,
 {
     /// Reads at most `count` bytes from `Read` instance and appends them to the ring buffer.
     /// If `count` is `None` then as much as possible bytes will be read.
@@ -144,9 +150,9 @@ where
     ///
     /// If `read` is failed or returned an invalid number then error is returned.
     // TODO: Add note about reading only one contiguous slice at once.
-    pub fn read_from<S: Read>(
+    pub fn read_from<P: Read>(
         &mut self,
-        reader: &mut S,
+        reader: &mut P,
         count: Option<usize>,
     ) -> io::Result<usize> {
         self.acquire().read_from(reader, count)
@@ -154,10 +160,11 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<B, R> Write for Producer<u8, B, R>
+impl<C, S, R> Write for Producer<u8, C, S, R>
 where
-    B: AbstractRingBuffer<u8>,
-    R: RingBufferRef<u8, B>,
+    C: Container<u8>,
+    S: Counter,
+    R: RingBufferRef<u8, C, S>,
 {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         self.acquire().write(buffer)

@@ -1,7 +1,8 @@
 use crate::{
     consumer::{Consumer, LocalConsumer},
+    counter::Counter,
     producer::{LocalProducer, Producer},
-    ring_buffer::{AbstractRingBuffer, RingBufferRef},
+    ring_buffer::{Container, RingBufferRef},
 };
 
 /// Moves at most `count` items from the `src` consumer to the `dst` producer.
@@ -10,11 +11,15 @@ use crate::{
 /// `count` is the number of items being moved, if `None` - as much as possible items will be moved.
 ///
 /// Returns number of items been moved.
-pub fn transfer_local<'a, 'b, T>(
-    src: &mut LocalConsumer<'a, T>,
-    dst: &mut LocalProducer<'b, T>,
+pub fn transfer_local<'a, 'b, T, Sc, Sp>(
+    src: &mut LocalConsumer<'a, T, Sc>,
+    dst: &mut LocalProducer<'b, T, Sp>,
     count: Option<usize>,
-) -> usize {
+) -> usize
+where
+    Sc: Counter,
+    Sp: Counter,
+{
     let (src_left, src_right) = unsafe { src.as_uninit_slices() };
     let (dst_left, dst_right) = unsafe { dst.free_space_as_slices() };
     let src_iter = src_left.iter().chain(src_right.iter());
@@ -35,16 +40,18 @@ pub fn transfer_local<'a, 'b, T>(
     actual_count
 }
 
-pub fn transfer<T, Bs, Bd, Rs, Rd>(
-    src: &mut Consumer<T, Bs, Rs>,
-    dst: &mut Producer<T, Bd, Rd>,
+pub fn transfer<T, Cc, Cp, Sc, Sp, Rc, Rp>(
+    src: &mut Consumer<T, Cc, Sc, Rc>,
+    dst: &mut Producer<T, Cp, Sp, Rp>,
     count: Option<usize>,
 ) -> usize
 where
-    Bs: AbstractRingBuffer<T>,
-    Bd: AbstractRingBuffer<T>,
-    Rs: RingBufferRef<T, Bs>,
-    Rd: RingBufferRef<T, Bd>,
+    Cc: Container<T>,
+    Cp: Container<T>,
+    Sc: Counter,
+    Sp: Counter,
+    Rc: RingBufferRef<T, Cc, Sc>,
+    Rp: RingBufferRef<T, Cp, Sp>,
 {
     transfer_local(&mut src.acquire(), &mut dst.acquire(), count)
 }

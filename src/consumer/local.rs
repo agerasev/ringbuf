@@ -1,6 +1,6 @@
 use crate::{
+    counter::{Counter, LocalHeadCounter},
     producer::LocalProducer,
-    ring_buffer::{Counter, HeadCounter},
     transfer::transfer_local,
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
@@ -12,13 +12,13 @@ use std::io::{self, Read, Write};
 /// HeapConsumer part of ring buffer.
 ///
 /// Generic over item type, ring buffer container and ring buffer reference.
-pub struct LocalConsumer<'a, T> {
+pub struct LocalConsumer<'a, T, S: Counter> {
     data: &'a mut [MaybeUninit<T>],
-    counter: HeadCounter<'a>,
+    counter: LocalHeadCounter<'a, S>,
 }
 
-impl<'a, T> LocalConsumer<'a, T> {
-    pub(crate) fn new(data: &'a mut [MaybeUninit<T>], counter: HeadCounter<'a>) -> Self {
+impl<'a, T, S: Counter> LocalConsumer<'a, T, S> {
+    pub(crate) fn new(data: &'a mut [MaybeUninit<T>], counter: LocalHeadCounter<'a, S>) -> Self {
         Self { data, counter }
     }
 
@@ -124,7 +124,7 @@ impl<'a, T> LocalConsumer<'a, T> {
     }
 
     /// Returns iterator that removes elements one by one from the ring buffer.
-    pub fn pop_iter(&mut self) -> LocalPopIterator<'a, '_, T> {
+    pub fn pop_iter(&mut self) -> LocalPopIterator<'a, '_, T, S> {
         LocalPopIterator { consumer: self }
     }
 
@@ -175,27 +175,27 @@ impl<'a, T> LocalConsumer<'a, T> {
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns count of elements been moved.
-    pub fn transfer_to<'b>(
+    pub fn transfer_to<'b, Sp: Counter>(
         &mut self,
-        other: &mut LocalProducer<'b, T>,
+        producer: &mut LocalProducer<'b, T, Sp>,
         count: Option<usize>,
     ) -> usize {
-        transfer_local(self, other, count)
+        transfer_local(self, producer, count)
     }
 }
 
-pub struct LocalPopIterator<'a, 'b: 'a, T> {
-    consumer: &'b mut LocalConsumer<'a, T>,
+pub struct LocalPopIterator<'a, 'b: 'a, T, S: Counter> {
+    consumer: &'b mut LocalConsumer<'a, T, S>,
 }
 
-impl<'a, 'b: 'a, T> Iterator for LocalPopIterator<'a, 'b, T> {
+impl<'a, 'b: 'a, T, S: Counter> Iterator for LocalPopIterator<'a, 'b, T, S> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
         self.consumer.pop()
     }
 }
 
-impl<'a, T: Copy> LocalConsumer<'a, T> {
+impl<'a, T: Copy, S: Counter> LocalConsumer<'a, T, S> {
     /// Removes first elements from the ring buffer and writes them into a slice.
     /// Elements should be `Copy`.
     ///
@@ -223,10 +223,10 @@ impl<'a, T: Copy> LocalConsumer<'a, T> {
 }
 
 #[cfg(feature = "std")]
-impl<'a> LocalConsumer<'a, u8> {
-    pub fn write_into<S: Write>(
+impl<'a, S: Counter> LocalConsumer<'a, u8, S> {
+    pub fn write_into<P: Write>(
         &mut self,
-        writer: &mut S,
+        writer: &mut P,
         count: Option<usize>,
     ) -> io::Result<usize> {
         let (left, _) = unsafe { self.as_uninit_slices() };
@@ -241,7 +241,7 @@ impl<'a> LocalConsumer<'a, u8> {
 }
 
 #[cfg(feature = "std")]
-impl<'a> Read for LocalConsumer<'a, u8> {
+impl<'a, S: Counter> Read for LocalConsumer<'a, u8, S> {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         let n = self.pop_slice(buffer);
         if n == 0 && !buffer.is_empty() {

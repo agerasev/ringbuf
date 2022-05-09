@@ -1,16 +1,14 @@
 #[cfg(feature = "async")]
 mod async_;
 mod basic;
-mod counter;
 mod storage;
 
 #[cfg(feature = "async")]
 pub use async_::*;
 pub use basic::*;
-pub use counter::*;
 pub use storage::*;
 
-use crate::utils::uninit_array;
+use crate::{counter::AtomicCounter, utils::uninit_array};
 use core::mem::MaybeUninit;
 
 #[cfg(feature = "alloc")]
@@ -19,11 +17,11 @@ use alloc::vec::Vec;
 /// Stack-allocated ring buffer with static capacity.
 ///
 /// Capacity must be greater that zero.
-pub type StaticRingBuffer<T, const N: usize> = RingBuffer<T, [MaybeUninit<T>; N]>;
+pub type StaticRingBuffer<T, const N: usize> = RingBuffer<T, [MaybeUninit<T>; N], AtomicCounter>;
 
 /// Heap-allocated ring buffer.
 #[cfg(feature = "alloc")]
-pub type HeapRingBuffer<T> = RingBuffer<T, Vec<MaybeUninit<T>>>;
+pub type HeapRingBuffer<T> = RingBuffer<T, Vec<MaybeUninit<T>>, AtomicCounter>;
 
 #[cfg(feature = "alloc")]
 impl<T> HeapRingBuffer<T> {
