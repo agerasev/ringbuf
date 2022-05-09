@@ -120,8 +120,9 @@ where
     }
 }
 
-impl<T: Copy, C, S, R> Producer<T, C, S, R>
+impl<T, C, S, R> Producer<T, C, S, R>
 where
+    T: Copy,
     C: Container<T>,
     S: Counter,
     R: RingBufferRef<T, C, S>,

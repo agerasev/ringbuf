@@ -45,6 +45,23 @@ where
     }
 }
 
+impl<T, C, R> AsyncConsumer<T, C, R>
+where
+    T: Copy,
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+{
+    pub fn pop_slice<'a: 'b, 'b>(
+        &'a mut self,
+        slice: &'b mut [T],
+    ) -> PopSliceFuture<'a, 'b, T, C, R> {
+        PopSliceFuture {
+            owner: self,
+            slice: Some(slice),
+        }
+    }
+}
+
 pub struct PopFuture<'a, T, C, R>
 where
     C: Container<T>,
@@ -77,6 +94,44 @@ where
                 Poll::Ready(item)
             }
             None => Poll::Pending,
+        }
+    }
+}
+
+pub struct PopSliceFuture<'a, 'b, T, C, R>
+where
+    T: Copy,
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+{
+    owner: &'a mut AsyncConsumer<T, C, R>,
+    slice: Option<&'b mut [T]>,
+}
+impl<'a, 'b, T, C, R> Unpin for PopSliceFuture<'a, 'b, T, C, R>
+where
+    T: Copy,
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+{
+}
+impl<'a, 'b, T, C, R> Future for PopSliceFuture<'a, 'b, T, C, R>
+where
+    T: Copy,
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+{
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.owner.register_waker(cx.waker());
+        let mut slice = self.slice.take().unwrap();
+        let len = self.owner.base.pop_slice(slice);
+        slice = &mut slice[len..];
+        if slice.is_empty() {
+            Poll::Ready(())
+        } else {
+            self.slice.replace(slice);
+            Poll::Pending
         }
     }
 }

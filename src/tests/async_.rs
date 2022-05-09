@@ -1,9 +1,6 @@
 use crate::AsyncHeapRingBuffer;
-use futures::{
-    executor::{block_on, ThreadPool},
-    join,
-    task::{noop_waker_ref, AtomicWaker},
-};
+use futures::task::{noop_waker_ref, AtomicWaker};
+use std::{sync::mpsc, vec, vec::Vec};
 
 #[test]
 fn atomic_waker() {
@@ -19,44 +16,69 @@ fn atomic_waker() {
     assert!(waker.take().is_none());
 }
 
-#[test]
-fn push_pop() {
-    let attempts = 256;
-    let (mut prod, mut cons) = AsyncHeapRingBuffer::<i32>::new(2).split_async();
-    block_on(async {
-        join!(
-            async {
-                for i in 0..attempts {
-                    prod.push(i).await;
-                }
-            },
-            async {
-                for i in 0..attempts {
-                    assert_eq!(cons.pop().await, i);
-                }
-            }
-        );
-    });
+macro_rules! execute {
+    ( $( $tasks:expr ),* $(,)? ) => {
+        futures::executor::block_on(async {
+            futures::join!($($tasks),*)
+        });
+    };
+}
+
+macro_rules! execute_concurrently {
+    ( $pool_size:expr, $( $tasks:expr ),* $(,)? ) => {{
+        let pool = futures::executor::ThreadPool::builder()
+            .pool_size(2)
+            .create()
+            .unwrap();
+        let (tx, rx) = mpsc::channel();
+        let mut cnt = 0;
+        $(
+            let ltx = tx.clone();
+            pool.spawn_ok(async move {
+                $tasks.await;
+                ltx.send(()).unwrap();
+            });
+            cnt += 1;
+        )*
+        for _ in 0..cnt {
+            rx.recv().unwrap();
+        }
+    }};
 }
 
 #[test]
-fn push_pop_pool() {
-    use std::{println, thread};
-
+fn push_pop() {
     let attempts = 1024;
     let (mut prod, mut cons) = AsyncHeapRingBuffer::<i32>::new(2).split_async();
-    let pool = ThreadPool::builder().pool_size(2).create().unwrap();
-    pool.spawn_ok(async move {
-        for i in 0..attempts {
-            println!("Push thread {:?}", thread::current().id());
-            prod.push(i).await;
-        }
-    });
-    pool.spawn_ok(async move {
-        for i in 0..attempts {
-            println!("Pop thread {:?}", thread::current().id());
-            assert_eq!(cons.pop().await, i);
-        }
-    });
-    thread::sleep_ms(1000);
+    execute_concurrently!(
+        2,
+        async move {
+            for i in 0..attempts {
+                prod.push(i).await;
+            }
+        },
+        async move {
+            for i in 0..attempts {
+                assert_eq!(cons.pop().await, i);
+            }
+        },
+    );
+}
+
+#[test]
+fn push_pop_slice() {
+    let attempts = 1024;
+    let (mut prod, mut cons) = AsyncHeapRingBuffer::<usize>::new(3).split_async();
+    execute_concurrently!(
+        2,
+        async move {
+            let data = (0..attempts).collect::<Vec<_>>();
+            prod.push_slice(&data).await;
+        },
+        async move {
+            let mut data = vec![0; attempts];
+            cons.pop_slice(&mut data).await;
+            assert!(data.into_iter().eq(0..attempts));
+        },
+    );
 }
