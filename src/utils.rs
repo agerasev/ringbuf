@@ -1,5 +1,8 @@
 use core::mem::{self, MaybeUninit};
 
+// TODO: Remove on `Never` type (`!`) stabilization.
+pub enum Never {}
+
 // TODO: Remove on `maybe_uninit_uninit_array` stabilization.
 pub fn uninit_array<T, const N: usize>() -> [MaybeUninit<T>; N] {
     unsafe { MaybeUninit::<[MaybeUninit<T>; N]>::uninit().assume_init() }

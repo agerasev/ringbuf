@@ -8,6 +8,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll, Waker},
 };
+use futures::future::FusedFuture;
 
 pub struct AsyncProducer<T, C, R>
 where
@@ -43,6 +44,13 @@ where
             item: Some(item),
         }
     }
+
+    pub fn push_iter<I: Iterator<Item = T>>(&mut self, iter: I) -> PushIterFuture<'_, T, C, R, I> {
+        PushIterFuture {
+            owner: self,
+            iter: Some(iter),
+        }
+    }
 }
 
 impl<T, C, R> AsyncProducer<T, C, R>
@@ -75,6 +83,15 @@ where
     C: Container<T>,
     R: RingBufferRef<T, C, AsyncCounter>,
 {
+}
+impl<'a, T, C, R> FusedFuture for PushFuture<'a, T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+{
+    fn is_terminated(&self) -> bool {
+        self.item.is_none()
+    }
 }
 impl<'a, T, C, R> Future for PushFuture<'a, T, C, R>
 where
@@ -112,6 +129,16 @@ where
     R: RingBufferRef<T, C, AsyncCounter>,
 {
 }
+impl<'a, 'b, T, C, R> FusedFuture for PushSliceFuture<'a, 'b, T, C, R>
+where
+    T: Copy,
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+{
+    fn is_terminated(&self) -> bool {
+        self.slice.is_none()
+    }
+}
 impl<'a, 'b, T, C, R> Future for PushSliceFuture<'a, 'b, T, C, R>
 where
     T: Copy,
@@ -129,6 +156,57 @@ where
             Poll::Ready(())
         } else {
             self.slice.replace(slice);
+            Poll::Pending
+        }
+    }
+}
+
+pub struct PushIterFuture<'a, T, C, R, I>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+    I: Iterator<Item = T>,
+{
+    owner: &'a mut AsyncProducer<T, C, R>,
+    iter: Option<I>,
+}
+impl<'a, T, C, R, I> Unpin for PushIterFuture<'a, T, C, R, I>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+    I: Iterator<Item = T>,
+{
+}
+impl<'a, T, C, R, I> FusedFuture for PushIterFuture<'a, T, C, R, I>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+    I: Iterator<Item = T>,
+{
+    fn is_terminated(&self) -> bool {
+        self.iter.is_none()
+    }
+}
+impl<'a, T, C, R, I> Future for PushIterFuture<'a, T, C, R, I>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+    I: Iterator<Item = T>,
+{
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.owner.register_waker(cx.waker());
+        let mut iter = self.iter.take().unwrap();
+        let iter_ended = {
+            let mut local = self.owner.base.acquire();
+            local.push_iter(&mut iter);
+            !local.is_full()
+        };
+        if iter_ended {
+            Poll::Ready(())
+        } else {
+            self.iter.replace(iter);
             Poll::Pending
         }
     }

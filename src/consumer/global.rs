@@ -86,8 +86,8 @@ where
         self.acquire().pop()
     }
 
-    /// Returns iterator that removes elements one by one from the ring buffer.
-    pub fn pop_iter(&mut self) -> PopIterator<T, C, S, R> {
+    /// Returns an iterator that removes elements one by one from the ring buffer.
+    pub fn pop_iter(&mut self) -> PopIterator<'_, T, C, S, R> {
         PopIterator { consumer: self }
     }
 

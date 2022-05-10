@@ -123,7 +123,7 @@ impl<'a, T, S: Counter> LocalConsumer<'a, T, S> {
         }
     }
 
-    /// Returns iterator that removes elements one by one from the ring buffer.
+    /// Returns an iterator that removes elements one by one from the ring buffer.
     pub fn pop_iter(&mut self) -> LocalPopIterator<'a, '_, T, S> {
         LocalPopIterator { consumer: self }
     }
