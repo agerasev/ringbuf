@@ -52,6 +52,13 @@ where
             iter: Some(iter),
         }
     }
+
+    pub fn sink(&mut self) -> PushSink<'_, T, C, R> {
+        PushSink {
+            owner: self,
+            item: None,
+        }
+    }
 }
 
 impl<T, C, R> AsyncProducer<T, C, R>
@@ -219,6 +226,7 @@ where
     R: RingBufferRef<T, C, AsyncCounter>,
 {
     owner: &'a mut AsyncProducer<T, C, R>,
+    item: Option<T>,
 }
 impl<'a, T, C, R> Unpin for PushSink<'a, T, C, R>
 where
@@ -232,21 +240,26 @@ where
     R: RingBufferRef<T, C, AsyncCounter>,
 {
     type Error = Never;
-    /*
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let item = self.item.take().unwrap();
         self.owner.register_waker(cx.waker());
-        let mut iter = self.iter.take().unwrap();
-        let iter_ended = {
-            let mut local = self.owner.base.acquire();
-            local.push_iter(&mut iter);
-            !local.is_full()
-        };
-        if iter_ended {
-            Poll::Ready(())
-        } else {
-            self.iter.replace(iter);
-            Poll::Pending
+        match self.owner.base.push(item) {
+            Err(item) => {
+                self.item.replace(item);
+                Poll::Pending
+            }
+            Ok(()) => Poll::Ready(Ok(())),
         }
     }
-    */
+    fn start_send(mut self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
+        assert!(self.item.replace(item).is_none());
+        Ok(())
+    }
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
 }
