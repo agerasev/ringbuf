@@ -2,13 +2,14 @@ use super::Producer;
 use crate::{
     counter::AsyncCounter,
     ring_buffer::{Container, RingBufferRef},
+    utils::Never,
 };
 use core::{
     future::Future,
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-use futures::future::FusedFuture;
+use futures::{future::FusedFuture, sink::Sink};
 
 pub struct AsyncProducer<T, C, R>
 where
@@ -210,4 +211,42 @@ where
             Poll::Pending
         }
     }
+}
+
+pub struct PushSink<'a, T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+{
+    owner: &'a mut AsyncProducer<T, C, R>,
+}
+impl<'a, T, C, R> Unpin for PushSink<'a, T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+{
+}
+impl<'a, T, C, R> Sink<T> for PushSink<'a, T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+{
+    type Error = Never;
+    /*
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.owner.register_waker(cx.waker());
+        let mut iter = self.iter.take().unwrap();
+        let iter_ended = {
+            let mut local = self.owner.base.acquire();
+            local.push_iter(&mut iter);
+            !local.is_full()
+        };
+        if iter_ended {
+            Poll::Ready(())
+        } else {
+            self.iter.replace(iter);
+            Poll::Pending
+        }
+    }
+    */
 }
