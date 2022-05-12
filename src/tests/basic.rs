@@ -10,7 +10,7 @@ fn head_tail<T>(ring_buffer: &HeapRingBuffer<T>) -> (usize, usize) {
 fn capacity() {
     let cap = 13;
     let buf = HeapRingBuffer::<i32>::new(cap);
-    assert_eq!(buf.capacity().get(), cap);
+    assert_eq!(buf.capacity(), cap);
 }
 #[test]
 fn split_capacity() {

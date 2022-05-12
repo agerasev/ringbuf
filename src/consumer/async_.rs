@@ -8,6 +8,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll, Waker},
 };
+use futures::stream::Stream;
 
 pub struct AsyncConsumer<T, C, R>
 where
@@ -28,7 +29,17 @@ where
         }
     }
 
-    fn register_waker(&self, waker: &Waker) {
+    pub fn as_sync(&self) -> &Consumer<T, C, AsyncCounter, R> {
+        &self.base
+    }
+    pub fn as_mut_sync(&mut self) -> &mut Consumer<T, C, AsyncCounter, R> {
+        &mut self.base
+    }
+    pub fn into_sync(self) -> Consumer<T, C, AsyncCounter, R> {
+        self.base
+    }
+
+    pub(crate) fn register_waker(&self, waker: &Waker) {
         self.base
             .ring_buffer
             .counter()
@@ -42,6 +53,10 @@ where
             owner: self,
             done: false,
         }
+    }
+
+    pub fn stream(&mut self) -> PopStream<'_, T, C, R> {
+        PopStream { owner: self }
     }
 }
 
@@ -132,6 +147,35 @@ where
         } else {
             self.slice.replace(slice);
             Poll::Pending
+        }
+    }
+}
+
+pub struct PopStream<'a, T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+{
+    owner: &'a mut AsyncConsumer<T, C, R>,
+}
+impl<'a, 'b, T, C, R> Unpin for PopStream<'a, T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+{
+}
+impl<'a, 'b, T, C, R> Stream for PopStream<'a, T, C, R>
+where
+    C: Container<T>,
+    R: RingBufferRef<T, C, AsyncCounter>,
+{
+    type Item = T;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.owner.register_waker(cx.waker());
+        match self.owner.base.pop() {
+            Some(item) => Poll::Ready(Some(item)),
+            None => Poll::Pending,
         }
     }
 }

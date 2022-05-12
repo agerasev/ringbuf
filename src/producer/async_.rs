@@ -2,14 +2,13 @@ use super::Producer;
 use crate::{
     counter::AsyncCounter,
     ring_buffer::{Container, RingBufferRef},
-    utils::Never,
 };
 use core::{
     future::Future,
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-use futures::{future::FusedFuture, sink::Sink};
+use futures::{future::FusedFuture, never::Never, sink::Sink};
 
 pub struct AsyncProducer<T, C, R>
 where
@@ -30,7 +29,17 @@ where
         }
     }
 
-    fn register_waker(&self, waker: &Waker) {
+    pub fn as_sync(&self) -> &Producer<T, C, AsyncCounter, R> {
+        &self.base
+    }
+    pub fn as_mut_sync(&mut self) -> &mut Producer<T, C, AsyncCounter, R> {
+        &mut self.base
+    }
+    pub fn into_sync(self) -> Producer<T, C, AsyncCounter, R> {
+        self.base
+    }
+
+    pub(crate) fn register_waker(&self, waker: &Waker) {
         self.base
             .ring_buffer
             .counter()

@@ -23,8 +23,8 @@ pub struct RingBuffer<T, C: Container<T>, S: Counter> {
 
 impl<T, C: Container<T>, S: Counter> RingBuffer<T, C, S> {
     #[inline]
-    pub fn capacity(&self) -> NonZeroUsize {
-        self.storage.len()
+    pub fn capacity(&self) -> usize {
+        self.storage.len().get()
     }
 
     #[inline]

@@ -53,13 +53,14 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-mod counter;
 mod utils;
 
 mod consumer;
 mod producer;
 mod ring_buffer;
 mod transfer;
+
+pub mod counter;
 
 pub use consumer::*;
 pub use producer::*;

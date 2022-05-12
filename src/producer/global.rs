@@ -50,7 +50,7 @@ where
     /// The capacity of the buffer is constant.
     #[inline]
     pub fn capacity(&self) -> usize {
-        self.ring_buffer.capacity().get()
+        self.ring_buffer.capacity()
     }
 
     /// Checks if the ring buffer is empty.
