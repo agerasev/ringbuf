@@ -1,0 +1,26 @@
+[package]
+name = "async-ringbuf"
+version = "0.1.0"
+edition = "2021"
+resolver = "2"
+
+description = "Async SPSC FIFO ring buffer"
+documentation = "https://docs.rs/async-ringbuf"
+homepage = "https://github.com/agerasev/async-ringbuf"
+repository = "https://github.com/agerasev/async-ringbuf.git"
+readme = "README.md"
+keywords = ["async", "spsc", "ring-buffer", "rb", "fifo"]
+categories = ["concurrency", "data-structures", "no-std"]
+license = "MIT/Apache-2.0"
+
+[features]
+default = ["alloc", "std"]
+alloc = ["ringbuf/alloc"]
+std = ["alloc", "ringbuf/std"]
+
+[dependencies]
+ringbuf = { path = "../ringbuf", default-features = false }
+futures = { version = "0.3", default-features = false }
+
+[dev-dependencies]
+futures = { version = "0.3", features = ["executor", "thread-pool"] }
