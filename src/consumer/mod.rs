@@ -1,10 +1,6 @@
-#[cfg(feature = "async")]
-mod async_;
 mod global;
 mod local;
 
-#[cfg(feature = "async")]
-pub use async_::*;
 pub use global::*;
 pub use local::*;
 
