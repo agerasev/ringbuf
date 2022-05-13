@@ -13,11 +13,12 @@ use alloc::vec::Vec;
 /// Stack-allocated ring buffer with static capacity.
 ///
 /// Capacity must be greater that zero.
-pub type StaticRingBuffer<T, const N: usize> = RingBuffer<T, [MaybeUninit<T>; N], AtomicCounter>;
+pub type StaticRingBuffer<T, const N: usize> =
+    OwningRingBuffer<T, [MaybeUninit<T>; N], AtomicCounter>;
 
 /// Heap-allocated ring buffer.
 #[cfg(feature = "alloc")]
-pub type HeapRingBuffer<T> = RingBuffer<T, Vec<MaybeUninit<T>>, AtomicCounter>;
+pub type HeapRingBuffer<T> = OwningRingBuffer<T, Vec<MaybeUninit<T>>, AtomicCounter>;
 
 impl<T, const N: usize> Default for StaticRingBuffer<T, N> {
     fn default() -> Self {

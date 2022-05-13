@@ -2,7 +2,7 @@ use super::LocalConsumer;
 use crate::{
     counter::Counter,
     producer::Producer,
-    ring_buffer::{Container, RingBufferRef},
+    ring_buffer::{RingBuffer, RingBufferRef},
     transfer::transfer,
 };
 use core::marker::PhantomData;
@@ -13,22 +13,12 @@ use std::io::{self, Read, Write};
 /// HeapConsumer part of ring buffer.
 ///
 /// Generic over item type, ring buffer container and ring buffer reference.
-pub struct Consumer<T, C, S, R>
-where
-    C: Container<T>,
-    S: Counter,
-    R: RingBufferRef<T, C, S>,
-{
+pub struct Consumer<T, R: RingBufferRef<T>> {
     pub(crate) ring_buffer: R,
-    _phantom: PhantomData<(T, C, S)>,
+    _phantom: PhantomData<T>,
 }
 
-impl<T, C, S, R> Consumer<T, C, S, R>
-where
-    C: Container<T>,
-    S: Counter,
-    R: RingBufferRef<T, C, S>,
-{
+impl<T, R: RingBufferRef<T>> Consumer<T, R> {
     pub unsafe fn new(ring_buffer: R) -> Self {
         Self {
             ring_buffer,
@@ -36,7 +26,9 @@ where
         }
     }
 
-    pub fn acquire(&mut self) -> LocalConsumer<'_, T, S> {
+    pub fn acquire(
+        &mut self,
+    ) -> LocalConsumer<'_, T, <<R as RingBufferRef<T>>::RingBuffer as RingBuffer<T>>::Counter> {
         unsafe {
             LocalConsumer::new(
                 self.ring_buffer.data(),
@@ -87,7 +79,7 @@ where
     }
 
     /// Returns an iterator that removes elements one by one from the ring buffer.
-    pub fn pop_iter(&mut self) -> PopIterator<'_, T, C, S, R> {
+    pub fn pop_iter(&mut self) -> PopIterator<'_, T, R> {
         PopIterator { consumer: self }
     }
 
@@ -134,48 +126,27 @@ assert_eq!(cons.skip(8), 0);
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns count of elements been moved.
-    pub fn transfer_to<Cp, Sp, Rp>(
+    pub fn transfer_to<Rp: RingBufferRef<T>>(
         &mut self,
-        producer: &mut Producer<T, Cp, Sp, Rp>,
+        producer: &mut Producer<T, Rp>,
         count: Option<usize>,
-    ) -> usize
-    where
-        Cp: Container<T>,
-        Sp: Counter,
-        Rp: RingBufferRef<T, Cp, Sp>,
-    {
+    ) -> usize {
         transfer(self, producer, count)
     }
 }
 
-pub struct PopIterator<'a, T, C, S, R>
-where
-    C: Container<T>,
-    S: Counter,
-    R: RingBufferRef<T, C, S>,
-{
-    consumer: &'a mut Consumer<T, C, S, R>,
+pub struct PopIterator<'a, T, R: RingBufferRef<T>> {
+    consumer: &'a mut Consumer<T, R>,
 }
 
-impl<'a, T, C, S, R> Iterator for PopIterator<'a, T, C, S, R>
-where
-    C: Container<T>,
-    S: Counter,
-    R: RingBufferRef<T, C, S>,
-{
+impl<'a, T, R: RingBufferRef<T>> Iterator for PopIterator<'a, T, R> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
         self.consumer.pop()
     }
 }
 
-impl<T, C, S, R> Consumer<T, C, S, R>
-where
-    T: Copy,
-    C: Container<T>,
-    S: Counter,
-    R: RingBufferRef<T, C, S>,
-{
+impl<T: Copy, R: RingBufferRef<T>> Consumer<T, R> {
     /// Removes first elements from the ring buffer and writes them into a slice.
     /// Elements should be `Copy`.
     ///
@@ -186,12 +157,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<C, S, R> Consumer<u8, C, S, R>
-where
-    C: Container<u8>,
-    S: Counter,
-    R: RingBufferRef<u8, C, S>,
-{
+impl<R: RingBufferRef<u8>> Consumer<u8, R> {
     /// Removes at most first `count` bytes from the ring buffer and writes them into a `Write` instance.
     /// If `count` is `None` then as much as possible bytes will be written.
     ///
@@ -210,12 +176,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<C, S, R> Read for Consumer<u8, C, S, R>
-where
-    C: Container<u8>,
-    S: Counter,
-    R: RingBufferRef<u8, C, S>,
-{
+impl<R: RingBufferRef<u8>> Read for Consumer<u8, R> {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         self.acquire().read(buffer)
     }

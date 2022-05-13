@@ -5,6 +5,15 @@ use core::{mem::MaybeUninit, ops::Deref};
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
 
+pub trait RingBuffer<T> {
+    type Counter: Counter;
+
+    fn capacity(&self) -> usize;
+    #[allow(clippy::mut_from_ref)]
+    unsafe fn data(&self) -> &mut [MaybeUninit<T>];
+    fn counter(&self) -> &Self::Counter;
+}
+
 /// Ring buffer itself.
 ///
 /// The structure consists of abstract container (something that could be referenced as contiguous array) and two counters: `head` and `tail`.
@@ -13,28 +22,32 @@ use alloc::sync::Arc;
 /// The ring buffer does not take an extra space that means if its capacity is `N` then the container size is also `N` (not `N + 1`).
 /// This is achieved by using modulus of `2 * Self::capacity()` (instead of `Self::capacity()`) for `head` and `tail` arithmetics.
 /// It allows us to distinguish situations when the buffer is empty (`head == tail`) and when the buffer is full (`tail - head == Self::capacity()` modulo `2 * Self::capacity()`) without using an extra space in container.
-pub struct RingBuffer<T, C: Container<T>, S: Counter> {
+pub struct OwningRingBuffer<T, C: Container<T>, S: Counter> {
     storage: SharedStorage<T, C>,
     counter: S,
 }
 
-impl<T, C: Container<T>, S: Counter> RingBuffer<T, C, S> {
+impl<T, C: Container<T>, S: Counter> RingBuffer<T> for OwningRingBuffer<T, C, S> {
+    type Counter = S;
+
     #[inline]
-    pub fn capacity(&self) -> usize {
+    fn capacity(&self) -> usize {
         self.storage.len().get()
     }
 
     #[inline]
     #[allow(clippy::mut_from_ref)]
-    pub unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
+    unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
         self.storage.as_slice()
     }
 
     #[inline]
-    pub fn counter(&self) -> &S {
+    fn counter(&self) -> &S {
         &self.counter
     }
+}
 
+impl<T, C: Container<T>, S: Counter> OwningRingBuffer<T, C, S> {
     /// Constructs ring buffer from container and counters.
     ///
     /// # Safety
@@ -53,8 +66,7 @@ impl<T, C: Container<T>, S: Counter> RingBuffer<T, C, S> {
     ///
     /// This method consumes the ring buffer and puts it on heap in `Arc`. If you don't want to use heap the see `split_static`.
     #[cfg(feature = "alloc")]
-    #[allow(clippy::type_complexity)]
-    pub fn split(self) -> (Producer<T, C, S, Arc<Self>>, Consumer<T, C, S, Arc<Self>>) {
+    pub fn split(self) -> (Producer<T, Arc<Self>>, Consumer<T, Arc<Self>>) {
         let arc = Arc::new(self);
         unsafe { (Producer::new(arc.clone()), Consumer::new(arc)) }
     }
@@ -62,26 +74,25 @@ impl<T, C: Container<T>, S: Counter> RingBuffer<T, C, S> {
     /// Splits ring buffer into producer and consumer without using the heap.
     ///
     /// In this case producer and consumer stores a reference to the ring buffer, so you need to store the buffer somewhere.
-    #[allow(clippy::type_complexity)]
-    pub fn split_static(&mut self) -> (Producer<T, C, S, &Self>, Consumer<T, C, S, &Self>) {
+    pub fn split_static(&mut self) -> (Producer<T, &Self>, Consumer<T, &Self>) {
         unsafe { (Producer::new(self), Consumer::new(self)) }
     }
 }
 
-impl<T, C: Container<T>, S: Counter> Drop for RingBuffer<T, C, S> {
+impl<T, C: Container<T>, S: Counter> Drop for OwningRingBuffer<T, C, S> {
     fn drop(&mut self) {
-        unsafe { Consumer::<T, C, S, &Self>::new(self) }
-            .acquire()
-            .clear();
+        unsafe { Consumer::<T, &Self>::new(self) }.acquire().clear();
     }
 }
 
 /// Reference to the ring buffer.
-pub trait RingBufferRef<T, C: Container<T>, S: Counter>:
-    Deref<Target = RingBuffer<T, C, S>>
-{
+pub trait RingBufferRef<T>: Deref<Target = Self::RingBuffer> {
+    type RingBuffer: RingBuffer<T>;
 }
-impl<T, C: Container<T>, S: Counter, R> RingBufferRef<T, C, S> for R where
-    R: Deref<Target = RingBuffer<T, C, S>>
+
+impl<T, B: RingBuffer<T>, R> RingBufferRef<T> for R
+where
+    R: Deref<Target = B>,
 {
+    type RingBuffer = B;
 }

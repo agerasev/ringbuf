@@ -2,7 +2,7 @@ use super::LocalProducer;
 use crate::{
     consumer::Consumer,
     counter::Counter,
-    ring_buffer::{Container, RingBufferRef},
+    ring_buffer::{RingBuffer, RingBufferRef},
     transfer::transfer,
 };
 use core::marker::PhantomData;
@@ -13,22 +13,12 @@ use std::io::{self, Read, Write};
 /// Producer part of ring buffer.
 ///
 /// Generic over item type, ring buffer container and ring buffer reference.
-pub struct Producer<T, C, S, R>
-where
-    C: Container<T>,
-    S: Counter,
-    R: RingBufferRef<T, C, S>,
-{
+pub struct Producer<T, R: RingBufferRef<T>> {
     pub(crate) ring_buffer: R,
-    _phantom: PhantomData<(T, C, S)>,
+    _phantom: PhantomData<T>,
 }
 
-impl<T, C, S, R> Producer<T, C, S, R>
-where
-    C: Container<T>,
-    S: Counter,
-    R: RingBufferRef<T, C, S>,
-{
+impl<T, R: RingBufferRef<T>> Producer<T, R> {
     pub unsafe fn new(ring_buffer: R) -> Self {
         Self {
             ring_buffer,
@@ -36,7 +26,10 @@ where
         }
     }
 
-    pub fn acquire(&mut self) -> LocalProducer<'_, T, S> {
+    // TODO: Remove fully-qualified nested associated type on [#38078](https://github.com/rust-lang/rust/issues/38078) resolution.
+    pub fn acquire(
+        &mut self,
+    ) -> LocalProducer<'_, T, <<R as RingBufferRef<T>>::RingBuffer as RingBuffer<T>>::Counter> {
         unsafe {
             LocalProducer::new(
                 self.ring_buffer.data(),
@@ -106,27 +99,16 @@ where
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
     /// On success returns number of elements been moved.
-    pub fn transfer_from<Cc, Sc, Rc>(
+    pub fn transfer_from<Rc: RingBufferRef<T>>(
         &mut self,
-        consumer: &mut Consumer<T, Cc, Sc, Rc>,
+        consumer: &mut Consumer<T, Rc>,
         count: Option<usize>,
-    ) -> usize
-    where
-        Cc: Container<T>,
-        Sc: Counter,
-        Rc: RingBufferRef<T, Cc, Sc>,
-    {
+    ) -> usize {
         transfer(consumer, self, count)
     }
 }
 
-impl<T, C, S, R> Producer<T, C, S, R>
-where
-    T: Copy,
-    C: Container<T>,
-    S: Counter,
-    R: RingBufferRef<T, C, S>,
-{
+impl<T: Copy, R: RingBufferRef<T>> Producer<T, R> {
     /// Appends elements from slice to the ring buffer.
     /// Elements should be `Copy`.
     ///
@@ -137,12 +119,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<C, S, R> Producer<u8, C, S, R>
-where
-    C: Container<u8>,
-    S: Counter,
-    R: RingBufferRef<u8, C, S>,
-{
+impl<R: RingBufferRef<u8>> Producer<u8, R> {
     /// Reads at most `count` bytes from `Read` instance and appends them to the ring buffer.
     /// If `count` is `None` then as much as possible bytes will be read.
     ///
@@ -161,12 +138,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<C, S, R> Write for Producer<u8, C, S, R>
-where
-    C: Container<u8>,
-    S: Counter,
-    R: RingBufferRef<u8, C, S>,
-{
+impl<R: RingBufferRef<u8>> Write for Producer<u8, R> {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         self.acquire().write(buffer)
     }

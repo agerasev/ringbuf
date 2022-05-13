@@ -2,7 +2,7 @@ use crate::{
     consumer::{Consumer, LocalConsumer},
     counter::Counter,
     producer::{LocalProducer, Producer},
-    ring_buffer::{Container, RingBufferRef},
+    ring_buffer::RingBufferRef,
 };
 
 /// Moves at most `count` items from the `src` consumer to the `dst` producer.
@@ -40,18 +40,14 @@ where
     actual_count
 }
 
-pub fn transfer<T, Cc, Cp, Sc, Sp, Rc, Rp>(
-    src: &mut Consumer<T, Cc, Sc, Rc>,
-    dst: &mut Producer<T, Cp, Sp, Rp>,
+pub fn transfer<T, Rc, Rp>(
+    src: &mut Consumer<T, Rc>,
+    dst: &mut Producer<T, Rp>,
     count: Option<usize>,
 ) -> usize
 where
-    Cc: Container<T>,
-    Cp: Container<T>,
-    Sc: Counter,
-    Sp: Counter,
-    Rc: RingBufferRef<T, Cc, Sc>,
-    Rp: RingBufferRef<T, Cp, Sp>,
+    Rc: RingBufferRef<T>,
+    Rp: RingBufferRef<T>,
 {
     transfer_local(&mut src.acquire(), &mut dst.acquire(), count)
 }

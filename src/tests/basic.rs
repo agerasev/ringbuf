@@ -1,4 +1,4 @@
-use crate::{counter::Counter, HeapRingBuffer};
+use crate::{counter::Counter, HeapRingBuffer, RingBuffer as _};
 #[cfg(feature = "std")]
 use std::thread;
 
