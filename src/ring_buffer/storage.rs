@@ -3,6 +3,13 @@ use core::{
 };
 
 /// Abstract container for the ring buffer.
+///
+/// # Safety
+///
+/// *Container must not cause data race on concurrent `.as_mut()` calls.*
+///
+/// For now there are safe ring buffer constructors only for `Vec` and `[T; N]`.
+/// Using other conainers is unsafe.   
 pub trait Container<T>: AsMut<[MaybeUninit<T>]> {}
 impl<T, C> Container<T> for C where C: AsMut<[MaybeUninit<T>]> {}
 

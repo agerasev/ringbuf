@@ -11,14 +11,17 @@ use core::marker::PhantomData;
 use std::io::{self, Read, Write};
 
 /// Producer part of ring buffer.
-///
-/// Generic over item type, ring buffer container and ring buffer reference.
 pub struct Producer<T, R: RingBufferRef<T>> {
     ring_buffer_ref: R,
     _phantom: PhantomData<T>,
 }
 
 impl<T, R: RingBufferRef<T>> Producer<T, R> {
+    /// Creates producer from the ring buffer reference.
+    ///
+    /// # Safety
+    ///
+    /// There must be no another producer constructed from the same ring buffer.
     pub unsafe fn new(ring_buffer_ref: R) -> Self {
         Self {
             ring_buffer_ref,
@@ -26,15 +29,20 @@ impl<T, R: RingBufferRef<T>> Producer<T, R> {
         }
     }
 
+    /// Returns reference to the underlying ring buffer.
     #[inline]
     pub fn ring_buffer(&self) -> &R::RingBuffer {
         self.ring_buffer_ref.deref()
     }
 
+    /// Consumes `self` and returns underlying ring buffer reference.
     pub fn into_ring_buffer_ref(self) -> R {
         self.ring_buffer_ref
     }
 
+    /// Returns local producer that effectively freezes current ring buffer state.
+    ///
+    /// For more details see `LocalProducer`.
     pub fn acquire(&mut self) -> LocalProducer<'_, T, R::Counter> {
         unsafe {
             LocalProducer::new(
@@ -68,7 +76,7 @@ impl<T, R: RingBufferRef<T>> Producer<T, R> {
         self.ring_buffer().counter().is_full()
     }
 
-    /// The number of elements stored in the buffer.
+    /// The number of items stored in the buffer.
     ///
     /// Actual number may be equal to or less than the returned value.
     pub fn len(&self) -> usize {
@@ -82,29 +90,29 @@ impl<T, R: RingBufferRef<T>> Producer<T, R> {
         self.ring_buffer().counter().vacant_len()
     }
 
-    /// Appends an element to the ring buffer.
+    /// Appends an item to the ring buffer.
     ///
-    /// On failure returns an `Err` containing the element that hasn't been appended.
+    /// On failure returns an `Err` containing the item that hasn't been appended.
     pub fn push(&mut self, elem: T) -> Result<(), T> {
         self.acquire().push(elem)
     }
 
-    /// Appends elements from an iterator to the ring buffer.
+    /// Appends items from an iterator to the ring buffer.
     /// Elements that haven't been added to the ring buffer remain in the iterator.
     ///
-    /// Returns count of elements been appended to the ring buffer.
+    /// Returns count of items been appended to the ring buffer.
     ///
-    /// *Inserted elements are commited to the ring buffer all at once in the end,*
+    /// *Inserted items are commited to the ring buffer all at once in the end,*
     /// *e.g. when buffer is full or iterator has ended.*
     pub fn push_iter<I: Iterator<Item = T>>(&mut self, iter: &mut I) -> usize {
         self.acquire().push_iter(iter)
     }
 
-    /// Removes at most `count` elements from the consumer and appends them to the producer.
-    /// If `count` is `None` then as much as possible elements will be moved.
+    /// Removes at most `count` items from the consumer and appends them to the producer.
+    /// If `count` is `None` then as much as possible items will be moved.
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
-    /// On success returns number of elements been moved.
+    /// On success returns number of items been moved.
     pub fn transfer_from<Rc: RingBufferRef<T>>(
         &mut self,
         consumer: &mut Consumer<T, Rc>,
@@ -115,10 +123,10 @@ impl<T, R: RingBufferRef<T>> Producer<T, R> {
 }
 
 impl<T: Copy, R: RingBufferRef<T>> Producer<T, R> {
-    /// Appends elements from slice to the ring buffer.
+    /// Appends items from slice to the ring buffer.
     /// Elements should be `Copy`.
     ///
-    /// Returns count of elements been appended to the ring buffer.
+    /// Returns count of items been appended to the ring buffer.
     pub fn push_slice(&mut self, elems: &[T]) -> usize {
         self.acquire().push_slice(elems)
     }
@@ -132,8 +140,8 @@ impl<R: RingBufferRef<u8>> Producer<u8, R> {
     /// Returns `Ok(n)` if `read` succeeded. `n` is number of bytes been read.
     /// `n == 0` means that either `read` returned zero or ring buffer is full.
     ///
-    /// If `read` is failed or returned an invalid number then error is returned.
-    // TODO: Add note about reading only one contiguous slice at once.
+    /// If `read` is failed then original error is returned. In this case it is guaranteed that no items was read from the reader.
+    /// To achieve this we read only one contiguous slice at once. So this call may read less than `remaining` items in the buffer even if the reader is ready to provide more.
     pub fn read_from<P: Read>(
         &mut self,
         reader: &mut P,

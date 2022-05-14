@@ -35,7 +35,7 @@ fn skip() {
         i += 1;
     }
 
-    // Ask too much, delete the max number of elements
+    // Ask too much, delete the max number of items
     assert_eq!(cons.skip(10), 9);
 
     // Try to remove more than possible

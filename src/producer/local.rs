@@ -46,7 +46,7 @@ impl<'a, T, S: Counter> LocalProducer<'a, T, S> {
         self.counter.is_full()
     }
 
-    /// The number of elements stored in the buffer.
+    /// The number of items stored in the buffer.
     pub fn len(&self) -> usize {
         self.counter.occupied_len()
     }
@@ -61,10 +61,10 @@ impl<'a, T, S: Counter> LocalProducer<'a, T, S> {
     ///
     /// # Safety
     ///
-    /// Vacant memory is uninitialized. Initialized elements must be put starting from the beginning of first slice.
-    /// When first slice is fully filled then elements must be put to the beginning of the second slice.
+    /// Vacant memory is uninitialized. Initialized items must be put starting from the beginning of first slice.
+    /// When first slice is fully filled then items must be put to the beginning of the second slice.
     ///
-    /// *This method must be followed by `Self::advance` call with the number of elements being put previously as argument.*
+    /// *This method must be followed by `Self::advance` call with the number of items being put previously as argument.*
     /// *No other mutating calls allowed before that.*
     pub unsafe fn free_space_as_slices(
         &mut self,
@@ -81,14 +81,14 @@ impl<'a, T, S: Counter> LocalProducer<'a, T, S> {
     ///
     /// # Safety
     ///
-    /// First `count` elements in free space must be initialized.
+    /// First `count` items in free space must be initialized.
     pub unsafe fn advance(&mut self, count: usize) {
         self.counter.advance_tail(count);
     }
 
-    /// Appends an element to the ring buffer.
+    /// Appends an item to the ring buffer.
     ///
-    /// On failure returns an `Err` containing the element that hasn't been appended.
+    /// On failure returns an `Err` containing the item that hasn't been appended.
     pub fn push(&mut self, elem: T) -> Result<(), T> {
         if !self.is_full() {
             unsafe {
@@ -104,10 +104,10 @@ impl<'a, T, S: Counter> LocalProducer<'a, T, S> {
         }
     }
 
-    /// Appends elements from an iterator to the ring buffer.
+    /// Appends items from an iterator to the ring buffer.
     /// Elements that haven't been added to the ring buffer remain in the iterator.
     ///
-    /// Returns count of elements been appended to the ring buffer.
+    /// Returns count of items been appended to the ring buffer.
     pub fn push_iter<I: Iterator<Item = T>>(&mut self, iter: &mut I) -> usize {
         let (left, right) = unsafe { self.free_space_as_slices() };
         let mut count = 0;
@@ -122,11 +122,11 @@ impl<'a, T, S: Counter> LocalProducer<'a, T, S> {
         count
     }
 
-    /// Removes at most `count` elements from the consumer and appends them to the producer.
-    /// If `count` is `None` then as much as possible elements will be moved.
+    /// Removes at most `count` items from the consumer and appends them to the producer.
+    /// If `count` is `None` then as much as possible items will be moved.
     /// The producer and consumer parts may be of different buffers as well as of the same one.
     ///
-    /// On success returns number of elements been moved.
+    /// On success returns number of items been moved.
     pub fn transfer_from<'b, Sc: Counter>(
         &mut self,
         consumer: &mut LocalConsumer<'b, T, Sc>,
@@ -137,10 +137,10 @@ impl<'a, T, S: Counter> LocalProducer<'a, T, S> {
 }
 
 impl<'a, T: Copy, S: Counter> LocalProducer<'a, T, S> {
-    /// Appends elements from slice to the ring buffer.
+    /// Appends items from slice to the ring buffer.
     /// Elements should be `Copy`.
     ///
-    /// Returns count of elements been appended to the ring buffer.
+    /// Returns count of items been appended to the ring buffer.
     pub fn push_slice(&mut self, elems: &[T]) -> usize {
         let (left, right) = unsafe { self.free_space_as_slices() };
         let count = if elems.len() < left.len() {

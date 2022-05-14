@@ -5,7 +5,7 @@
 //! `HeapRingBuffer` is the initial structure representing ring buffer itself.
 //! Ring buffer can be splitted into pair of `HeapProducer` and `HeapConsumer`.
 //!
-//! `HeapProducer` and `HeapConsumer` are used to append/remove elements to/from the ring buffer accordingly. They can be safely sent between threads.
+//! `HeapProducer` and `HeapConsumer` are used to append/remove items to/from the ring buffer accordingly. They can be safely sent between threads.
 //! Operations with `HeapProducer` and `HeapConsumer` are lock-free - they succeed or fail immediately without blocking or waiting.
 //!
 //! Elements can be effectively appended/removed one by one or many at once.

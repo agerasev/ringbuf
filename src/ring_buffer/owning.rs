@@ -7,12 +7,13 @@ use alloc::sync::Arc;
 
 /// Ring buffer itself.
 ///
-/// The structure consists of abstract container (something that could be referenced as contiguous array) and two counters: `head` and `tail`.
-/// When an element is extracted from the ring buffer it is taken from the head side. New elements are appended to the tail side.
+/// The structure consists of:
+///
+/// 1. An abstract container. It is something that could be referenced as contiguous array.
+/// 2. A counter. It contains `head` and `tail` positions and implements a logic of moving them.
 ///
 /// The ring buffer does not take an extra space that means if its capacity is `N` then the container size is also `N` (not `N + 1`).
-/// This is achieved by using modulus of `2 * Self::capacity()` (instead of `Self::capacity()`) for `head` and `tail` arithmetics.
-/// It allows us to distinguish situations when the buffer is empty (`head == tail`) and when the buffer is full (`tail - head == Self::capacity()` modulo `2 * Self::capacity()`) without using an extra space in container.
+/// For details about how this is achieved see `counter::Counter`.
 pub struct OwningRingBuffer<T, C: Container<T>, S: Counter> {
     storage: SharedStorage<T, C>,
     counter: S,
@@ -43,13 +44,12 @@ impl<T, C: Container<T>, S: Counter> OwningRingBuffer<T, C, S> {
     /// # Safety
     ///
     /// The items in container inside `head..tail` range must be initialized, items outside this range must be uninitialized.
-    /// `head` and `tail` values must be valid (see structure documentaton).
-    pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
+    /// `head` and `tail` values must be valid (see `counter::Counter`).
+    /// Container and counter must have the same `len`.
+    pub unsafe fn from_raw_parts(container: C, counter: S) -> Self {
         let storage = SharedStorage::new(container);
-        Self {
-            counter: S::new(storage.len(), head, tail),
-            storage,
-        }
+        assert_eq!(storage.len(), counter.len());
+        Self { counter, storage }
     }
 
     /// Splits ring buffer into producer and consumer.
@@ -63,7 +63,7 @@ impl<T, C: Container<T>, S: Counter> OwningRingBuffer<T, C, S> {
 
     /// Splits ring buffer into producer and consumer without using the heap.
     ///
-    /// In this case producer and consumer stores a reference to the ring buffer, so you need to store the buffer somewhere.
+    /// In this case producer and consumer stores a reference to the ring buffer, so you also need to store the buffer somewhere.
     pub fn split_static(&mut self) -> (Producer<T, &Self>, Consumer<T, &Self>) {
         unsafe { (Producer::new(self), Consumer::new(self)) }
     }

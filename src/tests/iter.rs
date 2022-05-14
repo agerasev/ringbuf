@@ -10,8 +10,8 @@ fn iter() {
 
     let sum: i32 = cons.acquire().iter().sum();
 
-    let first = cons.pop().expect("First element not available");
-    let second = cons.pop().expect("Second element not available");
+    let first = cons.pop().expect("First item is not available");
+    let second = cons.pop().expect("Second item is not available");
 
     assert_eq!(sum, first + second);
 }
@@ -30,8 +30,8 @@ fn iter_mut() {
 
     let sum: i32 = cons.acquire().iter().sum();
 
-    let first = cons.pop().expect("First element not available");
-    let second = cons.pop().expect("Second element not available");
+    let first = cons.pop().expect("First item is not available");
+    let second = cons.pop().expect("Second item is not available");
 
     assert_eq!(sum, first + second);
 }
