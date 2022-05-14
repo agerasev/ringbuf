@@ -1,4 +1,4 @@
-use crate::AsyncHeapRingBuffer;
+use crate::{async_transfer, AsyncHeapRingBuffer};
 use futures::{
     sink::SinkExt,
     stream::{self, StreamExt},
@@ -19,11 +19,10 @@ fn atomic_waker() {
     waker.wake();
     assert!(waker.take().is_none());
 }
-
 struct Defer<F: FnOnce()>(Option<F>);
 impl<F: FnOnce()> Drop for Defer<F> {
     fn drop(&mut self) {
-        self.0.take();
+        self.0.take().unwrap()();
     }
 }
 
@@ -42,7 +41,7 @@ macro_rules! execute {
 macro_rules! execute_concurrently {
     ( $pool_size:expr, $( $tasks:expr ),* $(,)? ) => {{
         let pool = futures::executor::ThreadPool::builder()
-            .pool_size(2)
+            .pool_size($pool_size)
             .create()
             .unwrap();
         let (tx, rx) = mpsc::channel();
@@ -61,7 +60,7 @@ macro_rules! execute_concurrently {
     }};
 }
 
-const COUNT: usize = 1024;
+const COUNT: usize = 16;
 
 #[test]
 fn push_pop() {
@@ -100,7 +99,7 @@ fn push_pop_slice() {
 
 #[test]
 fn sink_stream() {
-    let (mut prod, mut cons) = AsyncHeapRingBuffer::<usize>::new(3).split_async();
+    let (mut prod, mut cons) = AsyncHeapRingBuffer::<usize>::new(1).split_async();
     execute_concurrently!(
         2,
         async move {
@@ -112,7 +111,6 @@ fn sink_stream() {
                 cons.stream()
                     .take(COUNT)
                     .fold(0, |s, x| async move {
-                        std::println!("{}", x);
                         assert_eq!(s, x);
                         s + 1
                     })
@@ -122,22 +120,30 @@ fn sink_stream() {
         },
     );
 }
-/*
+
 #[test]
 fn transfer() {
     let (mut src_prod, mut src_cons) = AsyncHeapRingBuffer::<usize>::new(3).split_async();
     let (mut dst_prod, mut dst_cons) = AsyncHeapRingBuffer::<usize>::new(5).split_async();
-    let (done_send, done_recv) = AsyncHeapRingBuffer::<usize>::new(1).split_async();
     execute_concurrently!(
         3,
+        async move { async_transfer(&mut src_cons, &mut dst_prod, Some(COUNT)).await },
         async move {
-            src_prod.sink().send_all(0..COUNT).await;
+            let mut src = stream::iter(0..COUNT).map(Ok);
+            src_prod.sink().send_all(&mut src).await.unwrap();
         },
         async move {
-            let mut data = vec![0; COUNT];
-            cons.pop_slice(&mut data).await;
-            assert!(data.into_iter().eq(0..COUNT));
+            assert_eq!(
+                dst_cons
+                    .stream()
+                    .take(COUNT)
+                    .fold(0, |s, x| async move {
+                        assert_eq!(s, x);
+                        s + 1
+                    })
+                    .await,
+                COUNT
+            );
         },
     );
 }
-*/

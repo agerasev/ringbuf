@@ -1,42 +1,69 @@
 use crate::{consumer::AsyncConsumer, counter::AsyncCounter, producer::AsyncProducer};
-use ringbuf::{Container, RingBuffer};
+use core::{marker::PhantomData, mem::MaybeUninit};
+use ringbuf::{OwningRingBuffer, RingBuffer};
 
-pub struct AsyncRingBuffer<T, C: Container<T>> {
-    base: RingBuffer<T, C, AsyncCounter>,
+#[cfg(feature = "alloc")]
+use alloc::{sync::Arc, vec::Vec};
+
+pub struct AsyncRingBuffer<T, B>
+where
+    B: RingBuffer<T, Counter = AsyncCounter>,
+{
+    base: B,
+    _phantom: PhantomData<T>,
 }
 
-impl<T, C: Container> AsyncRingBuffer<T, C> {
-    pub fn from_sync(base: RingBuffer<T, C, AsyncCounter>) -> Self {}
+impl<T, B> RingBuffer<T> for AsyncRingBuffer<T, B>
+where
+    B: RingBuffer<T, Counter = AsyncCounter>,
+{
+    type Counter = AsyncCounter;
+
+    #[inline]
+    fn capacity(&self) -> usize {
+        self.base.capacity()
+    }
+
+    #[inline]
+    unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
+        self.base.data()
+    }
+
+    #[inline]
+    fn counter(&self) -> &AsyncCounter {
+        self.base.counter()
+    }
 }
 
-impl<T, C: Container<T>> RingBuffer<T, C, AsyncCounter> {
+impl<T, B> AsyncRingBuffer<T, B>
+where
+    B: RingBuffer<T, Counter = AsyncCounter>,
+{
+    pub fn from_sync(base: B) -> Self {
+        Self {
+            base,
+            _phantom: PhantomData,
+        }
+    }
+
     #[cfg(feature = "alloc")]
-    #[allow(clippy::type_complexity)]
-    pub fn split_async(
-        self,
-    ) -> (
-        AsyncProducer<T, C, Arc<Self>>,
-        AsyncConsumer<T, C, Arc<Self>>,
-    ) {
+    pub fn split_async(self) -> (AsyncProducer<T, Arc<Self>>, AsyncConsumer<T, Arc<Self>>) {
         let arc = Arc::new(self);
         unsafe { (AsyncProducer::new(arc.clone()), AsyncConsumer::new(arc)) }
     }
 
-    pub fn split_async_static(
-        &mut self,
-    ) -> (AsyncProducer<T, C, &Self>, AsyncConsumer<T, C, &Self>) {
+    pub fn split_async_static(&mut self) -> (AsyncProducer<T, &Self>, AsyncConsumer<T, &Self>) {
         unsafe { (AsyncProducer::new(self), AsyncConsumer::new(self)) }
     }
 }
 
 #[cfg(feature = "alloc")]
-pub type AsyncHeapRingBuffer<T> = RingBuffer<T, Vec<MaybeUninit<T>>, AsyncCounter>;
+pub type AsyncHeapRingBuffer<T> =
+    AsyncRingBuffer<T, OwningRingBuffer<T, Vec<MaybeUninit<T>>, AsyncCounter>>;
 
 #[cfg(feature = "alloc")]
 impl<T> AsyncHeapRingBuffer<T> {
     pub fn new(capacity: usize) -> Self {
-        let mut data = Vec::new();
-        data.resize_with(capacity, MaybeUninit::uninit);
-        unsafe { Self::from_raw_parts(data, 0, 0) }
+        Self::from_sync(OwningRingBuffer::new(capacity))
     }
 }

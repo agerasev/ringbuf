@@ -5,20 +5,18 @@ use core::{
     task::{Context, Poll, Waker},
 };
 use futures::stream::Stream;
-use ringbuf::{Consumer, Container, RingBufferRef};
+use ringbuf::{Consumer, RingBuffer, RingBufferRef};
 
-pub struct AsyncConsumer<T, C, R>
+pub struct AsyncConsumer<T, R>
 where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
+    R: RingBufferRef<T, Counter = AsyncCounter>,
 {
-    pub(crate) base: Consumer<T, C, AsyncCounter, R>,
+    base: Consumer<T, R>,
 }
 
-impl<T, C, R> AsyncConsumer<T, C, R>
+impl<T, R> AsyncConsumer<T, R>
 where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
+    R: RingBufferRef<T, Counter = AsyncCounter>,
 {
     pub unsafe fn new(ring_buffer: R) -> Self {
         Self {
@@ -26,47 +24,43 @@ where
         }
     }
 
-    pub fn as_sync(&self) -> &Consumer<T, C, AsyncCounter, R> {
+    pub fn as_sync(&self) -> &Consumer<T, R> {
         &self.base
     }
-    pub fn as_mut_sync(&mut self) -> &mut Consumer<T, C, AsyncCounter, R> {
+    pub fn as_mut_sync(&mut self) -> &mut Consumer<T, R> {
         &mut self.base
     }
-    pub fn into_sync(self) -> Consumer<T, C, AsyncCounter, R> {
+    pub fn into_sync(self) -> Consumer<T, R> {
         self.base
     }
 
     pub(crate) fn register_waker(&self, waker: &Waker) {
         self.base
-            .ring_buffer
+            .ring_buffer()
             .counter()
             .wakers()
             .tail
             .register(waker);
     }
 
-    pub fn pop(&mut self) -> PopFuture<'_, T, C, R> {
+    pub fn pop(&mut self) -> PopFuture<'_, T, R> {
         PopFuture {
             owner: self,
             done: false,
         }
     }
 
-    pub fn stream(&mut self) -> PopStream<'_, T, C, R> {
+    pub fn stream(&mut self) -> PopStream<'_, T, R> {
         PopStream { owner: self }
     }
 }
 
-impl<T, C, R> AsyncConsumer<T, C, R>
+impl<T, R> AsyncConsumer<T, R>
 where
     T: Copy,
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
+    R: RingBufferRef<T, Counter = AsyncCounter>,
 {
-    pub fn pop_slice<'a: 'b, 'b>(
-        &'a mut self,
-        slice: &'b mut [T],
-    ) -> PopSliceFuture<'a, 'b, T, C, R> {
+    pub fn pop_slice<'a: 'b, 'b>(&'a mut self, slice: &'b mut [T]) -> PopSliceFuture<'a, 'b, T, R> {
         PopSliceFuture {
             owner: self,
             slice: Some(slice),
@@ -74,26 +68,19 @@ where
     }
 }
 
-pub struct PopFuture<'a, T, C, R>
+pub struct PopFuture<'a, T, R>
 where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
+    R: RingBufferRef<T, Counter = AsyncCounter>,
 {
-    owner: &'a mut AsyncConsumer<T, C, R>,
+    owner: &'a mut AsyncConsumer<T, R>,
     done: bool,
 }
 
-impl<'a, T, C, R> Unpin for PopFuture<'a, T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
-}
+impl<'a, T, R> Unpin for PopFuture<'a, T, R> where R: RingBufferRef<T, Counter = AsyncCounter> {}
 
-impl<'a, T, C, R> Future for PopFuture<'a, T, C, R>
+impl<'a, T, R> Future for PopFuture<'a, T, R>
 where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
+    R: RingBufferRef<T, Counter = AsyncCounter>,
 {
     type Output = T;
 
@@ -110,27 +97,24 @@ where
     }
 }
 
-pub struct PopSliceFuture<'a, 'b, T, C, R>
+pub struct PopSliceFuture<'a, 'b, T, R>
 where
     T: Copy,
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
+    R: RingBufferRef<T, Counter = AsyncCounter>,
 {
-    owner: &'a mut AsyncConsumer<T, C, R>,
+    owner: &'a mut AsyncConsumer<T, R>,
     slice: Option<&'b mut [T]>,
 }
-impl<'a, 'b, T, C, R> Unpin for PopSliceFuture<'a, 'b, T, C, R>
+impl<'a, 'b, T, R> Unpin for PopSliceFuture<'a, 'b, T, R>
 where
     T: Copy,
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
+    R: RingBufferRef<T, Counter = AsyncCounter>,
 {
 }
-impl<'a, 'b, T, C, R> Future for PopSliceFuture<'a, 'b, T, C, R>
+impl<'a, 'b, T, R> Future for PopSliceFuture<'a, 'b, T, R>
 where
     T: Copy,
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
+    R: RingBufferRef<T, Counter = AsyncCounter>,
 {
     type Output = ();
 
@@ -148,23 +132,16 @@ where
     }
 }
 
-pub struct PopStream<'a, T, C, R>
+pub struct PopStream<'a, T, R>
 where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
+    R: RingBufferRef<T, Counter = AsyncCounter>,
 {
-    owner: &'a mut AsyncConsumer<T, C, R>,
+    owner: &'a mut AsyncConsumer<T, R>,
 }
-impl<'a, 'b, T, C, R> Unpin for PopStream<'a, T, C, R>
+impl<'a, 'b, T, R> Unpin for PopStream<'a, T, R> where R: RingBufferRef<T, Counter = AsyncCounter> {}
+impl<'a, 'b, T, R> Stream for PopStream<'a, T, R>
 where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
-}
-impl<'a, 'b, T, C, R> Stream for PopStream<'a, T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
+    R: RingBufferRef<T, Counter = AsyncCounter>,
 {
     type Item = T;
 

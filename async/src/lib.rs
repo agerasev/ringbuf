@@ -1,3 +1,10 @@
+#[cfg(feature = "alloc")]
+extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
+
+pub use ringbuf;
+
 mod consumer;
 mod producer;
 mod ring_buffer;
