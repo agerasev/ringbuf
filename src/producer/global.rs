@@ -14,26 +14,32 @@ use std::io::{self, Read, Write};
 ///
 /// Generic over item type, ring buffer container and ring buffer reference.
 pub struct Producer<T, R: RingBufferRef<T>> {
-    pub(crate) ring_buffer: R,
+    ring_buffer_ref: R,
     _phantom: PhantomData<T>,
 }
 
 impl<T, R: RingBufferRef<T>> Producer<T, R> {
-    pub unsafe fn new(ring_buffer: R) -> Self {
+    pub unsafe fn new(ring_buffer_ref: R) -> Self {
         Self {
-            ring_buffer,
+            ring_buffer_ref,
             _phantom: PhantomData,
         }
     }
 
-    // TODO: Remove fully-qualified nested associated type on [#38078](https://github.com/rust-lang/rust/issues/38078) resolution.
-    pub fn acquire(
-        &mut self,
-    ) -> LocalProducer<'_, T, <<R as RingBufferRef<T>>::RingBuffer as RingBuffer<T>>::Counter> {
+    #[inline]
+    pub fn ring_buffer(&self) -> &R::RingBuffer {
+        self.ring_buffer_ref.deref()
+    }
+
+    pub fn into_ring_buffer_ref(self) -> R {
+        self.ring_buffer_ref
+    }
+
+    pub fn acquire(&mut self) -> LocalProducer<'_, T, R::Counter> {
         unsafe {
             LocalProducer::new(
-                self.ring_buffer.data(),
-                self.ring_buffer.counter().acquire_tail(),
+                self.ring_buffer().data(),
+                self.ring_buffer().counter().acquire_tail(),
             )
         }
     }
@@ -43,7 +49,7 @@ impl<T, R: RingBufferRef<T>> Producer<T, R> {
     /// The capacity of the buffer is constant.
     #[inline]
     pub fn capacity(&self) -> usize {
-        self.ring_buffer.capacity()
+        self.ring_buffer().capacity()
     }
 
     /// Checks if the ring buffer is empty.
@@ -51,7 +57,7 @@ impl<T, R: RingBufferRef<T>> Producer<T, R> {
     /// The result is relevant until you push items to the producer.
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.ring_buffer.counter().is_empty()
+        self.ring_buffer().counter().is_empty()
     }
 
     /// Checks if the ring buffer is full.
@@ -59,21 +65,21 @@ impl<T, R: RingBufferRef<T>> Producer<T, R> {
     /// *The result may become irrelevant at any time because of concurring activity of the consumer.*
     #[inline]
     pub fn is_full(&self) -> bool {
-        self.ring_buffer.counter().is_full()
+        self.ring_buffer().counter().is_full()
     }
 
     /// The number of elements stored in the buffer.
     ///
     /// Actual number may be equal to or less than the returned value.
     pub fn len(&self) -> usize {
-        self.ring_buffer.counter().occupied_len()
+        self.ring_buffer().counter().occupied_len()
     }
 
     /// The number of remaining free places in the buffer.
     ///
     /// Actual number may be equal to or greater than the returning value.
     pub fn remaining(&self) -> usize {
-        self.ring_buffer.counter().vacant_len()
+        self.ring_buffer().counter().vacant_len()
     }
 
     /// Appends an element to the ring buffer.

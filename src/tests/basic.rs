@@ -46,16 +46,16 @@ fn push() {
     let buf = HeapRingBuffer::<i32>::new(cap);
     let (mut prod, _) = buf.split();
 
-    assert_eq!(head_tail(&prod.ring_buffer), (0, 0));
+    assert_eq!(head_tail(prod.ring_buffer()), (0, 0));
 
     assert_eq!(prod.push(123), Ok(()));
-    assert_eq!(head_tail(&prod.ring_buffer), (0, 1));
+    assert_eq!(head_tail(prod.ring_buffer()), (0, 1));
 
     assert_eq!(prod.push(234), Ok(()));
-    assert_eq!(head_tail(&prod.ring_buffer), (0, 2));
+    assert_eq!(head_tail(prod.ring_buffer()), (0, 2));
 
     assert_eq!(prod.push(345), Err(345));
-    assert_eq!(head_tail(&prod.ring_buffer), (0, 2));
+    assert_eq!(head_tail(prod.ring_buffer()), (0, 2));
 }
 
 #[test]
@@ -64,10 +64,10 @@ fn pop_empty() {
     let buf = HeapRingBuffer::<i32>::new(cap);
     let (_, mut cons) = buf.split();
 
-    assert_eq!(head_tail(&cons.ring_buffer), (0, 0));
+    assert_eq!(head_tail(cons.ring_buffer()), (0, 0));
 
     assert_eq!(cons.pop(), None);
-    assert_eq!(head_tail(&cons.ring_buffer), (0, 0));
+    assert_eq!(head_tail(cons.ring_buffer()), (0, 0));
 }
 
 #[test]
@@ -78,21 +78,21 @@ fn push_pop_one() {
 
     let vcap = 2 * cap;
     let values = [12, 34, 56, 78, 90];
-    assert_eq!(head_tail(&cons.ring_buffer), (0, 0));
+    assert_eq!(head_tail(cons.ring_buffer()), (0, 0));
 
     for (i, v) in values.iter().enumerate() {
         assert_eq!(prod.push(*v), Ok(()));
-        assert_eq!(head_tail(&cons.ring_buffer), (i % vcap, (i + 1) % vcap));
+        assert_eq!(head_tail(cons.ring_buffer()), (i % vcap, (i + 1) % vcap));
 
         assert_eq!(cons.pop().unwrap(), *v);
         assert_eq!(
-            head_tail(&cons.ring_buffer),
+            head_tail(cons.ring_buffer()),
             ((i + 1) % vcap, (i + 1) % vcap)
         );
 
         assert_eq!(cons.pop(), None);
         assert_eq!(
-            head_tail(&cons.ring_buffer),
+            head_tail(cons.ring_buffer()),
             ((i + 1) % vcap, (i + 1) % vcap)
         );
     }
@@ -106,42 +106,42 @@ fn push_pop_all() {
 
     let vcap = 2 * cap;
     let values = [(12, 34, 13), (56, 78, 57), (90, 10, 91)];
-    assert_eq!(head_tail(&cons.ring_buffer), (0, 0));
+    assert_eq!(head_tail(cons.ring_buffer()), (0, 0));
 
     for (i, v) in values.iter().enumerate() {
         assert_eq!(prod.push(v.0), Ok(()));
         assert_eq!(
-            head_tail(&cons.ring_buffer),
+            head_tail(cons.ring_buffer()),
             (cap * i % vcap, (cap * i + 1) % vcap)
         );
 
         assert_eq!(prod.push(v.1), Ok(()));
         assert_eq!(
-            head_tail(&cons.ring_buffer),
+            head_tail(cons.ring_buffer()),
             (cap * i % vcap, (cap * i + 2) % vcap)
         );
 
         assert_eq!(prod.push(v.2).unwrap_err(), v.2);
         assert_eq!(
-            head_tail(&cons.ring_buffer),
+            head_tail(cons.ring_buffer()),
             (cap * i % vcap, (cap * i + 2) % vcap)
         );
 
         assert_eq!(cons.pop().unwrap(), v.0);
         assert_eq!(
-            head_tail(&cons.ring_buffer),
+            head_tail(cons.ring_buffer()),
             ((cap * i + 1) % vcap, (cap * i + 2) % vcap)
         );
 
         assert_eq!(cons.pop().unwrap(), v.1);
         assert_eq!(
-            head_tail(&cons.ring_buffer),
+            head_tail(cons.ring_buffer()),
             ((cap * i + 2) % vcap, (cap * i + 2) % vcap)
         );
 
         assert_eq!(cons.pop(), None);
         assert_eq!(
-            head_tail(&cons.ring_buffer),
+            head_tail(cons.ring_buffer()),
             ((cap * i + 2) % vcap, (cap * i + 2) % vcap)
         );
     }

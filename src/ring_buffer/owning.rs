@@ -1,18 +1,9 @@
-use super::{Container, SharedStorage};
+use super::{Container, RingBuffer, SharedStorage};
 use crate::{consumer::Consumer, counter::Counter, producer::Producer};
-use core::{mem::MaybeUninit, ops::Deref};
+use core::mem::MaybeUninit;
 
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
-
-pub trait RingBuffer<T> {
-    type Counter: Counter;
-
-    fn capacity(&self) -> usize;
-    #[allow(clippy::mut_from_ref)]
-    unsafe fn data(&self) -> &mut [MaybeUninit<T>];
-    fn counter(&self) -> &Self::Counter;
-}
 
 /// Ring buffer itself.
 ///
@@ -36,7 +27,6 @@ impl<T, C: Container<T>, S: Counter> RingBuffer<T> for OwningRingBuffer<T, C, S>
     }
 
     #[inline]
-    #[allow(clippy::mut_from_ref)]
     unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
         self.storage.as_slice()
     }
@@ -83,16 +73,4 @@ impl<T, C: Container<T>, S: Counter> Drop for OwningRingBuffer<T, C, S> {
     fn drop(&mut self) {
         unsafe { Consumer::<T, &Self>::new(self) }.acquire().clear();
     }
-}
-
-/// Reference to the ring buffer.
-pub trait RingBufferRef<T>: Deref<Target = Self::RingBuffer> {
-    type RingBuffer: RingBuffer<T>;
-}
-
-impl<T, B: RingBuffer<T>, R> RingBufferRef<T> for R
-where
-    R: Deref<Target = B>,
-{
-    type RingBuffer = B;
 }
