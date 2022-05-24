@@ -1,9 +1,9 @@
-use super::{Container, RingBuffer, SharedStorage};
-use crate::{consumer::Consumer, counter::Counter, producer::Producer};
-use core::mem::MaybeUninit;
+use super::{Container, RingBuffer, RingBufferBase, RingBufferHead, RingBufferTail, SharedStorage};
+//use crate::{consumer::Consumer, counter::Counter, producer::Producer};
+use core::{cell::Cell, mem::MaybeUninit, num::NonZeroUsize};
 
-#[cfg(feature = "alloc")]
-use alloc::sync::Arc;
+//#[cfg(feature = "alloc")]
+//use alloc::sync::Arc;
 
 /// Ring buffer itself.
 ///
@@ -14,31 +14,52 @@ use alloc::sync::Arc;
 ///
 /// The ring buffer does not take an extra space that means if its capacity is `N` then the container size is also `N` (not `N + 1`).
 /// For details about how this is achieved see `counter::Counter`.
-pub struct OwningRingBuffer<T, C: Container<T>, S: Counter> {
+pub struct LocalRingBuffer<T, C: Container<T>> {
     storage: SharedStorage<T, C>,
-    counter: S,
+    len: NonZeroUsize,
+    head: Cell<usize>,
+    tail: Cell<usize>,
 }
 
-impl<T, C: Container<T>, S: Counter> RingBuffer<T> for OwningRingBuffer<T, C, S> {
-    type Counter = S;
-
-    #[inline]
-    fn capacity(&self) -> usize {
-        self.storage.len().get()
-    }
-
+impl<T, C: Container<T>> RingBufferBase<T> for LocalRingBuffer<T, C> {
     #[inline]
     unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
         self.storage.as_slice()
     }
 
     #[inline]
-    fn counter(&self) -> &S {
-        &self.counter
+    fn capacity(&self) -> NonZeroUsize {
+        self.len
+    }
+
+    #[inline]
+    fn head(&self) -> usize {
+        self.head.get()
+    }
+
+    #[inline]
+    fn tail(&self) -> usize {
+        self.tail.get()
     }
 }
 
-impl<T, C: Container<T>, S: Counter> OwningRingBuffer<T, C, S> {
+impl<T, C: Container<T>> RingBufferHead<T> for LocalRingBuffer<T, C> {
+    #[inline]
+    unsafe fn set_head(&self, value: usize) {
+        self.head.set(value);
+    }
+}
+
+impl<T, C: Container<T>> RingBufferTail<T> for LocalRingBuffer<T, C> {
+    #[inline]
+    unsafe fn set_tail(&self, value: usize) {
+        self.tail.set(value);
+    }
+}
+
+impl<T, C: Container<T>> RingBuffer<T> for LocalRingBuffer<T, C> {}
+
+impl<T, C: Container<T>> LocalRingBuffer<T, C> {
     /// Constructs ring buffer from container and counters.
     ///
     /// # Safety
@@ -47,12 +68,16 @@ impl<T, C: Container<T>, S: Counter> OwningRingBuffer<T, C, S> {
     /// `head` and `tail` values must be valid (see [`Counter`](`crate::counter::Counter`)).
     ///
     /// Container and counter must have the same `len`.
-    pub unsafe fn from_raw_parts(container: C, counter: S) -> Self {
+    pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
         let storage = SharedStorage::new(container);
-        assert_eq!(storage.len(), counter.len());
-        Self { counter, storage }
+        Self {
+            len: storage.len(),
+            storage,
+            head: Cell::new(head),
+            tail: Cell::new(tail),
+        }
     }
-
+    /*
     /// Splits ring buffer into producer and consumer.
     ///
     /// This method consumes the ring buffer and puts it on heap in [`Arc`]. If you don't want to use heap the see [`Self::split_static`].
@@ -68,10 +93,13 @@ impl<T, C: Container<T>, S: Counter> OwningRingBuffer<T, C, S> {
     pub fn split_static(&mut self) -> (Producer<T, &Self>, Consumer<T, &Self>) {
         unsafe { (Producer::new(self), Consumer::new(self)) }
     }
+    */
 }
 
-impl<T, C: Container<T>, S: Counter> Drop for OwningRingBuffer<T, C, S> {
+/*
+impl<T, C: Container<T>> Drop for LocalRingBuffer<T, C> {
     fn drop(&mut self) {
         unsafe { Consumer::<T, &Self>::new(self) }.acquire().clear();
     }
 }
+*/

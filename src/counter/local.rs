@@ -40,16 +40,7 @@ impl Counter for LocalCounter {
     fn len(&self) -> NonZeroUsize {
         self.len
     }
-    fn head(&self) -> usize {
-        self.head.get()
-    }
-    fn tail(&self) -> usize {
-        self.tail.get()
-    }
 
-    unsafe fn set_head(&self, value: usize) {
-        self.head.set(value);
-    }
     unsafe fn set_tail(&self, value: usize) {
         self.tail.set(value);
     }
@@ -113,37 +104,6 @@ impl<'a, S: Counter> LocalHeadCounter<'a, S> {
             global,
         }
     }
-
-    /// Returns a pair of slices which contain, in order, the occupied cells in the ring buffer.
-    ///
-    /// All items in slices are guaranteed to be **initialized**.
-    ///
-    /// *The slices may not include items pushed to the buffer by the concurring producer right after this call.*
-    pub fn occupied_ranges(&self) -> (Range<usize>, Range<usize>) {
-        let head = self.head();
-        let tail = self.tail();
-        let len = self.len();
-
-        let (head_div, head_mod) = (head / len, head % len);
-        let (tail_div, tail_mod) = (tail / len, tail % len);
-
-        if head_div == tail_div {
-            (head_mod..tail_mod, 0..0)
-        } else {
-            (head_mod..len.get(), 0..tail_mod)
-        }
-    }
-    /// Move **head** position by `count` items forward.
-    ///
-    /// # Safety
-    ///
-    /// First `count` items in occupied area must be **initialized** before this call.
-    ///
-    /// *In debug mode panics if `count` is greater than number of items in the ring buffer.*
-    pub unsafe fn advance_head(&mut self, count: usize) {
-        debug_assert!(count <= self.occupied_len());
-        self.head.set((self.head() + count) % self.modulus());
-    }
 }
 
 impl<'a, S: Counter> LocalTailCounter<'a, S> {
@@ -153,37 +113,5 @@ impl<'a, S: Counter> LocalTailCounter<'a, S> {
             local: LocalCounter::clone_from(global),
             global,
         }
-    }
-
-    /// Returns a pair of slices which contain, in order, the vacant cells in the ring buffer.
-    ///
-    /// All items in slices are guaranteed to be *un-initialized*.
-    ///
-    /// *The slices may not include cells freed by the concurring consumer right after this call.*
-    pub fn vacant_ranges(&self) -> (Range<usize>, Range<usize>) {
-        let head = self.head();
-        let tail = self.tail();
-        let len = self.len();
-
-        let (head_div, head_mod) = (head / len, head % len);
-        let (tail_div, tail_mod) = (tail / len, tail % len);
-
-        if head_div == tail_div {
-            (tail_mod..len.get(), 0..head_mod)
-        } else {
-            (tail_mod..head_mod, 0..0)
-        }
-    }
-
-    /// Move **tail** position by `count` items forward.
-    ///
-    /// # Safety
-    ///
-    /// First `count` items in vacant area must be **de-initialized** (dropped) before this call.
-    ///
-    /// *In debug mode panics if `count` is greater than number of vacant places in the ring buffer.*
-    pub unsafe fn advance_tail(&mut self, count: usize) {
-        debug_assert!(count <= self.vacant_len());
-        self.tail.set((self.tail() + count) % self.modulus());
     }
 }

@@ -1,23 +1,26 @@
 use crate::{
+    ring_buffer::RingBufferRef,
     counter::{Counter, LocalHeadCounter},
     producer::LocalProducer,
     transfer::transfer_local,
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
-use core::{cmp, mem::MaybeUninit, ptr, slice};
+use core::{cmp, mem::MaybeUninit, ptr, slice, ops::DerefMut};
+use super::Consumer;
 
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-/// HeapConsumer part of ring buffer.
+/// Consumer part of ring buffer.
 ///
-/// Generic over item type, ring buffer container and ring buffer reference.
-pub struct LocalConsumer<'a, T, S: Counter> {
+/// The difference from [`Consumer`](`crate::Consumer`) is that all changes is postponed
+/// until [`Self::sync`] or [`Self::release`] is called or `Self` is dropped.
+pub struct LocalConsumer<T, R, G> {
     data: &'a mut [MaybeUninit<T>],
     counter: LocalHeadCounter<'a, S>,
 }
 
-impl<'a, T, S: Counter> LocalConsumer<'a, T, S> {
+impl<T, R, G> LocalConsumer<T, R, G> where R: RingBufferRef<T>, G: DerefMut<Target=Consumer<T, R>> {
     pub(crate) fn new(data: &'a mut [MaybeUninit<T>], counter: LocalHeadCounter<'a, S>) -> Self {
         Self { data, counter }
     }
@@ -38,7 +41,7 @@ impl<'a, T, S: Counter> LocalConsumer<'a, T, S> {
     }
 
     /// The number of remaining free places in the buffer.
-    pub fn remaining(&self) -> usize {
+    pub fn free_len(&self) -> usize {
         self.counter.vacant_len()
     }
 
@@ -61,23 +64,6 @@ impl<'a, T, S: Counter> LocalConsumer<'a, T, S> {
         (
             slice::from_raw_parts(ptr.add(ranges.0.start), ranges.0.len()),
             slice::from_raw_parts(ptr.add(ranges.1.start), ranges.1.len()),
-        )
-    }
-    /// Provides a direct mutable access to the ring buffer occupied memory.
-    ///
-    /// See [`Self::as_uninit_slices`] for details.
-    ///
-    /// # Safety
-    ///
-    /// The same as for [`Self::as_uninit_slices`] except that items could be modified without being removed.
-    pub unsafe fn as_mut_uninit_slices(
-        &mut self,
-    ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
-        let ranges = self.counter.occupied_ranges();
-        let ptr = self.data.as_mut_ptr();
-        (
-            slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
-            slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
         )
     }
 
@@ -123,18 +109,22 @@ impl<'a, T, S: Counter> LocalConsumer<'a, T, S> {
         }
     }
 
-    /// Local version of [`super::Consumer::pop_iter`].
+    /// See [`Consumer::pop_iter`](`super::Consumer::pop_iter`).
     pub fn pop_iter(&mut self) -> LocalPopIterator<'a, '_, T, S> {
         LocalPopIterator { consumer: self }
     }
 
-    /// Returns a front-to-back iterator.
+    /// Returns a front-to-back iterator containing references to items in the ring buffer.
+    ///
+    /// This iterator does not remove items out of the ring buffer.
     pub fn iter(&self) -> impl Iterator<Item = &T> + '_ {
         let (left, right) = self.as_slices();
         left.iter().chain(right.iter())
     }
 
-    /// Returns a front-to-back iterator that returns mutable references.
+    /// Returns a front-to-back iterator that returns mutable references to items in the ring buffer.
+    ///
+    /// This iterator does not remove items out of the ring buffer.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> + '_ {
         let (left, right) = self.as_mut_slices();
         left.iter_mut().chain(right.iter_mut())
@@ -143,21 +133,21 @@ impl<'a, T, S: Counter> LocalConsumer<'a, T, S> {
     /// Removes exactly `count` items from the head of ring buffer and drops them.
     ///
     /// *In debug mode panics if `count` is greater than number of items stored in the buffer.*
-    fn skip_unchecked(&mut self, count: usize) {
-        let (left, right) = unsafe { self.as_mut_uninit_slices() };
+    unsafe fn skip_unchecked(&mut self, count: usize) {
+        let (left, right) = self.as_mut_uninit_slices();
         debug_assert!(count <= left.len() + right.len());
         for elem in left.iter_mut().chain(right.iter_mut()).take(count) {
-            unsafe { ptr::drop_in_place(elem.as_mut_ptr()) };
+            ptr::drop_in_place(elem.as_mut_ptr());
         }
-        unsafe { self.advance(count) };
+        self.advance(count);
     }
 
-    /// Removes at most `n` and at least `min(n, HeapConsumer::len())` items from the buffer and safely drops them.
+    /// Removes at most `n` and at least `min(n, Consumer::len())` items from the buffer and safely drops them.
     ///
     /// Returns the number of deleted items.
     pub fn skip(&mut self, count: usize) -> usize {
         let count = cmp::min(count, self.len());
-        self.skip_unchecked(count);
+        unsafe { self.skip_unchecked(count) };
         count
     }
 
@@ -166,11 +156,11 @@ impl<'a, T, S: Counter> LocalConsumer<'a, T, S> {
     /// Returns the number of deleted items.
     pub fn clear(&mut self) -> usize {
         let count = self.len();
-        self.skip_unchecked(self.len());
+        unsafe { self.skip_unchecked(self.len()) };
         count
     }
 
-    /// Local version of [`super::Consumer::transfer_to`].
+    /// See [`Consumer::transfer_to`](`super::Consumer::transfer_to`).
     pub fn transfer_to<'b, Sp: Counter>(
         &mut self,
         producer: &mut LocalProducer<'b, T, Sp>,
@@ -180,9 +170,9 @@ impl<'a, T, S: Counter> LocalConsumer<'a, T, S> {
     }
 }
 
-/// Local version of [`PopIterator`](`super::PopIterator`).
+/// See [`PopIterator`](`super::PopIterator`).
 pub struct LocalPopIterator<'a, 'b: 'a, T, S: Counter> {
-    consumer: &'b mut LocalConsumer<'a, T, S>,
+    consumer: &'b mut LocalConsumer<T, R, G> where R: RingBufferRef<T>, G: DerefMut<Target=Consumer<T, R>>,
 }
 
 impl<'a, 'b: 'a, T, S: Counter> Iterator for LocalPopIterator<'a, 'b, T, S> {
@@ -192,8 +182,8 @@ impl<'a, 'b: 'a, T, S: Counter> Iterator for LocalPopIterator<'a, 'b, T, S> {
     }
 }
 
-impl<'a, T: Copy, S: Counter> LocalConsumer<'a, T, S> {
-    /// Local version of [`super::Consumer::pop_slice`].
+impl<'a, T: Copy, S: Counter> LocalConsumer<T, R, G> where R: RingBufferRef<T>, G: DerefMut<Target=Consumer<T, R>> {
+    /// See [`Consumer::pop_slice`](`super::Consumer::pop_slice`).
     pub fn pop_slice(&mut self, elems: &mut [T]) -> usize {
         let (left, right) = unsafe { self.as_uninit_slices() };
         let count = if elems.len() < left.len() {
@@ -218,7 +208,7 @@ impl<'a, T: Copy, S: Counter> LocalConsumer<'a, T, S> {
 
 #[cfg(feature = "std")]
 impl<'a, S: Counter> LocalConsumer<'a, u8, S> {
-    /// Local version of [`super::Consumer::write_into`].
+    /// See [`Consumer::write_into`](`super::Consumer::write_into`).
     pub fn write_into<P: Write>(
         &mut self,
         writer: &mut P,

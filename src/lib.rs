@@ -55,22 +55,22 @@ extern crate std;
 
 mod utils;
 
-mod consumer;
-mod producer;
+//mod consumer;
+//mod producer;
 mod ring_buffer;
-mod transfer;
+//mod transfer;
 
-pub mod counter;
+//pub mod counter;
 
-pub use consumer::*;
-pub use producer::*;
+//pub use consumer::*;
+//pub use producer::*;
 pub use ring_buffer::*;
-pub use transfer::*;
+//pub use transfer::*;
 
-#[cfg(test)]
-mod tests;
+//#[cfg(test)]
+//mod tests;
 
-#[cfg(feature = "bench")]
-extern crate test;
-#[cfg(feature = "bench")]
-mod benchmarks;
+//#[cfg(feature = "bench")]
+//extern crate test;
+//#[cfg(feature = "bench")]
+//mod benchmarks;

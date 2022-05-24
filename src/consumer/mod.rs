@@ -1,8 +1,10 @@
 mod global;
 mod local;
+mod traits;
 
 pub use global::*;
 pub use local::*;
+pub use traits::*;
 
 use crate::ring_buffer::StaticRingBuffer;
 

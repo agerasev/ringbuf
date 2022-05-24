@@ -12,7 +12,8 @@ use std::io::{self, Read, Write};
 
 /// Consumer part of ring buffer.
 ///
-/// Generic over item type, ring buffer container and ring buffer reference.
+/// The difference from [`LocalConsumer`](`crate::LocalConsumer`) is that any modification of `Self`
+/// becomes visible to the [`Producer`](`crate::Producer`) immediately.
 pub struct Consumer<T, R: RingBufferRef<T>> {
     ring_buffer_ref: R,
     _phantom: PhantomData<T>,
@@ -23,13 +24,14 @@ impl<T, R: RingBufferRef<T>> Consumer<T, R> {
     ///
     /// # Safety
     ///
-    /// There must be no another consumer constructed from the same ring buffer.
+    /// There must be no another consumer containing the same ring buffer reference.
     pub unsafe fn new(ring_buffer_ref: R) -> Self {
         Self {
             ring_buffer_ref,
             _phantom: PhantomData,
         }
     }
+
     /// Returns reference to the underlying ring buffer.
     #[inline]
     pub fn ring_buffer(&self) -> &R::RingBuffer {
@@ -40,16 +42,17 @@ impl<T, R: RingBufferRef<T>> Consumer<T, R> {
         self.ring_buffer_ref
     }
 
-    /// Returns local consumer that effectively freezes current ring buffer state.
+    /// Returns [`LocalConsumer`](`crate::LocalConsumer`) that borrows `Self`.
     ///
-    /// For more details see [`super::LocalConsumer`](`LocalConsumer`).
-    pub fn acquire(&mut self) -> LocalConsumer<'_, T, R::Counter> {
-        unsafe {
-            LocalConsumer::new(
-                self.ring_buffer().data(),
-                self.ring_buffer().counter().acquire_head(),
-            )
-        }
+    /// If you need `LocalConsumer` to own `Self` see [`Self::into_local`].
+    pub fn acquire(&mut self) -> LocalConsumer<T, &mut Self> {
+        unsafe { LocalConsumer::new(self) }
+    }
+    /// Returns [`LocalConsumer`](`crate::LocalConsumer`) that owns `Self`.
+    ///
+    /// If you need `LocalConsumer` to borrow `Self` see [`Self::acquire`].
+    pub fn into_local(self) -> LocalConsumer<T, Self> {
+        unsafe { LocalConsumer::new(self) }
     }
 
     /// Returns capacity of the ring buffer.
