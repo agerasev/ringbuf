@@ -26,10 +26,10 @@ pub trait RingBufferBase<T> {
     /// Tail position.
     fn tail(&self) -> usize;
 
-    #[inline]
     /// Modulus for `head` and `tail` values.
     ///
     /// Equals to `2 * len`.
+    #[inline]
     fn modulus(&self) -> NonZeroUsize {
         unsafe { NonZeroUsize::new_unchecked(2 * self.capacity().get()) }
     }
@@ -123,19 +123,28 @@ pub trait RingBufferRead<T>: RingBufferBase<T> {
         )
     }
 
-    /// Removes all items from the buffer and safely drops them.
+    /// Removes items from the head of ring buffer and drops them.
     ///
-    /// If there is concurring producer activity then the buffer may be not empty after this call.
+    /// + If `count_or_all` is `Some(count)` then exactly `count` items will be removed.
+    ///   *In debug mode panics if `count` is greater than number of items stored in the buffer.*
+    /// + If `count_or_all` is `None` then all items in ring buffer will be removed.
+    ///   *If there is concurring producer activity then the buffer may be not empty after this call.*
     ///
-    /// Returns the number of deleted items.
+    /// Returns the number of removed items.
     ///
     /// # Safety
     ///
     /// Must not be called concurrently.
-    unsafe fn clear(&self) -> usize {
+    unsafe fn skip(&self, count_or_all: Option<usize>) -> usize {
         let (left, right) = self.occupied_slices();
-        let count = left.len() + right.len();
-        for elem in left.iter_mut().chain(right.iter_mut()) {
+        let count = match count_or_all {
+            Some(count) => {
+                debug_assert!(count <= left.len() + right.len());
+                count
+            }
+            None => left.len() + right.len(),
+        };
+        for elem in left.iter_mut().chain(right.iter_mut()).take(count) {
             ptr::drop_in_place(elem.as_mut_ptr());
         }
         self.advance_head(count);

@@ -1,11 +1,11 @@
-//mod aliases;
+mod alias;
 mod atomic;
 mod cache;
 mod local;
 mod storage;
 mod traits;
 
-//pub use aliases::*;
+pub use alias::*;
 pub use atomic::*;
 pub use cache::*;
 pub use local::*;

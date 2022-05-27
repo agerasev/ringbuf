@@ -55,16 +55,14 @@ extern crate std;
 
 mod utils;
 
-//mod consumer;
-//mod producer;
+mod consumer;
+mod producer;
 mod ring_buffer;
 mod split;
 //mod transfer;
 
-//pub mod counter;
-
-//pub use consumer::*;
-//pub use producer::*;
+pub use consumer::*;
+pub use producer::*;
 pub use ring_buffer::*;
 pub use split::*;
 //pub use transfer::*;

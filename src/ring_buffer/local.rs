@@ -51,7 +51,7 @@ impl<T, C: Container<T>> RingBuffer<T> for LocalRingBuffer<T, C> {}
 
 impl<T, C: Container<T>> Drop for LocalRingBuffer<T, C> {
     fn drop(&mut self) {
-        unsafe { self.clear() };
+        unsafe { self.skip(None) };
     }
 }
 

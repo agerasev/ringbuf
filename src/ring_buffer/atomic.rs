@@ -56,7 +56,7 @@ impl<T, C: Container<T>> RingBuffer<T> for AtomicRingBuffer<T, C> {}
 
 impl<T, C: Container<T>> Drop for AtomicRingBuffer<T, C> {
     fn drop(&mut self) {
-        unsafe { self.clear() };
+        unsafe { self.skip(None) };
     }
 }
 
