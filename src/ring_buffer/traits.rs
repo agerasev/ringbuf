@@ -1,9 +1,4 @@
-use core::{
-    mem::MaybeUninit,
-    num::NonZeroUsize,
-    ops::{Deref, Range},
-    slice,
-};
+use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Range, ptr, slice};
 
 /// Basic ring buffer trait.
 ///
@@ -16,7 +11,7 @@ pub trait RingBufferBase<T> {
     /// All operations on this data must cohere with the counter.
     ///
     /// *Accessing raw data is extremely unsafe.*
-    /// It is recommended to use `Consumer::as_slices()` and `Producer::free_space_as_slices()` instead.
+    /// It is recommended to use [`Consumer::as_slices()`] and [`Producer::free_space_as_slices()`] instead.
     #[allow(clippy::mut_from_ref)]
     unsafe fn data(&self) -> &mut [MaybeUninit<T>];
 
@@ -65,7 +60,7 @@ pub trait RingBufferBase<T> {
 /// Ring buffer read end.
 ///
 /// Provides reading mechanism and access to occupied memory.
-pub trait RingBufferHead<T>: RingBufferBase<T> {
+pub trait RingBufferRead<T>: RingBufferBase<T> {
     /// Sets the new **head** position.
     ///
     /// # Safety
@@ -82,7 +77,7 @@ pub trait RingBufferHead<T>: RingBufferBase<T> {
     /// First `count` items in occupied area must be **initialized** before this call.
     ///
     /// *In debug mode panics if `count` is greater than number of items in the ring buffer.*
-    unsafe fn advance_head(&mut self, count: usize) {
+    unsafe fn advance_head(&self, count: usize) {
         debug_assert!(count <= self.occupied_len());
         self.set_head((self.head() + count) % self.modulus());
     }
@@ -119,7 +114,7 @@ pub trait RingBufferHead<T>: RingBufferBase<T> {
     ///
     /// *This method must be followed by [`Self::advance`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
-    unsafe fn occupied_slices(&mut self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+    unsafe fn occupied_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
         let ranges = self.occupied_ranges();
         let ptr = self.data().as_mut_ptr();
         (
@@ -127,12 +122,31 @@ pub trait RingBufferHead<T>: RingBufferBase<T> {
             slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
         )
     }
+
+    /// Removes all items from the buffer and safely drops them.
+    ///
+    /// If there is concurring producer activity then the buffer may be not empty after this call.
+    ///
+    /// Returns the number of deleted items.
+    ///
+    /// # Safety
+    ///
+    /// Must not be called concurrently.
+    unsafe fn clear(&self) -> usize {
+        let (left, right) = self.occupied_slices();
+        let count = left.len() + right.len();
+        for elem in left.iter_mut().chain(right.iter_mut()) {
+            ptr::drop_in_place(elem.as_mut_ptr());
+        }
+        self.advance_head(count);
+        count
+    }
 }
 
 /// Ring buffer write end.
 ///
 /// Provides writing mechanism and access to vacant memory.
-pub trait RingBufferTail<T>: RingBufferBase<T> {
+pub trait RingBufferWrite<T>: RingBufferBase<T> {
     /// Sets the new **tail** position.
     ///
     /// # Safety
@@ -149,7 +163,7 @@ pub trait RingBufferTail<T>: RingBufferBase<T> {
     /// First `count` items in vacant area must be **de-initialized** (dropped) before this call.
     ///
     /// *In debug mode panics if `count` is greater than number of vacant places in the ring buffer.*
-    unsafe fn advance_tail(&mut self, count: usize) {
+    unsafe fn advance_tail(&self, count: usize) {
         debug_assert!(count <= self.vacant_len());
         self.set_tail((self.tail() + count) % self.modulus());
     }
@@ -184,7 +198,7 @@ pub trait RingBufferTail<T>: RingBufferBase<T> {
     ///
     /// *This method must be followed by `Self::advance_tail` call with the number of items being put previously as argument.*
     /// *No other mutating calls allowed before that.*
-    unsafe fn vacant_slices(&mut self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+    unsafe fn vacant_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
         let ranges = self.vacant_ranges();
         let ptr = self.data().as_mut_ptr();
         (
@@ -195,8 +209,4 @@ pub trait RingBufferTail<T>: RingBufferBase<T> {
 }
 
 /// The whole ring buffer.
-pub trait RingBuffer<T>: RingBufferHead<T> + RingBufferTail<T> {}
-
-pub trait Split<R: Deref<Target = Self>> {
-    fn split(self) -> (R, R);
-}
+pub trait RingBuffer<T>: RingBufferRead<T> + RingBufferWrite<T> {}
