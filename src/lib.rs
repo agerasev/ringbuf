@@ -2,7 +2,7 @@
 //!
 //! # Overview
 //!
-//! `HeapRingBuffer` is the initial structure representing ring buffer itself.
+//! `HeapRb` is the initial structure representing ring buffer itself.
 //! Ring buffer can be splitted into pair of `HeapProducer` and `HeapConsumer`.
 //!
 //! `HeapProducer` and `HeapConsumer` are used to append/remove items to/from the ring buffer accordingly. They can be safely sent between threads.
@@ -25,21 +25,21 @@
 
 ```rust
 # extern crate ringbuf;
-use ringbuf::HeapRingBuffer;
+use ringbuf::{prelude::*, HeapRb};
 # fn main() {
-let rb = HeapRingBuffer::<i32>::new(2);
+let rb = HeapRb::<i32>::new(2);
 let (mut prod, mut cons) = rb.split();
 
 prod.push(0).unwrap();
 prod.push(1).unwrap();
 assert_eq!(prod.push(2), Err(2));
 
-assert_eq!(cons.pop().unwrap(), 0);
+assert_eq!(cons.pop(), Some(0));
 
 prod.push(2).unwrap();
 
-assert_eq!(cons.pop().unwrap(), 1);
-assert_eq!(cons.pop().unwrap(), 2);
+assert_eq!(cons.pop(), Some(1));
+assert_eq!(cons.pop(), Some(2));
 assert_eq!(cons.pop(), None);
 # }
 ```
@@ -55,18 +55,22 @@ extern crate std;
 
 mod utils;
 
-mod consumer;
-mod producer;
-mod ring_buffer;
-//mod transfer;
+pub mod consumer;
+pub mod producer;
+pub mod ring_buffer;
+mod transfer;
 
-pub use consumer::*;
-pub use producer::*;
-pub use ring_buffer::*;
-//pub use transfer::*;
+pub use consumer::Consumer;
+pub use producer::Producer;
+pub use ring_buffer::{HeapRb, Rb, StaticRb};
+pub use transfer::transfer;
 
-//#[cfg(test)]
-//mod tests;
+pub mod prelude {
+    pub use super::ring_buffer::{Rb as _, RbBase as _, RbRead as _, RbWrite as _};
+}
+
+#[cfg(test)]
+mod tests;
 
 //#[cfg(feature = "bench")]
 //extern crate test;

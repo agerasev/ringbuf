@@ -1,8 +1,8 @@
-use crate::{transfer, HeapRingBuffer};
+use crate::{prelude::*, transfer, HeapRb};
 
 #[test]
 fn push_pop_slice() {
-    let buf = HeapRingBuffer::<i32>::new(4);
+    let buf = HeapRb::<i32>::new(4);
     let (mut prod, mut cons) = buf.split();
 
     let mut tmp = [0; 5];
@@ -27,8 +27,8 @@ fn push_pop_slice() {
 
 #[test]
 fn move_slice() {
-    let buf0 = HeapRingBuffer::<i32>::new(4);
-    let buf1 = HeapRingBuffer::<i32>::new(4);
+    let buf0 = HeapRb::<i32>::new(4);
+    let buf1 = HeapRb::<i32>::new(4);
     let (mut prod0, mut cons0) = buf0.split();
     let (mut prod1, mut cons1) = buf1.split();
 
@@ -61,8 +61,8 @@ fn move_slice() {
 
 #[test]
 fn move_slice_count() {
-    let buf0 = HeapRingBuffer::<i32>::new(4);
-    let buf1 = HeapRingBuffer::<i32>::new(4);
+    let buf0 = HeapRb::<i32>::new(4);
+    let buf1 = HeapRb::<i32>::new(4);
     let (mut prod0, mut cons0) = buf0.split();
     let (mut prod1, mut cons1) = buf1.split();
 

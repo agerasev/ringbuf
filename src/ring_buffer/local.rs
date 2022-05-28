@@ -1,17 +1,15 @@
-use super::{
-    Container, RingBuffer, RingBufferBase, RingBufferRead, RingBufferWrite, SharedStorage,
-};
+use super::{Container, Rb, RbBase, RbRead, RbWrite, SharedStorage};
 use core::{cell::Cell, mem::MaybeUninit, num::NonZeroUsize, ptr};
 
 /// Ring buffer for using in single thread.
-pub struct LocalRingBuffer<T, C: Container<T>> {
+pub struct LocalRb<T, C: Container<T>> {
     storage: SharedStorage<T, C>,
     len: NonZeroUsize,
     head: Cell<usize>,
     tail: Cell<usize>,
 }
 
-impl<T, C: Container<T>> RingBufferBase<T> for LocalRingBuffer<T, C> {
+impl<T, C: Container<T>> RbBase<T> for LocalRb<T, C> {
     #[inline]
     unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
         self.storage.as_slice()
@@ -33,29 +31,29 @@ impl<T, C: Container<T>> RingBufferBase<T> for LocalRingBuffer<T, C> {
     }
 }
 
-impl<T, C: Container<T>> RingBufferRead<T> for LocalRingBuffer<T, C> {
+impl<T, C: Container<T>> RbRead<T> for LocalRb<T, C> {
     #[inline]
     unsafe fn set_head(&self, value: usize) {
         self.head.set(value);
     }
 }
 
-impl<T, C: Container<T>> RingBufferWrite<T> for LocalRingBuffer<T, C> {
+impl<T, C: Container<T>> RbWrite<T> for LocalRb<T, C> {
     #[inline]
     unsafe fn set_tail(&self, value: usize) {
         self.tail.set(value);
     }
 }
 
-impl<T, C: Container<T>> RingBuffer<T> for LocalRingBuffer<T, C> {}
+impl<T, C: Container<T>> Rb<T> for LocalRb<T, C> {}
 
-impl<T, C: Container<T>> Drop for LocalRingBuffer<T, C> {
+impl<T, C: Container<T>> Drop for LocalRb<T, C> {
     fn drop(&mut self) {
         unsafe { self.skip(None) };
     }
 }
 
-impl<T, C: Container<T>> LocalRingBuffer<T, C> {
+impl<T, C: Container<T>> LocalRb<T, C> {
     /// Constructs ring buffer from container and counters.
     ///
     /// # Safety

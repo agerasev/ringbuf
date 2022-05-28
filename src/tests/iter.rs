@@ -1,14 +1,14 @@
-use crate::HeapRingBuffer;
+use crate::{prelude::*, HeapRb};
 
 #[test]
 fn iter() {
-    let buf = HeapRingBuffer::<i32>::new(2);
+    let buf = HeapRb::<i32>::new(2);
     let (mut prod, mut cons) = buf.split();
 
     prod.push(10).unwrap();
     prod.push(20).unwrap();
 
-    let sum: i32 = cons.acquire().iter().sum();
+    let sum: i32 = cons.iter().sum();
 
     let first = cons.pop().expect("First item is not available");
     let second = cons.pop().expect("Second item is not available");
@@ -18,17 +18,17 @@ fn iter() {
 
 #[test]
 fn iter_mut() {
-    let buf = HeapRingBuffer::<i32>::new(2);
+    let buf = HeapRb::<i32>::new(2);
     let (mut prod, mut cons) = buf.split();
 
     prod.push(10).unwrap();
     prod.push(20).unwrap();
 
-    for v in cons.acquire().iter_mut() {
+    for v in cons.iter_mut() {
         *v *= 2;
     }
 
-    let sum: i32 = cons.acquire().iter().sum();
+    let sum: i32 = cons.iter().sum();
 
     let first = cons.pop().expect("First item is not available");
     let second = cons.pop().expect("Second item is not available");
@@ -38,7 +38,7 @@ fn iter_mut() {
 
 #[test]
 fn pop_iter() {
-    let buf = HeapRingBuffer::<i32>::new(2);
+    let buf = HeapRb::<i32>::new(2);
     let (mut prod, mut cons) = buf.split();
 
     prod.push(10).unwrap();

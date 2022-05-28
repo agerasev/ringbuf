@@ -1,4 +1,4 @@
-use crate::HeapRingBuffer;
+use crate::HeapRb;
 
 use test::{black_box, Bencher};
 
@@ -6,7 +6,7 @@ const RB_SIZE: usize = 256;
 
 #[bench]
 fn acquire(b: &mut Bencher) {
-    let buf = HeapRingBuffer::<u64>::new(RB_SIZE);
+    let buf = HeapRb::<u64>::new(RB_SIZE);
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
     b.iter(|| {
@@ -17,7 +17,7 @@ fn acquire(b: &mut Bencher) {
 
 #[bench]
 fn acquire_advance(b: &mut Bencher) {
-    let buf = HeapRingBuffer::<u64>::new(RB_SIZE);
+    let buf = HeapRb::<u64>::new(RB_SIZE);
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
     b.iter(|| {
@@ -28,7 +28,7 @@ fn acquire_advance(b: &mut Bencher) {
 
 #[bench]
 fn get_occupied_slices(b: &mut Bencher) {
-    let buf = HeapRingBuffer::<u64>::new(RB_SIZE);
+    let buf = HeapRb::<u64>::new(RB_SIZE);
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[0; 3 * RB_SIZE / 4]);
     cons.skip(RB_SIZE);
@@ -42,7 +42,7 @@ fn get_occupied_slices(b: &mut Bencher) {
 
 #[bench]
 fn get_vacant_slices(b: &mut Bencher) {
-    let buf = HeapRingBuffer::<u64>::new(RB_SIZE);
+    let buf = HeapRb::<u64>::new(RB_SIZE);
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[0; 1 * RB_SIZE / 4]);
     cons.skip(RB_SIZE);
@@ -56,7 +56,7 @@ fn get_vacant_slices(b: &mut Bencher) {
 
 #[bench]
 fn push_pop(b: &mut Bencher) {
-    let buf = HeapRingBuffer::<u64>::new(RB_SIZE);
+    let buf = HeapRb::<u64>::new(RB_SIZE);
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
     b.iter(|| {

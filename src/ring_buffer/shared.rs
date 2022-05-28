@@ -1,6 +1,4 @@
-use super::{
-    Container, RingBuffer, RingBufferBase, RingBufferRead, RingBufferWrite, SharedStorage,
-};
+use super::{Container, Rb, RbBase, RbRead, RbWrite, SharedStorage};
 use cache_padded::CachePadded;
 use core::{
     mem::{self, MaybeUninit},
@@ -10,14 +8,14 @@ use core::{
 };
 
 /// Ring buffer that could be shared between threads.
-pub struct SharedRingBuffer<T, C: Container<T>> {
+pub struct SharedRb<T, C: Container<T>> {
     storage: SharedStorage<T, C>,
     len: NonZeroUsize,
     head: CachePadded<AtomicUsize>,
     tail: CachePadded<AtomicUsize>,
 }
 
-impl<T, C: Container<T>> RingBufferBase<T> for SharedRingBuffer<T, C> {
+impl<T, C: Container<T>> RbBase<T> for SharedRb<T, C> {
     #[inline]
     unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
         self.storage.as_slice()
@@ -39,29 +37,29 @@ impl<T, C: Container<T>> RingBufferBase<T> for SharedRingBuffer<T, C> {
     }
 }
 
-impl<T, C: Container<T>> RingBufferRead<T> for SharedRingBuffer<T, C> {
+impl<T, C: Container<T>> RbRead<T> for SharedRb<T, C> {
     #[inline]
     unsafe fn set_head(&self, value: usize) {
         self.head.store(value, Ordering::Release)
     }
 }
 
-impl<T, C: Container<T>> RingBufferWrite<T> for SharedRingBuffer<T, C> {
+impl<T, C: Container<T>> RbWrite<T> for SharedRb<T, C> {
     #[inline]
     unsafe fn set_tail(&self, value: usize) {
         self.tail.store(value, Ordering::Release)
     }
 }
 
-impl<T, C: Container<T>> RingBuffer<T> for SharedRingBuffer<T, C> {}
+impl<T, C: Container<T>> Rb<T> for SharedRb<T, C> {}
 
-impl<T, C: Container<T>> Drop for SharedRingBuffer<T, C> {
+impl<T, C: Container<T>> Drop for SharedRb<T, C> {
     fn drop(&mut self) {
         unsafe { self.skip(None) };
     }
 }
 
-impl<T, C: Container<T>> SharedRingBuffer<T, C> {
+impl<T, C: Container<T>> SharedRb<T, C> {
     /// Constructs ring buffer from container and counters.
     ///
     /// # Safety

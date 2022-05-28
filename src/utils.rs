@@ -1,7 +1,4 @@
-use core::{
-    mem::{self, MaybeUninit},
-    ops::{Deref, DerefMut},
-};
+use core::mem::{self, MaybeUninit};
 
 // TODO: Remove on `maybe_uninit_uninit_array` stabilization.
 pub fn uninit_array<T, const N: usize>() -> [MaybeUninit<T>; N] {
@@ -31,20 +28,4 @@ pub unsafe fn write_uninit_slice<'a, T: Copy>(
 ) -> &'a mut [T] {
     dst.copy_from_slice(slice_assume_init_ref(src));
     dst
-}
-
-#[repr(transparent)]
-pub struct DerefWrapper<T>(pub T);
-
-impl<T> Deref for DerefWrapper<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for DerefWrapper<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
-    }
 }

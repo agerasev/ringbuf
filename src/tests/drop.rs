@@ -1,4 +1,4 @@
-use crate::{HeapConsumer, HeapRingBuffer};
+use crate::{prelude::*, Consumer, HeapRb};
 use alloc::collections::BTreeSet;
 use core::cell::RefCell;
 
@@ -30,7 +30,7 @@ fn single() {
     let set = RefCell::new(BTreeSet::new());
 
     let cap = 3;
-    let buf = HeapRingBuffer::new(cap);
+    let buf = HeapRb::new(cap);
 
     assert_eq!(set.borrow().len(), 0);
 
@@ -62,14 +62,14 @@ fn transaction() {
     let set = RefCell::new(BTreeSet::new());
 
     let cap = 5;
-    let buf = HeapRingBuffer::new(cap);
+    let buf = HeapRb::new(cap);
 
     assert_eq!(set.borrow().len(), 0);
     {
         let (mut prod, mut cons) = buf.split();
         let mut id = 0;
         let mut cnt = 0;
-        let assert_cnt = |cnt, n, cons: &HeapConsumer<_>, set: &RefCell<BTreeSet<_>>| {
+        let assert_cnt = |cnt, n, cons: &Consumer<_, _>, set: &RefCell<BTreeSet<_>>| {
             assert_eq!(cnt, n);
             assert_eq!(cnt, cons.len());
             assert_eq!(cnt, set.borrow().len());

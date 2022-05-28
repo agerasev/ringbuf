@@ -12,7 +12,7 @@ use alloc::{rc::Rc, sync::Arc};
 /// Basic ring buffer trait.
 ///
 /// Provides status methods and access to underlying memory.
-pub trait RingBufferBase<T> {
+pub trait RbBase<T> {
     /// Returns underlying raw ring buffer memory as slice.
     ///
     /// # Safety
@@ -69,7 +69,7 @@ pub trait RingBufferBase<T> {
 /// Ring buffer read end.
 ///
 /// Provides reading mechanism and access to occupied memory.
-pub trait RingBufferRead<T>: RingBufferBase<T> {
+pub trait RbRead<T>: RbBase<T> {
     /// Sets the new **head** position.
     ///
     /// # Safety
@@ -164,7 +164,7 @@ pub trait RingBufferRead<T>: RingBufferBase<T> {
 /// Ring buffer write end.
 ///
 /// Provides writing mechanism and access to vacant memory.
-pub trait RingBufferWrite<T>: RingBufferBase<T> {
+pub trait RbWrite<T>: RbBase<T> {
     /// Sets the new **tail** position.
     ///
     /// # Safety
@@ -227,7 +227,7 @@ pub trait RingBufferWrite<T>: RingBufferBase<T> {
 }
 
 /// The whole ring buffer.
-pub trait RingBuffer<T>: RingBufferRead<T> + RingBufferWrite<T> {
+pub trait Rb<T>: RbRead<T> + RbWrite<T> {
     /// Splits ring buffer into producer and consumer.
     ///
     /// This method consumes the ring buffer and puts it on heap in [`Arc`]. If you don't want to use heap the see [`Self::split_ref`].
@@ -243,7 +243,43 @@ pub trait RingBuffer<T>: RingBufferRead<T> + RingBufferWrite<T> {
     /// Splits ring buffer into producer and consumer without using the heap.
     ///
     /// In this case producer and consumer stores a reference to the ring buffer, so you also need to store the buffer somewhere.
-    fn split_ref(&mut self) -> (Producer<T, &Self>, Consumer<T, &Self>) {
+    fn split_ref(&mut self) -> (Producer<T, &Self>, Consumer<T, &Self>)
+    where
+        Self: Sized,
+    {
         unsafe { (Producer::new(self), Consumer::new(self)) }
+    }
+}
+
+pub trait RbRef<T> {
+    type Rb: RbBase<T>;
+    fn rb(&self) -> &Self::Rb;
+}
+
+#[repr(transparent)]
+pub struct RbWrapper<B>(pub B);
+
+impl<'a, T, B: RbBase<T>> RbRef<T> for RbWrapper<B> {
+    type Rb = B;
+    fn rb(&self) -> &B {
+        &self.0
+    }
+}
+impl<'a, T, B: RbBase<T>> RbRef<T> for &'a B {
+    type Rb = B;
+    fn rb(&self) -> &B {
+        self
+    }
+}
+impl<T, B: RbBase<T>> RbRef<T> for Rc<B> {
+    type Rb = B;
+    fn rb(&self) -> &B {
+        self.deref()
+    }
+}
+impl<T, B: RbBase<T>> RbRef<T> for Arc<B> {
+    type Rb = B;
+    fn rb(&self) -> &B {
+        self.deref()
     }
 }

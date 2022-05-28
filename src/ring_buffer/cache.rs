@@ -1,9 +1,9 @@
-use super::{RingBufferBase, RingBufferRead, RingBufferWrite};
-use core::{cell::Cell, marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, ops::Deref, ptr};
+use super::{RbBase, RbRead, RbRef, RbWrite};
+use core::{cell::Cell, marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, ptr};
 
-pub struct RingBufferReadCache<T, R: Deref>
+pub struct RbReadCache<T, R: RbRef<T>>
 where
-    R::Target: RingBufferRead<T>,
+    R::Rb: RbRead<T>,
 {
     target: R,
     head: Cell<usize>,
@@ -11,9 +11,9 @@ where
     _phantom: PhantomData<T>,
 }
 
-pub struct RingBufferWriteCache<T, R: Deref>
+pub struct RbWriteCache<T, R: RbRef<T>>
 where
-    R::Target: RingBufferWrite<T>,
+    R::Rb: RbWrite<T>,
 {
     target: R,
     head: usize,
@@ -21,18 +21,18 @@ where
     _phantom: PhantomData<T>,
 }
 
-impl<T, R: Deref> RingBufferBase<T> for RingBufferReadCache<T, R>
+impl<T, R: RbRef<T>> RbBase<T> for RbReadCache<T, R>
 where
-    R::Target: RingBufferRead<T>,
+    R::Rb: RbRead<T>,
 {
     #[inline]
     unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
-        self.target.data()
+        self.target.rb().data()
     }
 
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
-        self.target.capacity()
+        self.target.rb().capacity()
     }
 
     #[inline]
@@ -46,18 +46,18 @@ where
     }
 }
 
-impl<T, R: Deref> RingBufferBase<T> for RingBufferWriteCache<T, R>
+impl<T, R: RbRef<T>> RbBase<T> for RbWriteCache<T, R>
 where
-    R::Target: RingBufferWrite<T>,
+    R::Rb: RbWrite<T>,
 {
     #[inline]
     unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
-        self.target.data()
+        self.target.rb().data()
     }
 
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
-        self.target.capacity()
+        self.target.rb().capacity()
     }
 
     #[inline]
@@ -71,9 +71,9 @@ where
     }
 }
 
-impl<T, R: Deref> RingBufferRead<T> for RingBufferReadCache<T, R>
+impl<T, R: RbRef<T>> RbRead<T> for RbReadCache<T, R>
 where
-    R::Target: RingBufferRead<T>,
+    R::Rb: RbRead<T>,
 {
     #[inline]
     unsafe fn set_head(&self, value: usize) {
@@ -81,9 +81,9 @@ where
     }
 }
 
-impl<T, R: Deref> RingBufferWrite<T> for RingBufferWriteCache<T, R>
+impl<T, R: RbRef<T>> RbWrite<T> for RbWriteCache<T, R>
 where
-    R::Target: RingBufferWrite<T>,
+    R::Rb: RbWrite<T>,
 {
     #[inline]
     unsafe fn set_tail(&self, value: usize) {
@@ -91,49 +91,49 @@ where
     }
 }
 
-impl<T, R: Deref> Drop for RingBufferReadCache<T, R>
+impl<T, R: RbRef<T>> Drop for RbReadCache<T, R>
 where
-    R::Target: RingBufferRead<T>,
+    R::Rb: RbRead<T>,
 {
     fn drop(&mut self) {
         self.commit();
     }
 }
 
-impl<T, R: Deref> Drop for RingBufferWriteCache<T, R>
+impl<T, R: RbRef<T>> Drop for RbWriteCache<T, R>
 where
-    R::Target: RingBufferWrite<T>,
+    R::Rb: RbWrite<T>,
 {
     fn drop(&mut self) {
         self.commit();
     }
 }
 
-impl<T, R: Deref> RingBufferReadCache<T, R>
+impl<T, R: RbRef<T>> RbReadCache<T, R>
 where
-    R::Target: RingBufferRead<T>,
+    R::Rb: RbRead<T>,
 {
     /// Create new ring buffer cache.
     ///
     /// # Safety
     ///
     /// There must be only one instance containing the same ring buffer reference.
-    pub unsafe fn new(ring_buffer: R) -> Self {
+    pub unsafe fn new(rb_ref: R) -> Self {
         Self {
-            head: Cell::new(ring_buffer.head()),
-            tail: ring_buffer.tail(),
-            target: ring_buffer,
+            head: Cell::new(rb_ref.rb().head()),
+            tail: rb_ref.rb().tail(),
+            target: rb_ref,
             _phantom: PhantomData,
         }
     }
 
     pub fn commit(&mut self) {
-        unsafe { self.target.set_head(self.head.get()) }
+        unsafe { self.target.rb().set_head(self.head.get()) }
     }
 
     pub fn sync(&mut self) {
         self.commit();
-        self.tail = self.target.tail();
+        self.tail = self.target.rb().tail();
     }
 
     pub fn release(mut self) -> R {
@@ -144,31 +144,31 @@ where
     }
 }
 
-impl<T, R: Deref> RingBufferWriteCache<T, R>
+impl<T, R: RbRef<T>> RbWriteCache<T, R>
 where
-    R::Target: RingBufferWrite<T>,
+    R::Rb: RbWrite<T>,
 {
     /// Create new ring buffer cache.
     ///
     /// # Safety
     ///
     /// There must be only one instance containing the same ring buffer reference.
-    pub unsafe fn new(ring_buffer: R) -> Self {
+    pub unsafe fn new(rb_ref: R) -> Self {
         Self {
-            head: ring_buffer.head(),
-            tail: Cell::new(ring_buffer.tail()),
-            target: ring_buffer,
+            head: rb_ref.rb().head(),
+            tail: Cell::new(rb_ref.rb().tail()),
+            target: rb_ref,
             _phantom: PhantomData,
         }
     }
 
     pub fn commit(&mut self) {
-        unsafe { self.target.set_tail(self.tail.get()) }
+        unsafe { self.target.rb().set_tail(self.tail.get()) }
     }
 
     pub fn sync(&mut self) {
         self.commit();
-        self.head = self.target.head();
+        self.head = self.target.rb().head();
     }
 
     pub fn release(mut self) -> R {

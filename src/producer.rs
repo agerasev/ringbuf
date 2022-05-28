@@ -1,8 +1,8 @@
 use crate::{
-    ring_buffer::{RingBufferBase, RingBufferWrite},
+    ring_buffer::{RbBase, RbRef, RbWrapper, RbWrite, RbWriteCache},
     utils::write_slice,
 };
-use core::{marker::PhantomData, mem::MaybeUninit, ops::Deref};
+use core::{marker::PhantomData, mem::MaybeUninit};
 
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
@@ -14,28 +14,49 @@ use std::io::{self, Read, Write};
 /// Producer part of ring buffer.
 ///
 /// Generic over item type, ring buffer container and ring buffer reference.
-pub struct Producer<T, R: Deref>
+pub struct Producer<T, R: RbRef<T>>
 where
-    R::Target: RingBufferWrite<T>,
+    R::Rb: RbWrite<T>,
 {
-    ring_buffer: R,
+    rb_ref: R,
     _phantom: PhantomData<T>,
 }
 
-impl<T, R: Deref> Producer<T, R>
+impl<T, R: RbRef<T>> Producer<T, R>
 where
-    R::Target: RingBufferWrite<T>,
+    R::Rb: RbWrite<T>,
 {
     /// Creates producer from the ring buffer reference.
     ///
     /// # Safety
     ///
     /// There must be only one producer containing the same ring buffer reference.
-    pub unsafe fn new(ring_buffer: R) -> Self {
+    pub unsafe fn new(rb_ref: R) -> Self {
         Self {
-            ring_buffer,
+            rb_ref,
             _phantom: PhantomData,
         }
+    }
+
+    /// Returns reference to the underlying ring buffer.
+    #[inline]
+    pub fn rb(&self) -> &R::Rb {
+        self.rb_ref.rb()
+    }
+
+    /// Consumes `self` and returns underlying ring buffer reference.
+    pub fn into_rb_ref(self) -> R {
+        self.rb_ref
+    }
+
+    /// Returns caching consumer that borrows [`Self`].
+    pub fn cached(&mut self) -> Producer<T, RbWrapper<RbWriteCache<T, &R::Rb>>> {
+        unsafe { Producer::new(RbWrapper(RbWriteCache::new(self.rb_ref.rb()))) }
+    }
+
+    /// Transforms [`Self`] into caching consumer.
+    pub fn into_cached(self) -> Producer<T, RbWrapper<RbWriteCache<T, R>>> {
+        unsafe { Producer::new(RbWrapper(RbWriteCache::new(self.rb_ref))) }
     }
 
     /// Returns capacity of the ring buffer.
@@ -43,13 +64,13 @@ where
     /// The capacity of the buffer is constant.
     #[inline]
     pub fn capacity(&self) -> usize {
-        self.ring_buffer.capacity().get()
+        self.rb_ref.rb().capacity().get()
     }
 
     /// Checks if the ring buffer is empty.
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.ring_buffer.is_empty()
+        self.rb_ref.rb().is_empty()
     }
 
     /// Checks if the ring buffer is full.
@@ -57,21 +78,21 @@ where
     /// *The result may become irrelevant at any time because of concurring consumer activity.*
     #[inline]
     pub fn is_full(&self) -> bool {
-        self.ring_buffer.is_full()
+        self.rb_ref.rb().is_full()
     }
 
     /// The number of items stored in the buffer.
     ///
     /// *Actual number may be less than the returned value because of concurring consumer activity.*
     pub fn len(&self) -> usize {
-        self.ring_buffer.occupied_len()
+        self.rb_ref.rb().occupied_len()
     }
 
     /// The number of remaining free places in the buffer.
     ///
     /// *Actual number may be greater than the returning value because of concurring consumer activity.*
     pub fn free_len(&self) -> usize {
-        self.ring_buffer.vacant_len()
+        self.rb_ref.rb().vacant_len()
     }
 
     /// Provides a direct access to the ring buffer vacant memory.
@@ -87,7 +108,7 @@ where
     pub unsafe fn free_space_as_slices(
         &mut self,
     ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
-        self.ring_buffer.vacant_slices()
+        self.rb_ref.rb().vacant_slices()
     }
 
     /// Moves `tail` counter by `count` places.
@@ -96,7 +117,7 @@ where
     ///
     /// First `count` items in free space must be initialized.
     pub unsafe fn advance(&mut self, count: usize) {
-        self.ring_buffer.advance_tail(count)
+        self.rb_ref.rb().advance_tail(count)
     }
 
     /// Appends an item to the ring buffer.
@@ -137,25 +158,11 @@ where
         unsafe { self.advance(count) };
         count
     }
-    /*
-    /// Removes at most `count` items from the consumer and appends them to the producer.
-    /// If `count` is `None` then as much as possible items will be moved.
-    /// The producer and consumer parts may be of different buffers as well as of the same one.
-    ///
-    /// On success returns number of items been moved.
-    pub fn transfer_from<'b, Sc: Counter>(
-        &mut self,
-        consumer: &mut LocalConsumer<'b, T, Sc>,
-        count: Option<usize>,
-    ) -> usize {
-        transfer_local(consumer, self, count)
-    }
-    */
 }
 
-impl<'a, T: Copy, R: Deref> Producer<T, R>
+impl<'a, T: Copy, R: RbRef<T>> Producer<T, R>
 where
-    R::Target: RingBufferWrite<T>,
+    R::Rb: RbWrite<T>,
 {
     /// Appends items from slice to the ring buffer.
     /// Elements should be `Copy`.
@@ -184,9 +191,9 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<R: Deref> Producer<u8, R>
+impl<R: RbRef<u8>> Producer<u8, R>
 where
-    R::Target: RingBufferWrite<u8>,
+    R::Rb: RbWrite<u8>,
 {
     /// Reads at most `count` bytes from `Read` instance and appends them to the ring buffer.
     /// If `count` is `None` then as much as possible bytes will be read.
@@ -213,9 +220,9 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<R: Deref> Write for Producer<u8, R>
+impl<R: RbRef<u8>> Write for Producer<u8, R>
 where
-    R::Target: RingBufferWrite<u8>,
+    R::Rb: RbWrite<u8>,
 {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         let n = self.push_slice(buffer);

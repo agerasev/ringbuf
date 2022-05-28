@@ -1,4 +1,4 @@
-use crate::ring_buffer::HeapRingBuffer;
+use crate::ring_buffer::HeapRb;
 
 use test::{black_box, Bencher};
 
@@ -6,7 +6,7 @@ const RB_SIZE: usize = 1024;
 
 #[bench]
 fn slice_10(b: &mut Bencher) {
-    let buf = HeapRingBuffer::<u64>::new(RB_SIZE);
+    let buf = HeapRb::<u64>::new(RB_SIZE);
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
     let mut data = [1; 10];
@@ -19,7 +19,7 @@ fn slice_10(b: &mut Bencher) {
 
 #[bench]
 fn slice_100(b: &mut Bencher) {
-    let buf = HeapRingBuffer::<u64>::new(RB_SIZE);
+    let buf = HeapRb::<u64>::new(RB_SIZE);
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
     let mut data = [1; 100];
@@ -31,7 +31,7 @@ fn slice_100(b: &mut Bencher) {
 }
 #[bench]
 fn slice_1000(b: &mut Bencher) {
-    let buf = HeapRingBuffer::<u64>::new(RB_SIZE);
+    let buf = HeapRb::<u64>::new(RB_SIZE);
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; 12]);
     let mut data = [1; 1000];
