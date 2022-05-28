@@ -1,4 +1,13 @@
-use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Range, ptr, slice};
+use crate::{consumer::Consumer, producer::Producer};
+use core::{
+    mem::MaybeUninit,
+    num::NonZeroUsize,
+    ops::{Deref, Range},
+    ptr, slice,
+};
+
+#[cfg(feature = "alloc")]
+use alloc::{rc::Rc, sync::Arc};
 
 /// Basic ring buffer trait.
 ///
@@ -218,4 +227,23 @@ pub trait RingBufferWrite<T>: RingBufferBase<T> {
 }
 
 /// The whole ring buffer.
-pub trait RingBuffer<T>: RingBufferRead<T> + RingBufferWrite<T> {}
+pub trait RingBuffer<T>: RingBufferRead<T> + RingBufferWrite<T> {
+    /// Splits ring buffer into producer and consumer.
+    ///
+    /// This method consumes the ring buffer and puts it on heap in [`Arc`]. If you don't want to use heap the see [`Self::split_ref`].
+    #[cfg(feature = "alloc")]
+    fn split(self) -> (Producer<T, Arc<Self>>, Consumer<T, Arc<Self>>)
+    where
+        Self: Sized,
+    {
+        let arc = Arc::new(self);
+        unsafe { (Producer::new(arc.clone()), Consumer::new(arc)) }
+    }
+
+    /// Splits ring buffer into producer and consumer without using the heap.
+    ///
+    /// In this case producer and consumer stores a reference to the ring buffer, so you also need to store the buffer somewhere.
+    fn split_ref(&mut self) -> (Producer<T, &Self>, Consumer<T, &Self>) {
+        unsafe { (Producer::new(self), Consumer::new(self)) }
+    }
+}

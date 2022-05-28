@@ -1,5 +1,5 @@
 use super::{RingBufferBase, RingBufferRead, RingBufferWrite};
-use core::{cell::Cell, marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, ops::Deref};
+use core::{cell::Cell, marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, ops::Deref, ptr};
 
 pub struct RingBufferReadCache<T, R: Deref>
 where
@@ -96,7 +96,7 @@ where
     R::Target: RingBufferRead<T>,
 {
     fn drop(&mut self) {
-        unsafe { self.target.set_head(self.head.get()) }
+        self.commit();
     }
 }
 
@@ -105,6 +105,76 @@ where
     R::Target: RingBufferWrite<T>,
 {
     fn drop(&mut self) {
+        self.commit();
+    }
+}
+
+impl<T, R: Deref> RingBufferReadCache<T, R>
+where
+    R::Target: RingBufferRead<T>,
+{
+    /// Create new ring buffer cache.
+    ///
+    /// # Safety
+    ///
+    /// There must be only one instance containing the same ring buffer reference.
+    pub unsafe fn new(ring_buffer: R) -> Self {
+        Self {
+            head: Cell::new(ring_buffer.head()),
+            tail: ring_buffer.tail(),
+            target: ring_buffer,
+            _phantom: PhantomData,
+        }
+    }
+
+    pub fn commit(&mut self) {
+        unsafe { self.target.set_head(self.head.get()) }
+    }
+
+    pub fn sync(&mut self) {
+        self.commit();
+        self.tail = self.target.tail();
+    }
+
+    pub fn release(mut self) -> R {
+        self.commit();
+        let self_uninit = MaybeUninit::new(self);
+        unsafe { ptr::read(&self_uninit.assume_init_ref().target) }
+        // Self::drop is not called.
+    }
+}
+
+impl<T, R: Deref> RingBufferWriteCache<T, R>
+where
+    R::Target: RingBufferWrite<T>,
+{
+    /// Create new ring buffer cache.
+    ///
+    /// # Safety
+    ///
+    /// There must be only one instance containing the same ring buffer reference.
+    pub unsafe fn new(ring_buffer: R) -> Self {
+        Self {
+            head: ring_buffer.head(),
+            tail: Cell::new(ring_buffer.tail()),
+            target: ring_buffer,
+            _phantom: PhantomData,
+        }
+    }
+
+    pub fn commit(&mut self) {
         unsafe { self.target.set_tail(self.tail.get()) }
+    }
+
+    pub fn sync(&mut self) {
+        self.commit();
+        self.head = self.target.head();
+    }
+
+    pub fn release(mut self) -> R {
+        self.commit();
+        let self_uninit = MaybeUninit::new(self);
+        unsafe { ptr::read(&self_uninit.assume_init_ref().target) }
+        // Self::drop is not called.
     }
 }

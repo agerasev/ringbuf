@@ -3,20 +3,21 @@ use super::{
 };
 use cache_padded::CachePadded;
 use core::{
-    mem::MaybeUninit,
+    mem::{self, MaybeUninit},
     num::NonZeroUsize,
+    ptr,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
 /// Ring buffer that could be shared between threads.
-pub struct AtomicRingBuffer<T, C: Container<T>> {
+pub struct SharedRingBuffer<T, C: Container<T>> {
     storage: SharedStorage<T, C>,
     len: NonZeroUsize,
     head: CachePadded<AtomicUsize>,
     tail: CachePadded<AtomicUsize>,
 }
 
-impl<T, C: Container<T>> RingBufferBase<T> for AtomicRingBuffer<T, C> {
+impl<T, C: Container<T>> RingBufferBase<T> for SharedRingBuffer<T, C> {
     #[inline]
     unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
         self.storage.as_slice()
@@ -38,29 +39,29 @@ impl<T, C: Container<T>> RingBufferBase<T> for AtomicRingBuffer<T, C> {
     }
 }
 
-impl<T, C: Container<T>> RingBufferRead<T> for AtomicRingBuffer<T, C> {
+impl<T, C: Container<T>> RingBufferRead<T> for SharedRingBuffer<T, C> {
     #[inline]
     unsafe fn set_head(&self, value: usize) {
         self.head.store(value, Ordering::Release)
     }
 }
 
-impl<T, C: Container<T>> RingBufferWrite<T> for AtomicRingBuffer<T, C> {
+impl<T, C: Container<T>> RingBufferWrite<T> for SharedRingBuffer<T, C> {
     #[inline]
     unsafe fn set_tail(&self, value: usize) {
         self.tail.store(value, Ordering::Release)
     }
 }
 
-impl<T, C: Container<T>> RingBuffer<T> for AtomicRingBuffer<T, C> {}
+impl<T, C: Container<T>> RingBuffer<T> for SharedRingBuffer<T, C> {}
 
-impl<T, C: Container<T>> Drop for AtomicRingBuffer<T, C> {
+impl<T, C: Container<T>> Drop for SharedRingBuffer<T, C> {
     fn drop(&mut self) {
         unsafe { self.skip(None) };
     }
 }
 
-impl<T, C: Container<T>> AtomicRingBuffer<T, C> {
+impl<T, C: Container<T>> SharedRingBuffer<T, C> {
     /// Constructs ring buffer from container and counters.
     ///
     /// # Safety
@@ -75,5 +76,23 @@ impl<T, C: Container<T>> AtomicRingBuffer<T, C> {
             head: CachePadded::new(AtomicUsize::new(head)),
             tail: CachePadded::new(AtomicUsize::new(tail)),
         }
+    }
+
+    /// Destructures ring buffer into underlying container and `head` and `tail` counters.
+    ///
+    /// # Safety
+    ///
+    /// Initialized contents of the container must be properly dropped.
+    pub unsafe fn into_raw_parts(self) -> (C, usize, usize) {
+        let (head, tail) = (self.head(), self.tail());
+        let self_uninit = MaybeUninit::new(self);
+        let self_ref = self_uninit.assume_init_ref();
+
+        // In case if `AtomicUsize` implements `Drop`.
+        mem::drop(ptr::read(&self_ref.head));
+        mem::drop(ptr::read(&self_ref.tail));
+
+        (ptr::read(&self_ref.storage).into_inner(), head, tail)
+        // `Self::drop` is not called.
     }
 }

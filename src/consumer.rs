@@ -1,5 +1,5 @@
 use crate::{
-    ring_buffer::{RingBufferBase, RingBufferRead},
+    ring_buffer::{RingBufferBase, RingBufferRead, RingBufferReadCache},
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
 use core::{cmp, marker::PhantomData, mem::MaybeUninit, ops::Deref, slice};
@@ -24,7 +24,7 @@ where
     ///
     /// # Safety
     ///
-    /// There must be no another consumer containing the same ring buffer reference.
+    /// There must be only one consumer containing the same ring buffer reference.
     pub unsafe fn new(ring_buffer: R) -> Self {
         Self {
             ring_buffer,
@@ -32,6 +32,31 @@ where
         }
     }
 
+    /// Returns reference to the underlying ring buffer.
+    #[inline]
+    pub fn ring_buffer(&self) -> &R::Target {
+        self.ring_buffer.deref()
+    }
+
+    /// Consumes `self` and returns underlying ring buffer reference.
+    pub fn into_ring_buffer_ref(self) -> R {
+        self.ring_buffer
+    }
+    /*
+    /// Returns [`LocalConsumer`](`crate::LocalConsumer`) that borrows `Self`.
+    ///
+    /// If you need `LocalConsumer` to own `Self` see [`Self::into_local`].
+    pub fn cached(&mut self) -> Consumer<T, RingBufferReadCache<T, &R::Target>> {
+        unsafe { Consumer::new(RingBufferReadCache::new(&self.ring_buffer)) }
+    }
+
+    /// Returns [`LocalConsumer`](`crate::LocalConsumer`) that owns `Self`.
+    ///
+    /// If you need `LocalConsumer` to borrow `Self` see [`Self::acquire`].
+    pub fn into_cached(self) -> Consumer<T, R::Target> {
+        unsafe { LocalConsumer::new(self) }
+    }
+    */
     /// Returns capacity of the ring buffer.
     ///
     /// The capacity of the buffer is constant.

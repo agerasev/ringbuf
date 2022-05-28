@@ -1,7 +1,7 @@
 use super::{
     Container, RingBuffer, RingBufferBase, RingBufferRead, RingBufferWrite, SharedStorage,
 };
-use core::{cell::Cell, mem::MaybeUninit, num::NonZeroUsize};
+use core::{cell::Cell, mem::MaybeUninit, num::NonZeroUsize, ptr};
 
 /// Ring buffer for using in single thread.
 pub struct LocalRingBuffer<T, C: Container<T>> {
@@ -72,5 +72,21 @@ impl<T, C: Container<T>> LocalRingBuffer<T, C> {
             head: Cell::new(head),
             tail: Cell::new(tail),
         }
+    }
+
+    /// Destructures ring buffer into underlying container and `head` and `tail` counters.
+    ///
+    /// # Safety
+    ///
+    /// Initialized contents of the container must be properly dropped.
+    pub unsafe fn into_raw_parts(self) -> (C, usize, usize) {
+        let (head, tail) = (self.head(), self.tail());
+        let self_uninit = MaybeUninit::new(self);
+        (
+            ptr::read(&self_uninit.assume_init_ref().storage).into_inner(),
+            head,
+            tail,
+        )
+        // `Self::drop` is not called.
     }
 }

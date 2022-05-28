@@ -58,13 +58,11 @@ mod utils;
 mod consumer;
 mod producer;
 mod ring_buffer;
-mod split;
 //mod transfer;
 
 pub use consumer::*;
 pub use producer::*;
 pub use ring_buffer::*;
-pub use split::*;
 //pub use transfer::*;
 
 //#[cfg(test)]

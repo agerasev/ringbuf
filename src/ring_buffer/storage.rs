@@ -48,4 +48,8 @@ impl<T, C: Container<T>> SharedStorage<T, C> {
     pub unsafe fn as_slice(&self) -> &mut [MaybeUninit<T>] {
         (&mut *self.container.get()).as_mut()
     }
+
+    pub fn into_inner(self) -> C {
+        self.container.into_inner()
+    }
 }

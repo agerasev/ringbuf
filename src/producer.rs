@@ -30,7 +30,7 @@ where
     ///
     /// # Safety
     ///
-    /// There must be no another producer constructed from the same ring buffer.
+    /// There must be only one producer containing the same ring buffer reference.
     pub unsafe fn new(ring_buffer: R) -> Self {
         Self {
             ring_buffer,
