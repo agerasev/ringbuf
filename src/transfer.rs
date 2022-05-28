@@ -1,26 +1,20 @@
 use crate::{
     consumer::Consumer,
     producer::Producer,
-    ring_buffer::{RbRead, RbRef, RbWrite},
+    ring_buffer::{RbReadRef, RbWriteRef},
 };
 
 /// Moves at most `count` items from the `src` consumer to the `dst` producer.
-/// HeapConsumer and producer may be of different buffers as well as of the same one.
+/// Consumer and producer may be of different buffers as well as of the same one.
 ///
 /// `count` is the number of items being moved, if `None` - as much as possible items will be moved.
 ///
 /// Returns number of items been moved.
-pub fn transfer<T, Rs, Rd>(
+pub fn transfer<T, Rs: RbReadRef<T>, Rd: RbWriteRef<T>>(
     src: &mut Consumer<T, Rs>,
     dst: &mut Producer<T, Rd>,
     count: Option<usize>,
-) -> usize
-where
-    Rs: RbRef<T>,
-    Rs::Rb: RbRead<T>,
-    Rd: RbRef<T>,
-    Rd::Rb: RbWrite<T>,
-{
+) -> usize {
     let (src_left, src_right) = unsafe { src.as_uninit_slices() };
     let (dst_left, dst_right) = unsafe { dst.free_space_as_slices() };
     let src_iter = src_left.iter().chain(src_right.iter());

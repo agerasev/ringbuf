@@ -257,9 +257,9 @@ pub trait RbRef<T> {
 }
 
 #[repr(transparent)]
-pub struct RbWrapper<B>(pub B);
+pub struct RbWrap<B>(pub B);
 
-impl<'a, T, B: RbBase<T>> RbRef<T> for RbWrapper<B> {
+impl<'a, T, B: RbBase<T>> RbRef<T> for RbWrap<B> {
     type Rb = B;
     fn rb(&self) -> &B {
         &self.0
@@ -281,5 +281,33 @@ impl<T, B: RbBase<T>> RbRef<T> for Arc<B> {
     type Rb = B;
     fn rb(&self) -> &B {
         self.deref()
+    }
+}
+
+pub trait RbReadRef<T>: RbRef<T> {
+    type RbRead: RbRead<T>;
+    fn rb_read(&self) -> &Self::RbRead;
+}
+impl<T, R: RbRef<T>> RbReadRef<T> for R
+where
+    R::Rb: RbRead<T>,
+{
+    type RbRead = R::Rb;
+    fn rb_read(&self) -> &Self::RbRead {
+        self.rb()
+    }
+}
+
+pub trait RbWriteRef<T>: RbRef<T> {
+    type RbWrite: RbWrite<T>;
+    fn rb_write(&self) -> &Self::RbWrite;
+}
+impl<T, R: RbRef<T>> RbWriteRef<T> for R
+where
+    R::Rb: RbWrite<T>,
+{
+    type RbWrite = R::Rb;
+    fn rb_write(&self) -> &Self::RbWrite {
+        self.rb()
     }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    ring_buffer::{RbBase, RbRead, RbReadCache, RbRef, RbWrapper},
+    ring_buffer::{RbBase, RbRead, RbReadCache, RbReadRef, RbWrap},
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
 use core::{cmp, marker::PhantomData, mem::MaybeUninit, slice};
@@ -11,18 +11,12 @@ use std::io::{self, Read, Write};
 ///
 /// The difference from [`Consumer`](`crate::Consumer`) is that all changes is postponed
 /// until [`Self::sync`] or [`Self::release`] is called or `Self` is dropped.
-pub struct Consumer<T, R: RbRef<T>>
-where
-    R::Rb: RbRead<T>,
-{
+pub struct Consumer<T, R: RbReadRef<T>> {
     rb_ref: R,
     _phantom: PhantomData<T>,
 }
 
-impl<T, R: RbRef<T>> Consumer<T, R>
-where
-    R::Rb: RbRead<T>,
-{
+impl<T, R: RbReadRef<T>> Consumer<T, R> {
     /// Creates consumer from the ring buffer reference.
     ///
     /// # Safety
@@ -46,14 +40,14 @@ where
         self.rb_ref
     }
 
-    /// Returns caching consumer that borrows [`Self`].
-    pub fn cached(&mut self) -> Consumer<T, RbWrapper<RbReadCache<T, &R::Rb>>> {
-        unsafe { Consumer::new(RbWrapper(RbReadCache::new(self.rb_ref.rb()))) }
+    /// Returns postponed consumer that borrows [`Self`].
+    pub fn postponed(&mut self) -> Consumer<T, RbWrap<RbReadCache<T, &R::RbRead>>> {
+        unsafe { Consumer::new(RbWrap(RbReadCache::new(self.rb_ref.rb_read()))) }
     }
 
-    /// Transforms [`Self`] into caching consumer.
-    pub fn into_cached(self) -> Consumer<T, RbWrapper<RbReadCache<T, R>>> {
-        unsafe { Consumer::new(RbWrapper(RbReadCache::new(self.rb_ref))) }
+    /// Transforms [`Self`] into postponed consumer.
+    pub fn into_postponed(self) -> Consumer<T, RbWrap<RbReadCache<T, R>>> {
+        unsafe { Consumer::new(RbWrap(RbReadCache::new(self.rb_ref))) }
     }
 
     /// Returns capacity of the ring buffer.
@@ -103,7 +97,7 @@ where
     /// *This method must be followed by [`Self::advance`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
     pub unsafe fn as_uninit_slices(&self) -> (&[MaybeUninit<T>], &[MaybeUninit<T>]) {
-        let ranges = self.rb_ref.rb().occupied_ranges();
+        let ranges = self.rb_ref.rb_read().occupied_ranges();
         let ptr = self.rb_ref.rb().data().as_ptr();
         (
             slice::from_raw_parts(ptr.add(ranges.0.start), ranges.0.len()),
@@ -119,7 +113,7 @@ where
     ///
     /// See [`Self::as_uninit_slices`].
     pub unsafe fn as_mut_uninit_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
-        let ranges = self.rb_ref.rb().occupied_ranges();
+        let ranges = self.rb_ref.rb_read().occupied_ranges();
         let ptr = self.rb_ref.rb().data().as_mut_ptr();
         (
             slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
@@ -133,7 +127,7 @@ where
     ///
     /// First `count` items in occupied memory must be moved out or dropped.
     pub unsafe fn advance(&mut self, count: usize) {
-        self.rb_ref.rb().advance_head(count);
+        self.rb_ref.rb_read().advance_head(count);
     }
 
     /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
@@ -218,7 +212,7 @@ assert_eq!(cons.skip(8), 0);
     )]
     pub fn skip(&mut self, count: usize) -> usize {
         let count = cmp::min(count, self.len());
-        assert_eq!(unsafe { self.rb_ref.rb().skip(Some(count)) }, count);
+        assert_eq!(unsafe { self.rb_ref.rb_read().skip(Some(count)) }, count);
         count
     }
 
@@ -226,31 +220,22 @@ assert_eq!(cons.skip(8), 0);
     ///
     /// Returns the number of deleted items.
     pub fn clear(&mut self) -> usize {
-        unsafe { self.rb_ref.rb().skip(None) }
+        unsafe { self.rb_ref.rb_read().skip(None) }
     }
 }
 
-pub struct PopIterator<'a, T, R: RbRef<T>>
-where
-    R::Rb: RbRead<T>,
-{
+pub struct PopIterator<'a, T, R: RbReadRef<T>> {
     consumer: &'a mut Consumer<T, R>,
 }
 
-impl<'a, T, R: RbRef<T>> Iterator for PopIterator<'a, T, R>
-where
-    R::Rb: RbRead<T>,
-{
+impl<'a, T, R: RbReadRef<T>> Iterator for PopIterator<'a, T, R> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
         self.consumer.pop()
     }
 }
 
-impl<'a, T: Copy, R: RbRef<T>> Consumer<T, R>
-where
-    R::Rb: RbRead<T>,
-{
+impl<'a, T: Copy, R: RbReadRef<T>> Consumer<T, R> {
     /// Removes first items from the ring buffer and writes them into a slice.
     /// Elements must be [`Copy`].
     ///
@@ -277,8 +262,34 @@ where
     }
 }
 
+/// Postponed consumer.
+type PostponedConsumer<T, R> = Consumer<T, RbWrap<RbReadCache<T, R>>>;
+
+impl<T, R: RbReadRef<T>> PostponedConsumer<T, R> {
+    /// Create new postponed consumer.
+    ///
+    /// # Safety
+    ///
+    /// There must be only one consumer containing the same ring buffer reference.
+    pub unsafe fn new_postponed(rb_ref: R) -> Self {
+        Consumer::new(RbWrap(RbReadCache::new(rb_ref)))
+    }
+
+    /// Synchronize changes with the ring buffer.
+    ///
+    /// Postponed consumer requires manual synchronization to make freed space visible for the producer.
+    pub fn sync(&mut self) {
+        self.rb_ref.0.sync();
+    }
+
+    /// Synchronize and transform back to immediate consumer.
+    pub fn into_immediate(self) -> Consumer<T, R> {
+        unsafe { Consumer::new(self.rb_ref.0.release()) }
+    }
+}
+
 #[cfg(feature = "std")]
-impl<'a, R: RbRef<u8>> Consumer<u8, R>
+impl<'a, R: RbReadRef<u8>> Consumer<u8, R>
 where
     R::Rb: RbRead<u8>,
 {
@@ -307,7 +318,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<'a, R: RbRef<u8>> Read for Consumer<u8, R>
+impl<'a, R: RbReadRef<u8>> Read for Consumer<u8, R>
 where
     R::Rb: RbRead<u8>,
 {

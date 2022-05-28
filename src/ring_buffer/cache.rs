@@ -1,30 +1,21 @@
-use super::{RbBase, RbRead, RbRef, RbWrite};
+use super::{RbBase, RbRead, RbReadRef, RbWrite, RbWriteRef};
 use core::{cell::Cell, marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, ptr};
 
-pub struct RbReadCache<T, R: RbRef<T>>
-where
-    R::Rb: RbRead<T>,
-{
+pub struct RbReadCache<T, R: RbReadRef<T>> {
     target: R,
     head: Cell<usize>,
     tail: usize,
     _phantom: PhantomData<T>,
 }
 
-pub struct RbWriteCache<T, R: RbRef<T>>
-where
-    R::Rb: RbWrite<T>,
-{
+pub struct RbWriteCache<T, R: RbWriteRef<T>> {
     target: R,
     head: usize,
     tail: Cell<usize>,
     _phantom: PhantomData<T>,
 }
 
-impl<T, R: RbRef<T>> RbBase<T> for RbReadCache<T, R>
-where
-    R::Rb: RbRead<T>,
-{
+impl<T, R: RbReadRef<T>> RbBase<T> for RbReadCache<T, R> {
     #[inline]
     unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
         self.target.rb().data()
@@ -46,10 +37,7 @@ where
     }
 }
 
-impl<T, R: RbRef<T>> RbBase<T> for RbWriteCache<T, R>
-where
-    R::Rb: RbWrite<T>,
-{
+impl<T, R: RbWriteRef<T>> RbBase<T> for RbWriteCache<T, R> {
     #[inline]
     unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
         self.target.rb().data()
@@ -71,48 +59,33 @@ where
     }
 }
 
-impl<T, R: RbRef<T>> RbRead<T> for RbReadCache<T, R>
-where
-    R::Rb: RbRead<T>,
-{
+impl<T, R: RbReadRef<T>> RbRead<T> for RbReadCache<T, R> {
     #[inline]
     unsafe fn set_head(&self, value: usize) {
         self.head.set(value);
     }
 }
 
-impl<T, R: RbRef<T>> RbWrite<T> for RbWriteCache<T, R>
-where
-    R::Rb: RbWrite<T>,
-{
+impl<T, R: RbWriteRef<T>> RbWrite<T> for RbWriteCache<T, R> {
     #[inline]
     unsafe fn set_tail(&self, value: usize) {
         self.tail.set(value);
     }
 }
 
-impl<T, R: RbRef<T>> Drop for RbReadCache<T, R>
-where
-    R::Rb: RbRead<T>,
-{
+impl<T, R: RbReadRef<T>> Drop for RbReadCache<T, R> {
     fn drop(&mut self) {
         self.commit();
     }
 }
 
-impl<T, R: RbRef<T>> Drop for RbWriteCache<T, R>
-where
-    R::Rb: RbWrite<T>,
-{
+impl<T, R: RbWriteRef<T>> Drop for RbWriteCache<T, R> {
     fn drop(&mut self) {
         self.commit();
     }
 }
 
-impl<T, R: RbRef<T>> RbReadCache<T, R>
-where
-    R::Rb: RbRead<T>,
-{
+impl<T, R: RbReadRef<T>> RbReadCache<T, R> {
     /// Create new ring buffer cache.
     ///
     /// # Safety
@@ -128,7 +101,7 @@ where
     }
 
     pub fn commit(&mut self) {
-        unsafe { self.target.rb().set_head(self.head.get()) }
+        unsafe { self.target.rb_read().set_head(self.head.get()) }
     }
 
     pub fn sync(&mut self) {
@@ -144,10 +117,7 @@ where
     }
 }
 
-impl<T, R: RbRef<T>> RbWriteCache<T, R>
-where
-    R::Rb: RbWrite<T>,
-{
+impl<T, R: RbWriteRef<T>> RbWriteCache<T, R> {
     /// Create new ring buffer cache.
     ///
     /// # Safety
@@ -163,7 +133,7 @@ where
     }
 
     pub fn commit(&mut self) {
-        unsafe { self.target.rb().set_tail(self.tail.get()) }
+        unsafe { self.target.rb_write().set_tail(self.tail.get()) }
     }
 
     pub fn sync(&mut self) {

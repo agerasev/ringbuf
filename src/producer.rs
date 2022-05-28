@@ -1,5 +1,5 @@
 use crate::{
-    ring_buffer::{RbBase, RbRef, RbWrapper, RbWrite, RbWriteCache},
+    ring_buffer::{RbBase, RbWrap, RbWrite, RbWriteCache, RbWriteRef},
     utils::write_slice,
 };
 use core::{marker::PhantomData, mem::MaybeUninit};
@@ -12,20 +12,12 @@ use core::cmp;
 use std::io::{self, Read, Write};
 
 /// Producer part of ring buffer.
-///
-/// Generic over item type, ring buffer container and ring buffer reference.
-pub struct Producer<T, R: RbRef<T>>
-where
-    R::Rb: RbWrite<T>,
-{
+pub struct Producer<T, R: RbWriteRef<T>> {
     rb_ref: R,
     _phantom: PhantomData<T>,
 }
 
-impl<T, R: RbRef<T>> Producer<T, R>
-where
-    R::Rb: RbWrite<T>,
-{
+impl<T, R: RbWriteRef<T>> Producer<T, R> {
     /// Creates producer from the ring buffer reference.
     ///
     /// # Safety
@@ -50,13 +42,13 @@ where
     }
 
     /// Returns caching consumer that borrows [`Self`].
-    pub fn cached(&mut self) -> Producer<T, RbWrapper<RbWriteCache<T, &R::Rb>>> {
-        unsafe { Producer::new(RbWrapper(RbWriteCache::new(self.rb_ref.rb()))) }
+    pub fn postponed(&mut self) -> PostponedProducer<T, &R::RbWrite> {
+        unsafe { Producer::new(RbWrap(RbWriteCache::new(self.rb_ref.rb_write()))) }
     }
 
     /// Transforms [`Self`] into caching consumer.
-    pub fn into_cached(self) -> Producer<T, RbWrapper<RbWriteCache<T, R>>> {
-        unsafe { Producer::new(RbWrapper(RbWriteCache::new(self.rb_ref))) }
+    pub fn into_postponed(self) -> PostponedProducer<T, R> {
+        unsafe { Producer::new(RbWrap(RbWriteCache::new(self.rb_ref))) }
     }
 
     /// Returns capacity of the ring buffer.
@@ -108,7 +100,7 @@ where
     pub unsafe fn free_space_as_slices(
         &mut self,
     ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
-        self.rb_ref.rb().vacant_slices()
+        self.rb_ref.rb_write().vacant_slices()
     }
 
     /// Moves `tail` counter by `count` places.
@@ -117,7 +109,7 @@ where
     ///
     /// First `count` items in free space must be initialized.
     pub unsafe fn advance(&mut self, count: usize) {
-        self.rb_ref.rb().advance_tail(count)
+        self.rb_ref.rb_write().advance_tail(count)
     }
 
     /// Appends an item to the ring buffer.
@@ -160,10 +152,7 @@ where
     }
 }
 
-impl<'a, T: Copy, R: RbRef<T>> Producer<T, R>
-where
-    R::Rb: RbWrite<T>,
-{
+impl<'a, T: Copy, R: RbWriteRef<T>> Producer<T, R> {
     /// Appends items from slice to the ring buffer.
     /// Elements should be `Copy`.
     ///
@@ -190,8 +179,34 @@ where
     }
 }
 
+/// Postponed producer.
+type PostponedProducer<T, R> = Producer<T, RbWrap<RbWriteCache<T, R>>>;
+
+impl<T, R: RbWriteRef<T>> PostponedProducer<T, R> {
+    /// Create new postponed producer.
+    ///
+    /// # Safety
+    ///
+    /// There must be only one producer containing the same ring buffer reference.
+    pub unsafe fn new_postponed(rb_ref: R) -> Self {
+        Producer::new(RbWrap(RbWriteCache::new(rb_ref)))
+    }
+
+    /// Synchronize changes with the ring buffer.
+    ///
+    /// Postponed producer requires manual synchronization to make pushed items visible for the consumer.
+    pub fn sync(&mut self) {
+        self.rb_ref.0.sync();
+    }
+
+    /// Synchronize and transform back to immediate producer.
+    pub fn into_immediate(self) -> Producer<T, R> {
+        unsafe { Producer::new(self.rb_ref.0.release()) }
+    }
+}
+
 #[cfg(feature = "std")]
-impl<R: RbRef<u8>> Producer<u8, R>
+impl<R: RbWriteRef<u8>> Producer<u8, R>
 where
     R::Rb: RbWrite<u8>,
 {
@@ -220,7 +235,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<R: RbRef<u8>> Write for Producer<u8, R>
+impl<R: RbWriteRef<u8>> Write for Producer<u8, R>
 where
     R::Rb: RbWrite<u8>,
 {
