@@ -1,7 +1,15 @@
-//use crate::{consumer::AsyncConsumer, producer::AsyncProducer};
-use core::num::NonZeroUsize;
+use crate::{consumer::AsyncConsumer, producer::AsyncProducer};
+use core::{marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, task::Waker};
 use futures::task::AtomicWaker;
-use ringbuf::ring_buffer::{Rb, RbBase, RbRead, RbWrite};
+use ringbuf::{
+    ring_buffer::{Container, Rb, RbBase, RbRead, RbWrite},
+    Consumer, LocalRb, Producer, SharedRb,
+};
+
+#[cfg(feature = "alloc")]
+use alloc::{rc::Rc, sync::Arc};
+#[cfg(feature = "alloc")]
+use ringbuf::HeapRb;
 
 #[derive(Default)]
 pub struct Wakers {
@@ -12,22 +20,14 @@ pub struct Wakers {
 pub struct AsyncRb<T, B: Rb<T>> {
     base: B,
     wakers: Wakers,
-}
-
-impl<T, B: Rb<T>> AsyncRb<T, B> {
-    fn new(base: B) -> Self {
-        Self {
-            base,
-            wakers: Wakers::default(),
-        }
-    }
-
-    pub fn wakers(&self) -> &Wakers {
-        &self.wakers
-    }
+    _phantom: PhantomData<T>,
 }
 
 impl<T, B: Rb<T>> RbBase<T> for AsyncRb<T, B> {
+    unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
+        self.base.data()
+    }
+
     fn capacity(&self) -> NonZeroUsize {
         self.base.capacity()
     }
@@ -55,36 +55,81 @@ impl<T, B: Rb<T>> RbWrite<T> for AsyncRb<T, B> {
     }
 }
 
+pub trait AsyncRbRead<T>: RbRead<T> {
+    fn register_tail_waker(&self, waker: &Waker);
+}
+impl<T, B: Rb<T>> AsyncRbRead<T> for AsyncRb<T, B> {
+    fn register_tail_waker(&self, waker: &Waker) {
+        self.wakers.tail.register(waker);
+    }
+}
+
+pub trait AsyncRbWrite<T>: RbWrite<T> {
+    fn register_head_waker(&self, waker: &Waker);
+}
+impl<T, B: Rb<T>> AsyncRbWrite<T> for AsyncRb<T, B> {
+    fn register_head_waker(&self, waker: &Waker) {
+        self.wakers.head.register(waker);
+    }
+}
+
 impl<T, B: Rb<T>> Rb<T> for AsyncRb<T, B> {}
-/*
+
 impl<T, B: Rb<T>> AsyncRb<T, B> {
-    #[cfg(feature = "alloc")]
-    pub fn split_async(
-        self,
-    ) -> (
-        AsyncProducer<T, C, Arc<Self>>,
-        AsyncConsumer<T, C, Arc<Self>>,
-    ) {
+    pub fn from_base(base: B) -> Self {
+        Self {
+            base,
+            wakers: Wakers::default(),
+            _phantom: PhantomData,
+        }
+    }
+
+    pub fn into_base(self) -> B {
+        self.base
+    }
+
+    pub fn split_ref(&mut self) -> (AsyncProducer<T, &Self>, AsyncConsumer<T, &Self>) {
+        unsafe {
+            (
+                AsyncProducer::from_sync(Producer::new(self)),
+                AsyncConsumer::from_sync(Consumer::new(self)),
+            )
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<T, C: Container<T>> AsyncRb<T, LocalRb<T, C>> {
+    pub fn split(self) -> (AsyncProducer<T, Rc<Self>>, AsyncConsumer<T, Rc<Self>>) {
+        let rc = Rc::new(self);
+        unsafe {
+            (
+                AsyncProducer::from_sync(Producer::new(rc.clone())),
+                AsyncConsumer::from_sync(Consumer::new(rc)),
+            )
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<T, C: Container<T>> AsyncRb<T, SharedRb<T, C>> {
+    pub fn split(self) -> (AsyncProducer<T, Arc<Self>>, AsyncConsumer<T, Arc<Self>>) {
         let arc = Arc::new(self);
-        unsafe { (AsyncProducer::new(arc.clone()), AsyncConsumer::new(arc)) }
-    }
-
-    pub fn split_async_static(
-        &mut self,
-    ) -> (AsyncProducer<T, C, &Self>, AsyncConsumer<T, C, &Self>) {
-        unsafe { (AsyncProducer::new(self), AsyncConsumer::new(self)) }
+        unsafe {
+            (
+                AsyncProducer::from_sync(Producer::new(arc.clone())),
+                AsyncConsumer::from_sync(Consumer::new(arc)),
+            )
+        }
     }
 }
 
 #[cfg(feature = "alloc")]
-pub type AsyncHeapRingBuffer<T> = RingBuffer<T, Vec<MaybeUninit<T>>, AsyncCounter>;
+pub type AsyncHeapRb<T> = AsyncRb<T, HeapRb<T>>;
 
 #[cfg(feature = "alloc")]
-impl<T> AsyncHeapRingBuffer<T> {
+impl<T> AsyncHeapRb<T> {
     pub fn new(capacity: usize) -> Self {
-        let mut data = Vec::new();
-        data.resize_with(capacity, MaybeUninit::uninit);
-        unsafe { Self::from_raw_parts(data, 0, 0) }
+        Self::from_base(HeapRb::new(capacity))
     }
 }
-*/

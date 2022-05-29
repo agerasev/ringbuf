@@ -1,39 +1,38 @@
+use crate::ring_buffer::AsyncRbRead;
 use core::{
     future::Future,
     pin::Pin,
     task::{Context, Poll, Waker},
 };
 use futures::stream::Stream;
-use ringbuf::{ring_buffer::RbReadRef, Consumer};
+use ringbuf::{ring_buffer::RbRef, Consumer};
 
-pub struct AsyncConsumer<T, R> {
-    pub(crate) base: Consumer<T, R>,
+pub struct AsyncConsumer<T, R: RbRef>
+where
+    R::Rb: AsyncRbRead<T>,
+{
+    base: Consumer<T, R>,
 }
 
-impl<T, R: RbReadRef<T>> AsyncConsumer<T, R> {
-    pub unsafe fn new(ring_buffer: R) -> Self {
-        Self {
-            base: Consumer::new(ring_buffer),
-        }
+impl<T, R: RbRef> AsyncConsumer<T, R>
+where
+    R::Rb: AsyncRbRead<T>,
+{
+    pub fn from_sync(base: Consumer<T, R>) -> Self {
+        Self { base }
     }
-
-    pub fn as_sync(&self) -> &Consumer<T, C, AsyncCounter, R> {
+    pub fn into_sync(self) -> Consumer<T, R> {
+        self.base
+    }
+    pub fn as_sync(&self) -> &Consumer<T, R> {
         &self.base
     }
-    pub fn as_mut_sync(&mut self) -> &mut Consumer<T, C, AsyncCounter, R> {
+    pub fn as_mut_sync(&mut self) -> &mut Consumer<T, R> {
         &mut self.base
-    }
-    pub fn into_sync(self) -> Consumer<T, C, AsyncCounter, R> {
-        self.base
     }
 
     pub(crate) fn register_waker(&self, waker: &Waker) {
-        self.base
-            .ring_buffer
-            .counter()
-            .wakers()
-            .tail
-            .register(waker);
+        self.base.rb().register_tail_waker(waker);
     }
 
     pub fn pop(&mut self) -> PopFuture<'_, T, R> {
@@ -48,7 +47,10 @@ impl<T, R: RbReadRef<T>> AsyncConsumer<T, R> {
     }
 }
 
-impl<T: Copy, R: RbReadRef<T>> AsyncConsumer<T, R> {
+impl<T: Copy, R: RbRef> AsyncConsumer<T, R>
+where
+    R::Rb: AsyncRbRead<T>,
+{
     pub fn pop_slice<'a: 'b, 'b>(&'a mut self, slice: &'b mut [T]) -> PopSliceFuture<'a, 'b, T, R> {
         PopSliceFuture {
             owner: self,
@@ -57,12 +59,18 @@ impl<T: Copy, R: RbReadRef<T>> AsyncConsumer<T, R> {
     }
 }
 
-pub struct PopFuture<'a, T, R: RbReadRef<T>> {
+pub struct PopFuture<'a, T, R: RbRef>
+where
+    R::Rb: AsyncRbRead<T>,
+{
     owner: &'a mut AsyncConsumer<T, R>,
     done: bool,
 }
-impl<'a, T, R: RbReadRef<T>> Unpin for PopFuture<'a, T, R> {}
-impl<'a, T, R: RbReadRef<T>> Future for PopFuture<'a, T, R> {
+impl<'a, T, R: RbRef> Unpin for PopFuture<'a, T, R> where R::Rb: AsyncRbRead<T> {}
+impl<'a, T, R: RbRef> Future for PopFuture<'a, T, R>
+where
+    R::Rb: AsyncRbRead<T>,
+{
     type Output = T;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -78,12 +86,18 @@ impl<'a, T, R: RbReadRef<T>> Future for PopFuture<'a, T, R> {
     }
 }
 
-pub struct PopSliceFuture<'a, 'b, T: Copy, R: RbReadRef<T>> {
+pub struct PopSliceFuture<'a, 'b, T: Copy, R: RbRef>
+where
+    R::Rb: AsyncRbRead<T>,
+{
     owner: &'a mut AsyncConsumer<T, R>,
     slice: Option<&'b mut [T]>,
 }
-impl<'a, 'b, T: Copy, R: RbReadRef<T>> Unpin for PopSliceFuture<'a, 'b, T, R> {}
-impl<'a, 'b, T: Copy, R: RbReadRef<T>> Future for PopSliceFuture<'a, 'b, T, R> {
+impl<'a, 'b, T: Copy, R: RbRef> Unpin for PopSliceFuture<'a, 'b, T, R> where R::Rb: AsyncRbRead<T> {}
+impl<'a, 'b, T: Copy, R: RbRef> Future for PopSliceFuture<'a, 'b, T, R>
+where
+    R::Rb: AsyncRbRead<T>,
+{
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -100,11 +114,17 @@ impl<'a, 'b, T: Copy, R: RbReadRef<T>> Future for PopSliceFuture<'a, 'b, T, R> {
     }
 }
 
-pub struct PopStream<'a, T, R> {
+pub struct PopStream<'a, T, R: RbRef>
+where
+    R::Rb: AsyncRbRead<T>,
+{
     owner: &'a mut AsyncConsumer<T, R>,
 }
-impl<'a, 'b, T: Copy, R: RbReadRef<T>> Unpin for PopStream<'a, T, R> {}
-impl<'a, 'b, T: Copy, R: RbReadRef<T>> Stream for PopStream<'a, T, R> {
+impl<'a, 'b, T: Copy, R: RbRef> Unpin for PopStream<'a, T, R> where R::Rb: AsyncRbRead<T> {}
+impl<'a, 'b, T: Copy, R: RbRef> Stream for PopStream<'a, T, R>
+where
+    R::Rb: AsyncRbRead<T>,
+{
     type Item = T;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {

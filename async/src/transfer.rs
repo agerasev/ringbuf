@@ -1,5 +1,9 @@
-use crate::{consumer::AsyncConsumer, counter::AsyncCounter, producer::AsyncProducer};
-use ringbuf::{Container, RingBufferRef};
+use crate::{
+    consumer::AsyncConsumer,
+    producer::AsyncProducer,
+    ring_buffer::{AsyncRbRead, AsyncRbWrite},
+};
+use ringbuf::ring_buffer::RbRef;
 
 /// Tranfer data from one ring buffer to another.
 ///
@@ -10,15 +14,13 @@ use ringbuf::{Container, RingBufferRef};
 ///
 /// If `count` is `None` then transfer will be performed **indefinitely**.
 /// The only way to stop it is to drop the future.  
-pub async fn async_transfer<T, Cc, Cp, Rc, Rp>(
-    src: &mut AsyncConsumer<T, Cc, Rc>,
-    dst: &mut AsyncProducer<T, Cp, Rp>,
+pub async fn async_transfer<T, Rs: RbRef, Rd: RbRef>(
+    src: &mut AsyncConsumer<T, Rs>,
+    dst: &mut AsyncProducer<T, Rd>,
     mut count: Option<usize>,
 ) where
-    Cc: Container<T>,
-    Cp: Container<T>,
-    Rc: RingBufferRef<T, Cc, AsyncCounter>,
-    Rp: RingBufferRef<T, Cp, AsyncCounter>,
+    Rs::Rb: AsyncRbRead<T>,
+    Rd::Rb: AsyncRbWrite<T>,
 {
     // TODO: Transfer multiple items at once.
     loop {

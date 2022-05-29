@@ -1,4 +1,4 @@
-use crate::AsyncHeapRingBuffer;
+use crate::AsyncHeapRb;
 use futures::{
     sink::SinkExt,
     stream::{self, StreamExt},
@@ -65,9 +65,8 @@ const COUNT: usize = 1024;
 
 #[test]
 fn push_pop() {
-    let (mut prod, mut cons) = AsyncHeapRingBuffer::<usize>::new(2).split_async();
-    execute_concurrently!(
-        2,
+    let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(2).split();
+    execute!(
         async move {
             for i in 0..COUNT {
                 prod.push(i).await;
@@ -83,9 +82,8 @@ fn push_pop() {
 
 #[test]
 fn push_pop_slice() {
-    let (mut prod, mut cons) = AsyncHeapRingBuffer::<usize>::new(3).split_async();
-    execute_concurrently!(
-        2,
+    let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(3).split();
+    execute!(
         async move {
             let data = (0..COUNT).collect::<Vec<_>>();
             prod.push_slice(&data).await;
@@ -98,11 +96,11 @@ fn push_pop_slice() {
     );
 }
 
+/*
 #[test]
 fn sink_stream() {
-    let (mut prod, mut cons) = AsyncHeapRingBuffer::<usize>::new(3).split_async();
-    execute_concurrently!(
-        2,
+    let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(3).split();
+    execute!(
         async move {
             let mut src = stream::iter(0..COUNT).map(Ok);
             prod.sink().send_all(&mut src).await.unwrap();
@@ -122,12 +120,12 @@ fn sink_stream() {
         },
     );
 }
-/*
+
 #[test]
 fn transfer() {
-    let (mut src_prod, mut src_cons) = AsyncHeapRingBuffer::<usize>::new(3).split_async();
-    let (mut dst_prod, mut dst_cons) = AsyncHeapRingBuffer::<usize>::new(5).split_async();
-    let (done_send, done_recv) = AsyncHeapRingBuffer::<usize>::new(1).split_async();
+    let (mut src_prod, mut src_cons) = AsyncHeapRb::<usize>::new(3).split();
+    let (mut dst_prod, mut dst_cons) = AsyncHeapRb::<usize>::new(5).split();
+    let (done_send, done_recv) = AsyncHeapRb::<usize>::new(1).split();
     execute_concurrently!(
         3,
         async move {

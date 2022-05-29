@@ -1,39 +1,38 @@
+use crate::ring_buffer::AsyncRbWrite;
 use core::{
     future::Future,
     pin::Pin,
     task::{Context, Poll, Waker},
 };
 use futures::{future::FusedFuture, never::Never, sink::Sink};
-use ringbuf::{ring_buffer::RbWriteRef, Producer};
+use ringbuf::{ring_buffer::RbRef, Producer};
 
-pub struct AsyncProducer<T, R: RbWriteRef<T>> {
-    pub base: Producer<T, R>,
+pub struct AsyncProducer<T, R: RbRef>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
+    base: Producer<T, R>,
 }
 
-impl<T, R: RbWriteRef<T>> AsyncProducer<T, R> {
-    pub unsafe fn new(ring_buffer: R) -> Self {
-        Self {
-            base: Producer::new(ring_buffer),
-        }
+impl<T, R: RbRef> AsyncProducer<T, R>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
+    pub fn from_sync(base: Producer<T, R>) -> Self {
+        Self { base }
     }
-
+    pub fn into_sync(self) -> Producer<T, R> {
+        self.base
+    }
     pub fn as_sync(&self) -> &Producer<T, R> {
         &self.base
     }
     pub fn as_mut_sync(&mut self) -> &mut Producer<T, R> {
         &mut self.base
     }
-    pub fn into_sync(self) -> Producer<T, R> {
-        self.base
-    }
 
     fn register_waker(&self, waker: &Waker) {
-        self.base
-            .ring_buffer
-            .counter()
-            .wakers()
-            .head
-            .register(waker);
+        self.base.rb().register_head_waker(waker);
     }
 
     pub fn push(&mut self, item: T) -> PushFuture<'_, T, R> {
@@ -58,7 +57,10 @@ impl<T, R: RbWriteRef<T>> AsyncProducer<T, R> {
     }
 }
 
-impl<T: Copy, R: RbWriteRef<T>> AsyncProducer<T, R> {
+impl<T: Copy, R: RbRef> AsyncProducer<T, R>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
     pub fn push_slice<'a: 'b, 'b>(&'a mut self, slice: &'b [T]) -> PushSliceFuture<'a, 'b, T, R> {
         PushSliceFuture {
             owner: self,
@@ -67,17 +69,26 @@ impl<T: Copy, R: RbWriteRef<T>> AsyncProducer<T, R> {
     }
 }
 
-pub struct PushFuture<'a, T, R: RbWriteRef<T>> {
+pub struct PushFuture<'a, T, R: RbRef>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
     owner: &'a mut AsyncProducer<T, R>,
     item: Option<T>,
 }
-impl<'a, T, R: RbWriteRef<T>> Unpin for PushFuture<'a, T, R> {}
-impl<'a, T, R: RbWriteRef<T>> FusedFuture for PushFuture<'a, T, R> {
+impl<'a, T, R: RbRef> Unpin for PushFuture<'a, T, R> where R::Rb: AsyncRbWrite<T> {}
+impl<'a, T, R: RbRef> FusedFuture for PushFuture<'a, T, R>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
     fn is_terminated(&self) -> bool {
         self.item.is_none()
     }
 }
-impl<'a, T, R: RbWriteRef<T>> Future for PushFuture<'a, T, R> {
+impl<'a, T, R: RbRef> Future for PushFuture<'a, T, R>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -93,17 +104,26 @@ impl<'a, T, R: RbWriteRef<T>> Future for PushFuture<'a, T, R> {
     }
 }
 
-pub struct PushSliceFuture<'a, 'b, T: Copy, R: RbWriteRef<T>> {
+pub struct PushSliceFuture<'a, 'b, T: Copy, R: RbRef>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
     owner: &'a mut AsyncProducer<T, R>,
     slice: Option<&'b [T]>,
 }
-impl<'a, 'b, T: Copy, R: RbWriteRef<T>> Unpin for PushSliceFuture<'a, 'b, T, R> {}
-impl<'a, 'b, T: Copy, R: RbWriteRef<T>> FusedFuture for PushSliceFuture<'a, 'b, T, R> {
+impl<'a, 'b, T: Copy, R: RbRef> Unpin for PushSliceFuture<'a, 'b, T, R> where R::Rb: AsyncRbWrite<T> {}
+impl<'a, 'b, T: Copy, R: RbRef> FusedFuture for PushSliceFuture<'a, 'b, T, R>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
     fn is_terminated(&self) -> bool {
         self.slice.is_none()
     }
 }
-impl<'a, 'b, T: Copy, R: RbWriteRef<T>> Future for PushSliceFuture<'a, 'b, T, R> {
+impl<'a, 'b, T: Copy, R: RbRef> Future for PushSliceFuture<'a, 'b, T, R>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -120,24 +140,36 @@ impl<'a, 'b, T: Copy, R: RbWriteRef<T>> Future for PushSliceFuture<'a, 'b, T, R>
     }
 }
 
-pub struct PushIterFuture<'a, T, R: RbWriteRef<T>, I: Iterator<Item = T>> {
+pub struct PushIterFuture<'a, T, R: RbRef, I: Iterator<Item = T>>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
     owner: &'a mut AsyncProducer<T, R>,
     iter: Option<I>,
 }
-impl<'a, T, R: RbWriteRef<T>, I: Iterator<Item = T>> Unpin for PushIterFuture<'a, T, R, I> {}
-impl<'a, T, R: RbWriteRef<T>, I: Iterator<Item = T>> FusedFuture for PushIterFuture<'a, T, R, I> {
+impl<'a, T, R: RbRef, I: Iterator<Item = T>> Unpin for PushIterFuture<'a, T, R, I> where
+    R::Rb: AsyncRbWrite<T>
+{
+}
+impl<'a, T, R: RbRef, I: Iterator<Item = T>> FusedFuture for PushIterFuture<'a, T, R, I>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
     fn is_terminated(&self) -> bool {
         self.iter.is_none()
     }
 }
-impl<'a, T, R: RbWriteRef<T>, I: Iterator<Item = T>> Future for PushIterFuture<'a, T, R, I> {
+impl<'a, T, R: RbRef, I: Iterator<Item = T>> Future for PushIterFuture<'a, T, R, I>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.owner.register_waker(cx.waker());
         let mut iter = self.iter.take().unwrap();
         let iter_ended = {
-            let mut local = self.owner.base.acquire();
+            let mut local = self.owner.base.postponed();
             local.push_iter(&mut iter);
             !local.is_full()
         };
@@ -150,12 +182,18 @@ impl<'a, T, R: RbWriteRef<T>, I: Iterator<Item = T>> Future for PushIterFuture<'
     }
 }
 
-pub struct PushSink<'a, T, R> {
+pub struct PushSink<'a, T, R: RbRef>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
     owner: &'a mut AsyncProducer<T, R>,
     item: Option<T>,
 }
-impl<'a, T, R: RbWriteRef<T>> Unpin for PushSink<'a, T, R> {}
-impl<'a, T, R: RbWriteRef<T>> Sink<T> for PushSink<'a, T, R> {
+impl<'a, T, R: RbRef> Unpin for PushSink<'a, T, R> where R::Rb: AsyncRbWrite<T> {}
+impl<'a, T, R: RbRef> Sink<T> for PushSink<'a, T, R>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
     type Error = Never;
 
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
