@@ -74,3 +74,5 @@ mod tests;
 extern crate test;
 #[cfg(feature = "bench")]
 mod benchmarks;
+
+pub mod asm;
