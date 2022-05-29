@@ -1,10 +1,10 @@
-use crate::RingBuffer;
+use crate::HeapRb;
 use alloc::rc::Rc;
 
 #[test]
 fn skip() {
     // Initialize ringbuffer, prod and cons
-    let rb = RingBuffer::<i8>::new(10);
+    let rb = HeapRb::<i8>::new(10);
     let (mut prod, mut cons) = rb.split();
     let mut i = 0;
 
@@ -35,7 +35,7 @@ fn skip() {
         i += 1;
     }
 
-    // Ask too much, delete the max number of elements
+    // Ask too much, delete the max number of items
     assert_eq!(cons.skip(10), 9);
 
     // Try to remove more than possible
@@ -53,7 +53,7 @@ fn skip_drop() {
 
     static N: usize = 10;
 
-    let rb = RingBuffer::<Rc<()>>::new(N);
+    let rb = HeapRb::<Rc<()>>::new(N);
     let (mut prod, mut cons) = rb.split();
 
     for _ in 0..N {

@@ -1,11 +1,10 @@
+use crate::HeapRb;
 use std::io;
-
-use crate::RingBuffer;
 
 #[test]
 fn from() {
-    let buf0 = RingBuffer::<u8>::new(4);
-    let buf1 = RingBuffer::<u8>::new(4);
+    let buf0 = HeapRb::<u8>::new(4);
+    let buf1 = HeapRb::<u8>::new(4);
     let (mut prod0, mut cons0) = buf0.split();
     let (mut prod1, mut cons1) = buf1.split();
 
@@ -44,8 +43,8 @@ fn from() {
 
 #[test]
 fn into() {
-    let buf0 = RingBuffer::<u8>::new(4);
-    let buf1 = RingBuffer::<u8>::new(4);
+    let buf0 = HeapRb::<u8>::new(4);
+    let buf1 = HeapRb::<u8>::new(4);
     let (mut prod0, mut cons0) = buf0.split();
     let (mut prod1, mut cons1) = buf1.split();
 
@@ -84,8 +83,8 @@ fn into() {
 
 #[test]
 fn count() {
-    let buf0 = RingBuffer::<u8>::new(4);
-    let buf1 = RingBuffer::<u8>::new(4);
+    let buf0 = HeapRb::<u8>::new(4);
+    let buf1 = HeapRb::<u8>::new(4);
     let (mut prod0, mut cons0) = buf0.split();
     let (mut prod1, mut cons1) = buf1.split();
 

@@ -2,11 +2,11 @@
 //!
 //! # Overview
 //!
-//! `RingBuffer` is the initial structure representing ring buffer itself.
-//! Ring buffer can be splitted into pair of `Producer` and `Consumer`.
+//! `HeapRb` is the initial structure representing ring buffer itself.
+//! Ring buffer can be splitted into pair of `HeapProducer` and `HeapConsumer`.
 //!
-//! `Producer` and `Consumer` are used to append/remove elements to/from the ring buffer accordingly. They can be safely sent between threads.
-//! Operations with `Producer` and `Consumer` are lock-free - they succeed or fail immediately without blocking or waiting.
+//! `HeapProducer` and `HeapConsumer` are used to append/remove items to/from the ring buffer accordingly. They can be safely sent between threads.
+//! Operations with `HeapProducer` and `HeapConsumer` are lock-free - they succeed or fail immediately without blocking or waiting.
 //!
 //! Elements can be effectively appended/removed one by one or many at once.
 //! Also data could be loaded/stored directly into/from [`Read`]/[`Write`] instances.
@@ -25,21 +25,21 @@
 
 ```rust
 # extern crate ringbuf;
-use ringbuf::RingBuffer;
+use ringbuf::HeapRb;
 # fn main() {
-let rb = RingBuffer::<i32>::new(2);
+let rb = HeapRb::<i32>::new(2);
 let (mut prod, mut cons) = rb.split();
 
 prod.push(0).unwrap();
 prod.push(1).unwrap();
 assert_eq!(prod.push(2), Err(2));
 
-assert_eq!(cons.pop().unwrap(), 0);
+assert_eq!(cons.pop(), Some(0));
 
 prod.push(2).unwrap();
 
-assert_eq!(cons.pop().unwrap(), 1);
-assert_eq!(cons.pop().unwrap(), 2);
+assert_eq!(cons.pop(), Some(1));
+assert_eq!(cons.pop(), Some(2));
 assert_eq!(cons.pop(), None);
 # }
 ```
@@ -53,23 +53,24 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-mod counter;
 mod utils;
 
-mod consumer;
-mod producer;
-mod ring_buffer;
+pub mod consumer;
+pub mod producer;
+pub mod ring_buffer;
 mod transfer;
 
-pub use consumer::*;
-pub use producer::*;
-pub use ring_buffer::*;
-pub use transfer::*;
+pub use consumer::Consumer;
+pub use producer::Producer;
+#[cfg(feature = "alloc")]
+pub use ring_buffer::HeapRb;
+pub use ring_buffer::{LocalRb, SharedRb, StaticRb};
+pub use transfer::transfer;
 
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "bench")]
-extern crate test;
-#[cfg(feature = "bench")]
-mod benchmarks;
+//#[cfg(feature = "bench")]
+//extern crate test;
+//#[cfg(feature = "bench")]
+//mod benchmarks;

@@ -14,7 +14,7 @@ categories = ["concurrency", "data-structures", "no-std"]
 license = "MIT/Apache-2.0"
 
 [features]
-default = ["std", "alloc"]
+default = ["alloc", "std"]
 alloc = []
 std = ["alloc"]
 bench = []
@@ -22,10 +22,10 @@ bench = []
 [dependencies]
 cache-padded = "1.2.0"
 
-[[example]]
-name = "simple"
-required-features = ["alloc"]
-
-[[example]]
-name = "message"
-required-features = ["std"]
+#[[example]]
+#name = "simple"
+#required-features = ["alloc"]
+#
+#[[example]]
+#name = "message"
+#required-features = ["std"]

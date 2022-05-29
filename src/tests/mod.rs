@@ -1,7 +1,7 @@
 #[cfg(feature = "alloc")]
 mod access;
 #[cfg(feature = "alloc")]
-mod base;
+mod basic;
 #[cfg(feature = "alloc")]
 mod drop;
 #[cfg(feature = "alloc")]

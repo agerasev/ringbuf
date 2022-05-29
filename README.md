@@ -19,11 +19,11 @@ Lock-free single-producer single-consumer (SPSC) FIFO ring buffer with direct ac
 
 # Overview
 
-`RingBuffer` is the initial structure representing ring buffer itself.
-Ring buffer can be splitted into pair of `Producer` and `Consumer`.
+`HeapRingBuffer` is the initial structure representing ring buffer itself.
+Ring buffer can be splitted into pair of `HeapProducer` and `HeapConsumer`.
 
-`Producer` and `Consumer` are used to append/remove elements to/from the ring buffer accordingly. They can be safely transfered between threads.
-Operations with `Producer` and `Consumer` are lock-free - they're succeded or failed immediately without blocking or waiting.
+`HeapProducer` and `HeapConsumer` are used to append/remove elements to/from the ring buffer accordingly. They can be safely transfered between threads.
+Operations with `HeapProducer` and `HeapConsumer` are lock-free - they're succeded or failed immediately without blocking or waiting.
 
 Elements can be effectively appended/removed one by one or many at once.
 Also data could be loaded/stored directly into/from [`Read`]/[`Write`] instances.
@@ -41,9 +41,9 @@ Also the crate could be used with `no_std` (but `alloc` is still required).
 ## Simple example
 
 ```rust
-use ringbuf::RingBuffer;
+use ringbuf::HeapRingBuffer;
 
-let rb = RingBuffer::<i32>::new(2);
+let rb = HeapRingBuffer::<i32>::new(2);
 let (mut prod, mut cons) = rb.split();
 
 prod.push(0).unwrap();
@@ -68,9 +68,9 @@ use std::io::Read;
 use std::thread;
 use std::time::Duration;
 
-use ringbuf::RingBuffer;
+use ringbuf::HeapRingBuffer;
 
-let buf = RingBuffer::<u8>::new(10);
+let buf = HeapRingBuffer::<u8>::new(10);
 let (mut prod, mut cons) = buf.split();
 
 let smsg = "The quick brown fox jumps over the lazy dog";
