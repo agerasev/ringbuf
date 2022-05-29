@@ -50,10 +50,7 @@ where
     }
 
     pub fn sink(&mut self) -> PushSink<'_, T, R> {
-        PushSink {
-            owner: self,
-            item: None,
-        }
+        PushSink { owner: self }
     }
 }
 
@@ -187,7 +184,6 @@ where
     R::Rb: AsyncRbWrite<T>,
 {
     owner: &'a mut AsyncProducer<T, R>,
-    item: Option<T>,
 }
 impl<'a, T, R: RbRef> Unpin for PushSink<'a, T, R> where R::Rb: AsyncRbWrite<T> {}
 impl<'a, T, R: RbRef> Sink<T> for PushSink<'a, T, R>
@@ -196,19 +192,16 @@ where
 {
     type Error = Never;
 
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        let item = self.item.take().unwrap();
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.owner.register_waker(cx.waker());
-        match self.owner.base.push(item) {
-            Err(item) => {
-                self.item.replace(item);
-                Poll::Pending
-            }
-            Ok(()) => Poll::Ready(Ok(())),
+        if self.owner.base.is_full() {
+            Poll::Pending
+        } else {
+            Poll::Ready(Ok(()))
         }
     }
     fn start_send(mut self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
-        assert!(self.item.replace(item).is_none());
+        assert!(self.owner.base.push(item).is_ok());
         Ok(())
     }
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {

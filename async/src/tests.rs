@@ -1,4 +1,4 @@
-use crate::AsyncHeapRb;
+use crate::{async_transfer, AsyncHeapRb};
 use futures::{
     sink::SinkExt,
     stream::{self, StreamExt},
@@ -23,7 +23,7 @@ fn atomic_waker() {
 struct Defer<F: FnOnce()>(Option<F>);
 impl<F: FnOnce()> Drop for Defer<F> {
     fn drop(&mut self) {
-        self.0.take();
+        self.0.take().unwrap()();
     }
 }
 
@@ -42,7 +42,7 @@ macro_rules! execute {
 macro_rules! execute_concurrently {
     ( $pool_size:expr, $( $tasks:expr ),* $(,)? ) => {{
         let pool = futures::executor::ThreadPool::builder()
-            .pool_size(2)
+            .pool_size($pool_size)
             .create()
             .unwrap();
         let (tx, rx) = mpsc::channel();
@@ -66,7 +66,8 @@ const COUNT: usize = 1024;
 #[test]
 fn push_pop() {
     let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(2).split();
-    execute!(
+    execute_concurrently!(
+        2,
         async move {
             for i in 0..COUNT {
                 prod.push(i).await;
@@ -83,7 +84,8 @@ fn push_pop() {
 #[test]
 fn push_pop_slice() {
     let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(3).split();
-    execute!(
+    execute_concurrently!(
+        2,
         async move {
             let data = (0..COUNT).collect::<Vec<_>>();
             prod.push_slice(&data).await;
@@ -96,11 +98,11 @@ fn push_pop_slice() {
     );
 }
 
-/*
 #[test]
 fn sink_stream() {
-    let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(3).split();
-    execute!(
+    let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(2).split();
+    execute_concurrently!(
+        2,
         async move {
             let mut src = stream::iter(0..COUNT).map(Ok);
             prod.sink().send_all(&mut src).await.unwrap();
@@ -110,7 +112,6 @@ fn sink_stream() {
                 cons.stream()
                     .take(COUNT)
                     .fold(0, |s, x| async move {
-                        std::println!("{}", x);
                         assert_eq!(s, x);
                         s + 1
                     })
@@ -125,17 +126,25 @@ fn sink_stream() {
 fn transfer() {
     let (mut src_prod, mut src_cons) = AsyncHeapRb::<usize>::new(3).split();
     let (mut dst_prod, mut dst_cons) = AsyncHeapRb::<usize>::new(5).split();
-    let (done_send, done_recv) = AsyncHeapRb::<usize>::new(1).split();
     execute_concurrently!(
         3,
+        async move { async_transfer(&mut src_cons, &mut dst_prod, Some(COUNT)).await },
         async move {
-            src_prod.sink().send_all(0..COUNT).await;
+            let mut src = stream::iter(0..COUNT).map(Ok);
+            src_prod.sink().send_all(&mut src).await.unwrap();
         },
         async move {
-            let mut data = vec![0; COUNT];
-            cons.pop_slice(&mut data).await;
-            assert!(data.into_iter().eq(0..COUNT));
+            assert_eq!(
+                dst_cons
+                    .stream()
+                    .take(COUNT)
+                    .fold(0, |s, x| async move {
+                        assert_eq!(s, x);
+                        s + 1
+                    })
+                    .await,
+                COUNT
+            );
         },
     );
 }
-*/
