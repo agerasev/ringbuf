@@ -1,17 +1,64 @@
-use crate::{consumer::AsyncConsumer, counter::AsyncCounter, producer::AsyncProducer};
-use ringbuf::{Container, RingBuffer};
+//use crate::{consumer::AsyncConsumer, producer::AsyncProducer};
+use core::num::NonZeroUsize;
+use futures::task::AtomicWaker;
+use ringbuf::ring_buffer::{Rb, RbBase, RbRead, RbWrite};
 
-pub struct AsyncRingBuffer<T, C: Container<T>> {
-    base: RingBuffer<T, C, AsyncCounter>,
+#[derive(Default)]
+pub struct Wakers {
+    pub head: AtomicWaker,
+    pub tail: AtomicWaker,
 }
 
-impl<T, C: Container> AsyncRingBuffer<T, C> {
-    pub fn from_sync(base: RingBuffer<T, C, AsyncCounter>) -> Self {}
+pub struct AsyncRb<T, B: Rb<T>> {
+    base: B,
+    wakers: Wakers,
 }
 
-impl<T, C: Container<T>> RingBuffer<T, C, AsyncCounter> {
+impl<T, B: Rb<T>> AsyncRb<T, B> {
+    fn new(base: B) -> Self {
+        Self {
+            base,
+            wakers: Wakers::default(),
+        }
+    }
+
+    pub fn wakers(&self) -> &Wakers {
+        &self.wakers
+    }
+}
+
+impl<T, B: Rb<T>> RbBase<T> for AsyncRb<T, B> {
+    fn capacity(&self) -> NonZeroUsize {
+        self.base.capacity()
+    }
+
+    fn head(&self) -> usize {
+        self.base.head()
+    }
+
+    fn tail(&self) -> usize {
+        self.base.tail()
+    }
+}
+
+impl<T, B: Rb<T>> RbRead<T> for AsyncRb<T, B> {
+    unsafe fn set_head(&self, value: usize) {
+        self.base.set_head(value);
+        self.wakers.head.wake();
+    }
+}
+
+impl<T, B: Rb<T>> RbWrite<T> for AsyncRb<T, B> {
+    unsafe fn set_tail(&self, value: usize) {
+        self.base.set_tail(value);
+        self.wakers.tail.wake();
+    }
+}
+
+impl<T, B: Rb<T>> Rb<T> for AsyncRb<T, B> {}
+/*
+impl<T, B: Rb<T>> AsyncRb<T, B> {
     #[cfg(feature = "alloc")]
-    #[allow(clippy::type_complexity)]
     pub fn split_async(
         self,
     ) -> (
@@ -40,3 +87,4 @@ impl<T> AsyncHeapRingBuffer<T> {
         unsafe { Self::from_raw_parts(data, 0, 0) }
     }
 }
+*/

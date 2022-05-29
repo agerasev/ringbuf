@@ -1,42 +1,33 @@
-use crate::counter::AsyncCounter;
 use core::{
     future::Future,
     pin::Pin,
     task::{Context, Poll, Waker},
 };
 use futures::{future::FusedFuture, never::Never, sink::Sink};
-use ringbuf::{Container, Producer, RingBufferRef};
+use ringbuf::{ring_buffer::RbWriteRef, Producer};
 
-pub struct AsyncProducer<T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
-    pub(crate) base: Producer<T, C, AsyncCounter, R>,
+pub struct AsyncProducer<T, R: RbWriteRef<T>> {
+    pub base: Producer<T, R>,
 }
 
-impl<T, C, R> AsyncProducer<T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
+impl<T, R: RbWriteRef<T>> AsyncProducer<T, R> {
     pub unsafe fn new(ring_buffer: R) -> Self {
         Self {
             base: Producer::new(ring_buffer),
         }
     }
 
-    pub fn as_sync(&self) -> &Producer<T, C, AsyncCounter, R> {
+    pub fn as_sync(&self) -> &Producer<T, R> {
         &self.base
     }
-    pub fn as_mut_sync(&mut self) -> &mut Producer<T, C, AsyncCounter, R> {
+    pub fn as_mut_sync(&mut self) -> &mut Producer<T, R> {
         &mut self.base
     }
-    pub fn into_sync(self) -> Producer<T, C, AsyncCounter, R> {
+    pub fn into_sync(self) -> Producer<T, R> {
         self.base
     }
 
-    pub(crate) fn register_waker(&self, waker: &Waker) {
+    fn register_waker(&self, waker: &Waker) {
         self.base
             .ring_buffer
             .counter()
@@ -45,21 +36,21 @@ where
             .register(waker);
     }
 
-    pub fn push(&mut self, item: T) -> PushFuture<'_, T, C, R> {
+    pub fn push(&mut self, item: T) -> PushFuture<'_, T, R> {
         PushFuture {
             owner: self,
             item: Some(item),
         }
     }
 
-    pub fn push_iter<I: Iterator<Item = T>>(&mut self, iter: I) -> PushIterFuture<'_, T, C, R, I> {
+    pub fn push_iter<I: Iterator<Item = T>>(&mut self, iter: I) -> PushIterFuture<'_, T, R, I> {
         PushIterFuture {
             owner: self,
             iter: Some(iter),
         }
     }
 
-    pub fn sink(&mut self) -> PushSink<'_, T, C, R> {
+    pub fn sink(&mut self) -> PushSink<'_, T, R> {
         PushSink {
             owner: self,
             item: None,
@@ -67,16 +58,8 @@ where
     }
 }
 
-impl<T, C, R> AsyncProducer<T, C, R>
-where
-    T: Copy,
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
-    pub fn push_slice<'a: 'b, 'b>(
-        &'a mut self,
-        slice: &'b [T],
-    ) -> PushSliceFuture<'a, 'b, T, C, R> {
+impl<T: Copy, R: RbWriteRef<T>> AsyncProducer<T, R> {
+    pub fn push_slice<'a: 'b, 'b>(&'a mut self, slice: &'b [T]) -> PushSliceFuture<'a, 'b, T, R> {
         PushSliceFuture {
             owner: self,
             slice: Some(slice),
@@ -84,34 +67,17 @@ where
     }
 }
 
-pub struct PushFuture<'a, T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
-    owner: &'a mut AsyncProducer<T, C, R>,
+pub struct PushFuture<'a, T, R: RbWriteRef<T>> {
+    owner: &'a mut AsyncProducer<T, R>,
     item: Option<T>,
 }
-impl<'a, T, C, R> Unpin for PushFuture<'a, T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
-}
-impl<'a, T, C, R> FusedFuture for PushFuture<'a, T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
+impl<'a, T, R: RbWriteRef<T>> Unpin for PushFuture<'a, T, R> {}
+impl<'a, T, R: RbWriteRef<T>> FusedFuture for PushFuture<'a, T, R> {
     fn is_terminated(&self) -> bool {
         self.item.is_none()
     }
 }
-impl<'a, T, C, R> Future for PushFuture<'a, T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
+impl<'a, T, R: RbWriteRef<T>> Future for PushFuture<'a, T, R> {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -127,38 +93,17 @@ where
     }
 }
 
-pub struct PushSliceFuture<'a, 'b, T, C, R>
-where
-    T: Copy,
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
-    owner: &'a mut AsyncProducer<T, C, R>,
+pub struct PushSliceFuture<'a, 'b, T: Copy, R: RbWriteRef<T>> {
+    owner: &'a mut AsyncProducer<T, R>,
     slice: Option<&'b [T]>,
 }
-impl<'a, 'b, T, C, R> Unpin for PushSliceFuture<'a, 'b, T, C, R>
-where
-    T: Copy,
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
-}
-impl<'a, 'b, T, C, R> FusedFuture for PushSliceFuture<'a, 'b, T, C, R>
-where
-    T: Copy,
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
+impl<'a, 'b, T: Copy, R: RbWriteRef<T>> Unpin for PushSliceFuture<'a, 'b, T, R> {}
+impl<'a, 'b, T: Copy, R: RbWriteRef<T>> FusedFuture for PushSliceFuture<'a, 'b, T, R> {
     fn is_terminated(&self) -> bool {
         self.slice.is_none()
     }
 }
-impl<'a, 'b, T, C, R> Future for PushSliceFuture<'a, 'b, T, C, R>
-where
-    T: Copy,
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
+impl<'a, 'b, T: Copy, R: RbWriteRef<T>> Future for PushSliceFuture<'a, 'b, T, R> {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -175,38 +120,17 @@ where
     }
 }
 
-pub struct PushIterFuture<'a, T, C, R, I>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-    I: Iterator<Item = T>,
-{
-    owner: &'a mut AsyncProducer<T, C, R>,
+pub struct PushIterFuture<'a, T, R: RbWriteRef<T>, I: Iterator<Item = T>> {
+    owner: &'a mut AsyncProducer<T, R>,
     iter: Option<I>,
 }
-impl<'a, T, C, R, I> Unpin for PushIterFuture<'a, T, C, R, I>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-    I: Iterator<Item = T>,
-{
-}
-impl<'a, T, C, R, I> FusedFuture for PushIterFuture<'a, T, C, R, I>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-    I: Iterator<Item = T>,
-{
+impl<'a, T, R: RbWriteRef<T>, I: Iterator<Item = T>> Unpin for PushIterFuture<'a, T, R, I> {}
+impl<'a, T, R: RbWriteRef<T>, I: Iterator<Item = T>> FusedFuture for PushIterFuture<'a, T, R, I> {
     fn is_terminated(&self) -> bool {
         self.iter.is_none()
     }
 }
-impl<'a, T, C, R, I> Future for PushIterFuture<'a, T, C, R, I>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-    I: Iterator<Item = T>,
-{
+impl<'a, T, R: RbWriteRef<T>, I: Iterator<Item = T>> Future for PushIterFuture<'a, T, R, I> {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -226,25 +150,12 @@ where
     }
 }
 
-pub struct PushSink<'a, T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
-    owner: &'a mut AsyncProducer<T, C, R>,
+pub struct PushSink<'a, T, R> {
+    owner: &'a mut AsyncProducer<T, R>,
     item: Option<T>,
 }
-impl<'a, T, C, R> Unpin for PushSink<'a, T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
-}
-impl<'a, T, C, R> Sink<T> for PushSink<'a, T, C, R>
-where
-    C: Container<T>,
-    R: RingBufferRef<T, C, AsyncCounter>,
-{
+impl<'a, T, R: RbWriteRef<T>> Unpin for PushSink<'a, T, R> {}
+impl<'a, T, R: RbWriteRef<T>> Sink<T> for PushSink<'a, T, R> {
     type Error = Never;
 
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
