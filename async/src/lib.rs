@@ -15,5 +15,6 @@ pub use producer::*;
 pub use ring_buffer::*;
 pub use transfer::*;
 
+#[cfg(feature = "std")]
 #[cfg(test)]
 mod tests;

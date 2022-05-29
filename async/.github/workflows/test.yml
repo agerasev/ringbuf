@@ -1,0 +1,14 @@
+on: [push, pull_request]
+
+jobs:
+  build_and_test:
+    name: async-ringbuf
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: cargo test --no-default-features
+      - run: cargo test --no-default-features --features alloc
+      - run: cargo test

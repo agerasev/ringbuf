@@ -19,8 +19,14 @@ alloc = ["ringbuf/alloc"]
 std = ["alloc", "ringbuf/std"]
 
 [dependencies]
-ringbuf = { path = "../ringbuf", default-features = false }
 futures = { version = "0.3", default-features = false }
+
+[dependencies.ringbuf]
+#path = "../ringbuf"
+git = "https://github.com/agerasev/ringbuf"
+rev = "b49340e0e4a6c3f445b2b5983eacb0ba4d3e2cba"
+default-features = false
+
 
 [dev-dependencies]
 futures = { version = "0.3", features = ["executor", "thread-pool"] }
