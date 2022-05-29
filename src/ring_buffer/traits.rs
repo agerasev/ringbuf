@@ -1,4 +1,4 @@
-use crate::{consumer::Consumer, producer::Producer};
+use super::RbWrap;
 use core::{
     mem::MaybeUninit,
     num::NonZeroUsize,
@@ -227,87 +227,23 @@ pub trait RbWrite<T>: RbBase<T> {
 }
 
 /// The whole ring buffer.
-pub trait Rb<T>: RbRead<T> + RbWrite<T> {
-    /// Splits ring buffer into producer and consumer.
-    ///
-    /// This method consumes the ring buffer and puts it on heap in [`Arc`]. If you don't want to use heap the see [`Self::split_ref`].
-    #[cfg(feature = "alloc")]
-    fn split(self) -> (Producer<T, Arc<Self>>, Consumer<T, Arc<Self>>)
-    where
-        Self: Sized,
-    {
-        let arc = Arc::new(self);
-        unsafe { (Producer::new(arc.clone()), Consumer::new(arc)) }
-    }
+pub trait Rb<T>: RbRead<T> + RbWrite<T> {}
 
-    /// Splits ring buffer into producer and consumer without using the heap.
-    ///
-    /// In this case producer and consumer stores a reference to the ring buffer, so you also need to store the buffer somewhere.
-    fn split_ref(&mut self) -> (Producer<T, &Self>, Consumer<T, &Self>)
-    where
-        Self: Sized,
-    {
-        unsafe { (Producer::new(self), Consumer::new(self)) }
-    }
+pub trait RbRef: Deref<Target = Self::Rb> {
+    type Rb;
 }
 
-pub trait RbRef<T> {
-    type Rb: RbBase<T>;
-    fn rb(&self) -> &Self::Rb;
-}
-
-#[repr(transparent)]
-pub struct RbWrap<B>(pub B);
-
-impl<'a, T, B: RbBase<T>> RbRef<T> for RbWrap<B> {
+impl<'a, B> RbRef for RbWrap<B> {
     type Rb = B;
-    fn rb(&self) -> &B {
-        &self.0
-    }
 }
-impl<'a, T, B: RbBase<T>> RbRef<T> for &'a B {
+impl<'a, B> RbRef for &'a B {
     type Rb = B;
-    fn rb(&self) -> &B {
-        self
-    }
 }
-impl<T, B: RbBase<T>> RbRef<T> for Rc<B> {
+#[cfg(feature = "alloc")]
+impl<B> RbRef for Rc<B> {
     type Rb = B;
-    fn rb(&self) -> &B {
-        self.deref()
-    }
 }
-impl<T, B: RbBase<T>> RbRef<T> for Arc<B> {
+#[cfg(feature = "alloc")]
+impl<B> RbRef for Arc<B> {
     type Rb = B;
-    fn rb(&self) -> &B {
-        self.deref()
-    }
-}
-
-pub trait RbReadRef<T>: RbRef<T> {
-    type RbRead: RbRead<T>;
-    fn rb_read(&self) -> &Self::RbRead;
-}
-impl<T, R: RbRef<T>> RbReadRef<T> for R
-where
-    R::Rb: RbRead<T>,
-{
-    type RbRead = R::Rb;
-    fn rb_read(&self) -> &Self::RbRead {
-        self.rb()
-    }
-}
-
-pub trait RbWriteRef<T>: RbRef<T> {
-    type RbWrite: RbWrite<T>;
-    fn rb_write(&self) -> &Self::RbWrite;
-}
-impl<T, R: RbRef<T>> RbWriteRef<T> for R
-where
-    R::Rb: RbWrite<T>,
-{
-    type RbWrite = R::Rb;
-    fn rb_write(&self) -> &Self::RbWrite {
-        self.rb()
-    }
 }

@@ -1,4 +1,4 @@
-use crate::{prelude::*, HeapRb};
+use crate::HeapRb;
 
 #[test]
 fn iter() {

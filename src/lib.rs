@@ -25,7 +25,7 @@
 
 ```rust
 # extern crate ringbuf;
-use ringbuf::{prelude::*, HeapRb};
+use ringbuf::HeapRb;
 # fn main() {
 let rb = HeapRb::<i32>::new(2);
 let (mut prod, mut cons) = rb.split();
@@ -62,12 +62,10 @@ mod transfer;
 
 pub use consumer::Consumer;
 pub use producer::Producer;
-pub use ring_buffer::{HeapRb, Rb, StaticRb};
+#[cfg(feature = "alloc")]
+pub use ring_buffer::HeapRb;
+pub use ring_buffer::StaticRb;
 pub use transfer::transfer;
-
-pub mod prelude {
-    pub use super::ring_buffer::{Rb as _, RbBase as _, RbRead as _, RbWrite as _};
-}
 
 #[cfg(test)]
 mod tests;

@@ -13,9 +13,11 @@ use alloc::vec::Vec;
 ///
 /// For now there are safe ring buffer constructors only for `Vec` and `[T; N]`.
 /// Using other conainers is unsafe.
-#[allow(clippy::len_without_is_empty)]
 pub trait Container<T> {
     fn len(&self) -> usize;
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
     fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>];
 }
 
@@ -35,6 +37,7 @@ impl<T, const N: usize> Container<T> for [MaybeUninit<T>; N] {
         self.as_mut()
     }
 }
+#[cfg(feature = "alloc")]
 impl<T> Container<T> for Vec<MaybeUninit<T>> {
     fn len(&self) -> usize {
         self.len()

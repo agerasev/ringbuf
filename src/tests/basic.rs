@@ -1,4 +1,4 @@
-use crate::{prelude::*, HeapRb};
+use crate::{ring_buffer::RbBase as _, HeapRb};
 #[cfg(feature = "std")]
 use std::thread;
 

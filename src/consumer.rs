@@ -1,5 +1,5 @@
 use crate::{
-    ring_buffer::{RbBase, RbRead, RbReadCache, RbReadRef, RbWrap},
+    ring_buffer::{RbBase, RbRead, RbReadCache, RbRef, RbWrap},
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
 use core::{cmp, marker::PhantomData, mem::MaybeUninit, slice};
@@ -11,20 +11,26 @@ use std::io::{self, Read, Write};
 ///
 /// The difference from [`Consumer`](`crate::Consumer`) is that all changes is postponed
 /// until [`Self::sync`] or [`Self::release`] is called or `Self` is dropped.
-pub struct Consumer<T, R: RbReadRef<T>> {
-    rb_ref: R,
+pub struct Consumer<T, R: RbRef>
+where
+    R::Rb: RbRead<T>,
+{
+    target: R,
     _phantom: PhantomData<T>,
 }
 
-impl<T, R: RbReadRef<T>> Consumer<T, R> {
+impl<T, R: RbRef> Consumer<T, R>
+where
+    R::Rb: RbRead<T>,
+{
     /// Creates consumer from the ring buffer reference.
     ///
     /// # Safety
     ///
     /// There must be only one consumer containing the same ring buffer reference.
-    pub unsafe fn new(rb_ref: R) -> Self {
+    pub unsafe fn new(target: R) -> Self {
         Self {
-            rb_ref,
+            target,
             _phantom: PhantomData,
         }
     }
@@ -32,55 +38,55 @@ impl<T, R: RbReadRef<T>> Consumer<T, R> {
     /// Returns reference to the underlying ring buffer.
     #[inline]
     pub fn rb(&self) -> &R::Rb {
-        self.rb_ref.rb()
+        &self.target
     }
 
     /// Consumes `self` and returns underlying ring buffer reference.
     pub fn into_rb_ref(self) -> R {
-        self.rb_ref
+        self.target
     }
 
     /// Returns postponed consumer that borrows [`Self`].
-    pub fn postponed(&mut self) -> Consumer<T, RbWrap<RbReadCache<T, &R::RbRead>>> {
-        unsafe { Consumer::new(RbWrap(RbReadCache::new(self.rb_ref.rb_read()))) }
+    pub fn postponed(&mut self) -> Consumer<T, RbWrap<RbReadCache<T, &R::Rb>>> {
+        unsafe { Consumer::new(RbWrap(RbReadCache::new(&self.target))) }
     }
 
     /// Transforms [`Self`] into postponed consumer.
     pub fn into_postponed(self) -> Consumer<T, RbWrap<RbReadCache<T, R>>> {
-        unsafe { Consumer::new(RbWrap(RbReadCache::new(self.rb_ref))) }
+        unsafe { Consumer::new(RbWrap(RbReadCache::new(self.target))) }
     }
 
     /// Returns capacity of the ring buffer.
     ///
     /// The capacity of the buffer is constant.
     pub fn capacity(&self) -> usize {
-        self.rb_ref.rb().capacity().get()
+        self.target.capacity().get()
     }
 
     /// Checks if the ring buffer is empty.
     ///
     /// *The result may become irrelevant at any time because of concurring producer activity.*
     pub fn is_empty(&self) -> bool {
-        self.rb_ref.rb().is_empty()
+        self.target.is_empty()
     }
 
     /// Checks if the ring buffer is full.
     pub fn is_full(&self) -> bool {
-        self.rb_ref.rb().is_full()
+        self.target.is_full()
     }
 
     /// The number of items stored in the buffer.
     ///
     /// *Actual number may be greater than the returned value because of concurring producer activity.*
     pub fn len(&self) -> usize {
-        self.rb_ref.rb().occupied_len()
+        self.target.occupied_len()
     }
 
     /// The number of remaining free places in the buffer.
     ///
     /// *Actual number may be less than the returned value because of concurring producer activity.*
     pub fn free_len(&self) -> usize {
-        self.rb_ref.rb().vacant_len()
+        self.target.vacant_len()
     }
 
     /// Provides a direct access to the ring buffer occupied memory.
@@ -97,8 +103,8 @@ impl<T, R: RbReadRef<T>> Consumer<T, R> {
     /// *This method must be followed by [`Self::advance`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
     pub unsafe fn as_uninit_slices(&self) -> (&[MaybeUninit<T>], &[MaybeUninit<T>]) {
-        let ranges = self.rb_ref.rb_read().occupied_ranges();
-        let ptr = self.rb_ref.rb().data().as_ptr();
+        let ranges = self.target.occupied_ranges();
+        let ptr = self.target.data().as_ptr();
         (
             slice::from_raw_parts(ptr.add(ranges.0.start), ranges.0.len()),
             slice::from_raw_parts(ptr.add(ranges.1.start), ranges.1.len()),
@@ -113,21 +119,21 @@ impl<T, R: RbReadRef<T>> Consumer<T, R> {
     ///
     /// See [`Self::as_uninit_slices`].
     pub unsafe fn as_mut_uninit_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
-        let ranges = self.rb_ref.rb_read().occupied_ranges();
-        let ptr = self.rb_ref.rb().data().as_mut_ptr();
+        let ranges = self.target.occupied_ranges();
+        let ptr = self.target.data().as_mut_ptr();
         (
             slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
             slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
         )
     }
 
-    /// Moves `head` rb_ref by `count` places.
+    /// Moves `head` target by `count` places.
     ///
     /// # Safety
     ///
     /// First `count` items in occupied memory must be moved out or dropped.
     pub unsafe fn advance(&mut self, count: usize) {
-        self.rb_ref.rb_read().advance_head(count);
+        self.target.advance_head(count);
     }
 
     /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
@@ -196,10 +202,10 @@ impl<T, R: RbReadRef<T>> Consumer<T, R> {
         doc = r##"
 ```rust
 # extern crate ringbuf;
-# use ringbuf::{prelude::*, HeapRb};
+# use ringbuf::HeapRb;
 # fn main() {
-let rb_ref = HeapRb::<i32>::new(8);
-let (mut prod, mut cons) = rb_ref.split();
+let target = HeapRb::<i32>::new(8);
+let (mut prod, mut cons) = target.split();
 
 assert_eq!(prod.push_iter(&mut (0..8)), 8);
 
@@ -212,7 +218,7 @@ assert_eq!(cons.skip(8), 0);
     )]
     pub fn skip(&mut self, count: usize) -> usize {
         let count = cmp::min(count, self.len());
-        assert_eq!(unsafe { self.rb_ref.rb_read().skip(Some(count)) }, count);
+        assert_eq!(unsafe { self.target.skip(Some(count)) }, count);
         count
     }
 
@@ -220,22 +226,31 @@ assert_eq!(cons.skip(8), 0);
     ///
     /// Returns the number of deleted items.
     pub fn clear(&mut self) -> usize {
-        unsafe { self.rb_ref.rb_read().skip(None) }
+        unsafe { self.target.skip(None) }
     }
 }
 
-pub struct PopIterator<'a, T, R: RbReadRef<T>> {
+pub struct PopIterator<'a, T, R: RbRef>
+where
+    R::Rb: RbRead<T>,
+{
     consumer: &'a mut Consumer<T, R>,
 }
 
-impl<'a, T, R: RbReadRef<T>> Iterator for PopIterator<'a, T, R> {
+impl<'a, T, R: RbRef> Iterator for PopIterator<'a, T, R>
+where
+    R::Rb: RbRead<T>,
+{
     type Item = T;
     fn next(&mut self) -> Option<T> {
         self.consumer.pop()
     }
 }
 
-impl<'a, T: Copy, R: RbReadRef<T>> Consumer<T, R> {
+impl<'a, T: Copy, R: RbRef> Consumer<T, R>
+where
+    R::Rb: RbRead<T>,
+{
     /// Removes first items from the ring buffer and writes them into a slice.
     /// Elements must be [`Copy`].
     ///
@@ -265,31 +280,34 @@ impl<'a, T: Copy, R: RbReadRef<T>> Consumer<T, R> {
 /// Postponed consumer.
 type PostponedConsumer<T, R> = Consumer<T, RbWrap<RbReadCache<T, R>>>;
 
-impl<T, R: RbReadRef<T>> PostponedConsumer<T, R> {
+impl<T, R: RbRef> PostponedConsumer<T, R>
+where
+    R::Rb: RbRead<T>,
+{
     /// Create new postponed consumer.
     ///
     /// # Safety
     ///
     /// There must be only one consumer containing the same ring buffer reference.
-    pub unsafe fn new_postponed(rb_ref: R) -> Self {
-        Consumer::new(RbWrap(RbReadCache::new(rb_ref)))
+    pub unsafe fn new_postponed(target: R) -> Self {
+        Consumer::new(RbWrap(RbReadCache::new(target)))
     }
 
     /// Synchronize changes with the ring buffer.
     ///
     /// Postponed consumer requires manual synchronization to make freed space visible for the producer.
     pub fn sync(&mut self) {
-        self.rb_ref.0.sync();
+        self.target.0.sync();
     }
 
     /// Synchronize and transform back to immediate consumer.
     pub fn into_immediate(self) -> Consumer<T, R> {
-        unsafe { Consumer::new(self.rb_ref.0.release()) }
+        unsafe { Consumer::new(self.target.0.release()) }
     }
 }
 
 #[cfg(feature = "std")]
-impl<'a, R: RbReadRef<u8>> Consumer<u8, R>
+impl<'a, R: RbRef> Consumer<u8, R>
 where
     R::Rb: RbRead<u8>,
 {
@@ -318,7 +336,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<'a, R: RbReadRef<u8>> Read for Consumer<u8, R>
+impl<'a, R: RbRef> Read for Consumer<u8, R>
 where
     R::Rb: RbRead<u8>,
 {

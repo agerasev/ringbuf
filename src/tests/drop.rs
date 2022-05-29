@@ -1,4 +1,4 @@
-use crate::{prelude::*, Consumer, HeapRb};
+use crate::{Consumer, HeapRb};
 use alloc::collections::BTreeSet;
 use core::cell::RefCell;
 

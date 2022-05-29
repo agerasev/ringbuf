@@ -1,7 +1,7 @@
 use crate::{
     consumer::Consumer,
     producer::Producer,
-    ring_buffer::{RbReadRef, RbWriteRef},
+    ring_buffer::{RbRead, RbRef, RbWrite},
 };
 
 /// Moves at most `count` items from the `src` consumer to the `dst` producer.
@@ -10,11 +10,15 @@ use crate::{
 /// `count` is the number of items being moved, if `None` - as much as possible items will be moved.
 ///
 /// Returns number of items been moved.
-pub fn transfer<T, Rs: RbReadRef<T>, Rd: RbWriteRef<T>>(
+pub fn transfer<T, Rs: RbRef, Rd: RbRef>(
     src: &mut Consumer<T, Rs>,
     dst: &mut Producer<T, Rd>,
     count: Option<usize>,
-) -> usize {
+) -> usize
+where
+    Rs::Rb: RbRead<T>,
+    Rd::Rb: RbWrite<T>,
+{
     let (src_left, src_right) = unsafe { src.as_uninit_slices() };
     let (dst_left, dst_right) = unsafe { dst.free_space_as_slices() };
     let src_iter = src_left.iter().chain(src_right.iter());

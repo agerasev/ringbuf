@@ -1,4 +1,5 @@
 use super::{Container, Rb, RbBase, RbRead, RbWrite, SharedStorage};
+use crate::{consumer::Consumer, producer::Producer};
 use cache_padded::CachePadded;
 use core::{
     mem::{self, MaybeUninit},
@@ -6,6 +7,9 @@ use core::{
     ptr,
     sync::atomic::{AtomicUsize, Ordering},
 };
+
+#[cfg(feature = "alloc")]
+use alloc::sync::Arc;
 
 /// Ring buffer that could be shared between threads.
 pub struct SharedRb<T, C: Container<T>> {
@@ -92,5 +96,27 @@ impl<T, C: Container<T>> SharedRb<T, C> {
 
         (ptr::read(&self_ref.storage).into_inner(), head, tail)
         // `Self::drop` is not called.
+    }
+
+    /// Splits ring buffer into producer and consumer.
+    ///
+    /// This method consumes the ring buffer and puts it on heap in [`Arc`]. If you don't want to use heap the see [`Self::split_ref`].
+    #[cfg(feature = "alloc")]
+    pub fn split(self) -> (Producer<T, Arc<Self>>, Consumer<T, Arc<Self>>)
+    where
+        Self: Sized,
+    {
+        let arc = Arc::new(self);
+        unsafe { (Producer::new(arc.clone()), Consumer::new(arc)) }
+    }
+
+    /// Splits ring buffer into producer and consumer without using the heap.
+    ///
+    /// In this case producer and consumer stores a reference to the ring buffer, so you also need to store the buffer somewhere.
+    pub fn split_ref(&mut self) -> (Producer<T, &Self>, Consumer<T, &Self>)
+    where
+        Self: Sized,
+    {
+        unsafe { (Producer::new(self), Consumer::new(self)) }
     }
 }

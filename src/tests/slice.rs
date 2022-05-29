@@ -1,4 +1,4 @@
-use crate::{prelude::*, transfer, HeapRb};
+use crate::{transfer, HeapRb};
 
 #[test]
 fn push_pop_slice() {
