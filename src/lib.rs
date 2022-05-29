@@ -64,7 +64,7 @@ pub use consumer::Consumer;
 pub use producer::Producer;
 #[cfg(feature = "alloc")]
 pub use ring_buffer::HeapRb;
-pub use ring_buffer::StaticRb;
+pub use ring_buffer::{LocalRb, SharedRb, StaticRb};
 pub use transfer::transfer;
 
 #[cfg(test)]
