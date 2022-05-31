@@ -8,7 +8,6 @@ use alloc::rc::Rc;
 /// Ring buffer for using in single thread.
 pub struct LocalRb<T, C: Container<T>> {
     storage: SharedStorage<T, C>,
-    len: NonZeroUsize,
     head: Cell<usize>,
     tail: Cell<usize>,
 }
@@ -21,7 +20,7 @@ impl<T, C: Container<T>> RbBase<T> for LocalRb<T, C> {
 
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
-        self.len
+        self.storage.len()
     }
 
     #[inline]
@@ -67,10 +66,8 @@ impl<T, C: Container<T>> LocalRb<T, C> {
     ///
     /// Container and counter must have the same `len`.
     pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
-        let storage = SharedStorage::new(container);
         Self {
-            len: storage.len(),
-            storage,
+            storage: SharedStorage::new(container),
             head: Cell::new(head),
             tail: Cell::new(tail),
         }
