@@ -2,7 +2,7 @@ use crate::{
     ring_buffer::{RbBase, RbRead, RbReadCache, RbRef, RbWrap},
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
-use core::{cmp, marker::PhantomData, mem::MaybeUninit, slice};
+use core::{cmp, marker::PhantomData, mem::MaybeUninit};
 
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
@@ -59,6 +59,7 @@ where
     /// Returns capacity of the ring buffer.
     ///
     /// The capacity of the buffer is constant.
+    #[inline]
     pub fn capacity(&self) -> usize {
         self.target.capacity().get()
     }
@@ -66,11 +67,13 @@ where
     /// Checks if the ring buffer is empty.
     ///
     /// *The result may become irrelevant at any time because of concurring producer activity.*
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.target.is_empty()
     }
 
     /// Checks if the ring buffer is full.
+    #[inline]
     pub fn is_full(&self) -> bool {
         self.target.is_full()
     }
@@ -78,6 +81,7 @@ where
     /// The number of items stored in the buffer.
     ///
     /// *Actual number may be greater than the returned value because of concurring producer activity.*
+    #[inline]
     pub fn len(&self) -> usize {
         self.target.occupied_len()
     }
@@ -85,6 +89,7 @@ where
     /// The number of remaining free places in the buffer.
     ///
     /// *Actual number may be less than the returned value because of concurring producer activity.*
+    #[inline]
     pub fn free_len(&self) -> usize {
         self.target.vacant_len()
     }
@@ -102,13 +107,10 @@ where
     ///
     /// *This method must be followed by [`Self::advance`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
+    #[inline]
     pub unsafe fn as_uninit_slices(&self) -> (&[MaybeUninit<T>], &[MaybeUninit<T>]) {
-        let ranges = self.target.occupied_ranges();
-        let ptr = self.target.data().as_ptr();
-        (
-            slice::from_raw_parts(ptr.add(ranges.0.start), ranges.0.len()),
-            slice::from_raw_parts(ptr.add(ranges.1.start), ranges.1.len()),
-        )
+        let (left, right) = self.target.occupied_slices();
+        (left as &[_], right as &[_])
     }
 
     /// Provides a direct mutable access to the ring buffer occupied memory.
@@ -118,13 +120,9 @@ where
     /// # Safety
     ///
     /// See [`Self::as_uninit_slices`].
+    #[inline]
     pub unsafe fn as_mut_uninit_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
-        let ranges = self.target.occupied_ranges();
-        let ptr = self.target.data().as_mut_ptr();
-        (
-            slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
-            slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
-        )
+        self.target.occupied_slices()
     }
 
     /// Moves `head` target by `count` places.
@@ -132,11 +130,13 @@ where
     /// # Safety
     ///
     /// First `count` items in occupied memory must be moved out or dropped.
+    #[inline]
     pub unsafe fn advance(&mut self, count: usize) {
         self.target.advance_head(count);
     }
 
     /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
+    #[inline]
     pub fn as_slices(&self) -> (&[T], &[T]) {
         unsafe {
             let (left, right) = self.as_uninit_slices();
@@ -145,6 +145,7 @@ where
     }
 
     /// Returns a pair of mutable slices which contain, in order, the contents of the ring buffer.
+    #[inline]
     pub fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
         unsafe {
             let (left, right) = self.as_mut_uninit_slices();
