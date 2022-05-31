@@ -229,6 +229,7 @@ pub trait RbWrite<T>: RbBase<T> {
 /// The whole ring buffer.
 pub trait Rb<T>: RbRead<T> + RbWrite<T> {}
 
+/// Reference to the ring buffer.
 pub trait RbRef: Deref<Target = Self::Rb> {
     type Rb;
 }

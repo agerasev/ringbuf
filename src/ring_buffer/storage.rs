@@ -9,11 +9,8 @@ use alloc::vec::Vec;
 ///
 /// # Safety
 ///
-/// *Container must not cause data race on concurrent `.as_mut()` calls.*
-///
-/// For now there are safe ring buffer constructors only for `Vec` and `[T; N]`.
-/// Using other conainers is unsafe.
-pub trait Container<T> {
+/// *Container must not cause data race on concurrent `.as_mut_slice()` calls.*
+pub unsafe trait Container<T> {
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool {
         self.len() == 0
@@ -21,7 +18,7 @@ pub trait Container<T> {
     fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>];
 }
 
-impl<'a, T> Container<T> for &'a mut [MaybeUninit<T>] {
+unsafe impl<'a, T> Container<T> for &'a mut [MaybeUninit<T>] {
     fn len(&self) -> usize {
         <[_]>::len(self)
     }
@@ -29,7 +26,7 @@ impl<'a, T> Container<T> for &'a mut [MaybeUninit<T>] {
         self
     }
 }
-impl<T, const N: usize> Container<T> for [MaybeUninit<T>; N] {
+unsafe impl<T, const N: usize> Container<T> for [MaybeUninit<T>; N] {
     fn len(&self) -> usize {
         N
     }
@@ -38,7 +35,7 @@ impl<T, const N: usize> Container<T> for [MaybeUninit<T>; N] {
     }
 }
 #[cfg(feature = "alloc")]
-impl<T> Container<T> for Vec<MaybeUninit<T>> {
+unsafe impl<T> Container<T> for Vec<MaybeUninit<T>> {
     fn len(&self) -> usize {
         self.len()
     }
