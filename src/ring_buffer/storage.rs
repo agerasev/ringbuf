@@ -15,6 +15,7 @@ use alloc::vec::Vec;
 /// Using other conainers is unsafe.
 pub trait Container<T> {
     fn len(&self) -> usize;
+    #[inline]
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -22,26 +23,32 @@ pub trait Container<T> {
 }
 
 impl<'a, T> Container<T> for &'a mut [MaybeUninit<T>] {
+    #[inline]
     fn len(&self) -> usize {
         <[_]>::len(self)
     }
+    #[inline]
     fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>] {
         self
     }
 }
 impl<T, const N: usize> Container<T> for [MaybeUninit<T>; N] {
+    #[inline]
     fn len(&self) -> usize {
         N
     }
+    #[inline]
     fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>] {
         self.as_mut()
     }
 }
 #[cfg(feature = "alloc")]
 impl<T> Container<T> for Vec<MaybeUninit<T>> {
+    #[inline]
     fn len(&self) -> usize {
         self.len()
     }
+    #[inline]
     fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>] {
         self.as_mut()
     }
@@ -79,6 +86,7 @@ impl<T, C: Container<T>> SharedStorage<T, C> {
     /// It is recommended to use [`Consumer::as_slices`](`crate::LocalConsumer::as_slices`) and
     /// [`Producer::free_space_as_slices`](`crate::LocalProducer::free_space_as_slices`) instead.
     #[allow(clippy::mut_from_ref)]
+    #[inline]
     pub unsafe fn as_slice(&self) -> &mut [MaybeUninit<T>] {
         (&mut *self.container.get()).as_mut_slice()
     }

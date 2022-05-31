@@ -82,6 +82,7 @@ where
     /// The number of items stored in the buffer.
     ///
     /// *Actual number may be less than the returned value because of concurring consumer activity.*
+    #[inline]
     pub fn len(&self) -> usize {
         self.target.occupied_len()
     }
@@ -89,6 +90,7 @@ where
     /// The number of remaining free places in the buffer.
     ///
     /// *Actual number may be greater than the returning value because of concurring consumer activity.*
+    #[inline]
     pub fn free_len(&self) -> usize {
         self.target.vacant_len()
     }
@@ -103,6 +105,7 @@ where
     ///
     /// *This method must be followed by `Self::advance` call with the number of items being put previously as argument.*
     /// *No other mutating calls allowed before that.*
+    #[inline]
     pub unsafe fn free_space_as_slices(
         &mut self,
     ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
@@ -114,6 +117,7 @@ where
     /// # Safety
     ///
     /// First `count` items in free space must be initialized.
+    #[inline]
     pub unsafe fn advance(&mut self, count: usize) {
         self.target.advance_tail(count)
     }

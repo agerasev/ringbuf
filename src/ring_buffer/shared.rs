@@ -14,7 +14,6 @@ use alloc::sync::Arc;
 /// Ring buffer that could be shared between threads.
 pub struct SharedRb<T, C: Container<T>> {
     storage: SharedStorage<T, C>,
-    len: NonZeroUsize,
     head: CachePadded<AtomicUsize>,
     tail: CachePadded<AtomicUsize>,
 }
@@ -27,7 +26,7 @@ impl<T, C: Container<T>> RbBase<T> for SharedRb<T, C> {
 
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
-        self.len
+        self.storage.len()
     }
 
     #[inline]
@@ -71,10 +70,8 @@ impl<T, C: Container<T>> SharedRb<T, C> {
     /// The items in container inside `head..tail` range must be initialized, items outside this range must be uninitialized.
     /// `head` and `tail` values must be valid (see [`Counter`](`crate::counter::Counter`)).
     pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
-        let storage = SharedStorage::new(container);
         Self {
-            len: storage.len(),
-            storage,
+            storage: SharedStorage::new(container),
             head: CachePadded::new(AtomicUsize::new(head)),
             tail: CachePadded::new(AtomicUsize::new(tail)),
         }
