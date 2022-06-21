@@ -9,8 +9,12 @@ use std::io::{self, Read, Write};
 
 /// Consumer part of ring buffer.
 ///
-/// The difference from [`Consumer`](`crate::Consumer`) is that all changes is postponed
-/// until [`Self::sync`] or [`Self::release`] is called or `Self` is dropped.
+/// It can operate in immediate (by default) and postponed modes.
+/// Modes could be switched using [`postponed`](`Self::postponed`)/[`into_postponed`](`Self::into_postponed`) and [`into_immediate`](`Self::into_immediate`) methods.
+///
+/// + In immediate mode removed and inserted items are automatically synchronized with the other end.
+/// + In postponed mode synchronization occures only when [`sync`](`Self::sync`) or [`into_immediate`](`Self::into_immediate`) is called or when `Self` is dropped.
+///   The only reason to use postponed mode is that multiple subsequent operations are performed slightly faster due to less frequent cache synchronization.
 pub struct Consumer<T, R: RbRef>
 where
     R::Rb: RbRead<T>,

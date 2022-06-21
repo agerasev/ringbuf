@@ -11,7 +11,14 @@ use alloc::{rc::Rc, sync::Arc};
 
 /// Basic ring buffer trait.
 ///
-/// Provides status methods and access to underlying memory.
+/// Provides raw head/tail pointers and access to underlying memory.
+///
+/// # Mechanism
+///
+/// When an item is extracted from the ring buffer it is taken from the **head** side. New items are appended to the **tail** side.
+///
+/// The valid values for `head` and `tail` are allowed be less than `2 * len` (instead of `len`).
+/// It allows us to distinguish situations when the buffer is empty (`head == tail`) and when the buffer is full (`tail - head == len` modulo `2 * len`) without using an extra space in container.
 pub trait RbBase<T> {
     /// Returns underlying raw ring buffer memory as slice.
     ///
@@ -20,7 +27,7 @@ pub trait RbBase<T> {
     /// All operations on this data must cohere with the counter.
     ///
     /// *Accessing raw data is extremely unsafe.*
-    /// It is recommended to use [`Consumer::as_slices()`] and [`Producer::free_space_as_slices()`] instead.
+    /// It is recommended to use [`Consumer::as_slices`](`crate::Consumer::as_slices`) and [`Producer::free_space_as_slices`](`crate::Producer::free_space_as_slices`) instead.
     #[allow(clippy::mut_from_ref)]
     unsafe fn data(&self) -> &mut [MaybeUninit<T>];
 
@@ -121,7 +128,7 @@ pub trait RbRead<T>: RbBase<T> {
     /// All items are initialized. Elements must be removed starting from the beginning of first slice.
     /// When all items are removed from the first slice then items must be removed from the beginning of the second slice.
     ///
-    /// *This method must be followed by [`Self::advance`] call with the number of items being removed previously as argument.*
+    /// *This method must be followed by [`Self::advance_head`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
     unsafe fn occupied_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
         let ranges = self.occupied_ranges();
@@ -214,7 +221,7 @@ pub trait RbWrite<T>: RbBase<T> {
     /// Vacant memory is uninitialized. Initialized items must be put starting from the beginning of first slice.
     /// When first slice is fully filled then items must be put to the beginning of the second slice.
     ///
-    /// *This method must be followed by `Self::advance_tail` call with the number of items being put previously as argument.*
+    /// *This method must be followed by [`Self::advance_tail`] call with the number of items being put previously as argument.*
     /// *No other mutating calls allowed before that.*
     unsafe fn vacant_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
         let ranges = self.vacant_ranges();

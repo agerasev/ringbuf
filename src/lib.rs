@@ -2,20 +2,25 @@
 //!
 //! # Overview
 //!
-//! `HeapRb` is the initial structure representing ring buffer itself.
-//! Ring buffer can be splitted into pair of `HeapProducer` and `HeapConsumer`.
+//! The initial thing you probably want to start with is to choose some implementation if the [`Rb`](`crate::ring_buffer::Rb`) trait representing ring buffer itself.
 //!
-//! `HeapProducer` and `HeapConsumer` are used to append/remove items to/from the ring buffer accordingly. They can be safely sent between threads.
-//! Operations with `HeapProducer` and `HeapConsumer` are lock-free - they succeed or fail immediately without blocking or waiting.
+//! Implementations of the [`Rb`](`crate::ring_buffer::Rb`) trait:
+//!
+//! + [`LocalRb`]. Only for single-threaded use.
+//! + [`SharedRb`]. Can be shared between threads.
+//!   + [`HeapRb`]. Contents are stored in dynamic memory. *Recommended for most use cases.*
+//!   + [`StaticRb`]. Contents can be stored in statically-allocated memory.
+//!
+//! Ring buffer can be splitted into pair of [`Producer`] and [`Consumer`].
+//!
+//! [`Producer`] and [`Consumer`] are used to append/remove items to/from the ring buffer accordingly. For [`SharedRb`] they can be safely sent between threads.
+//! Operations with [`Producer`] and [`Consumer`] are lock-free - they succeed or fail immediately without blocking or waiting.
 //!
 //! Elements can be effectively appended/removed one by one or many at once.
-//! Also data could be loaded/stored directly into/from [`Read`]/[`Write`] instances.
-//! And finally, there are `unsafe` methods allowing thread-safe direct access in place to the inner memory being appended/removed.
+//! Also data could be loaded/stored directly into/from [`Read`](`std::io::Read`)/[`Write`](`std::io::Write`) instances.
+//! And finally, there are `unsafe` methods allowing thread-safe direct access to the inner memory being appended/removed.
 //!
-//! [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
-//! [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
-//!
-//! When building with nightly toolchain it is possible to run benchmarks via `cargo bench --features benchmark`.
+//! When building with nightly toolchain it is possible to run benchmarks via `cargo bench --features bench`.
 #![cfg_attr(
     feature = "alloc",
     doc = r##"
@@ -55,8 +60,11 @@ extern crate std;
 
 mod utils;
 
+/// [`Consumer`] and additional types.
 pub mod consumer;
+/// [`Producer`] and additional types.
 pub mod producer;
+/// Ring buffer traits and implementations.
 pub mod ring_buffer;
 mod transfer;
 

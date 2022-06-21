@@ -12,6 +12,28 @@ use core::{
 use alloc::sync::Arc;
 
 /// Ring buffer that could be shared between threads.
+///
+/// Implements [`Sync`]. And its [`Producer`] and [`Consumer`] implement [`Send`].
+///
+#[cfg_attr(
+    feature = "std",
+    doc = r##"
+```
+use std::{thread, vec::Vec};
+use ringbuf::SharedRb;
+
+let (mut prod, mut cons) = SharedRb::<i32, Vec<_>>::new(256).split();
+thread::spawn(move || {
+    prod.push(123).unwrap();
+})
+.join();
+thread::spawn(move || {
+    assert_eq!(cons.pop().unwrap(), 123);
+})
+.join();
+```
+"##
+)]
 pub struct SharedRb<T, C: Container<T>> {
     storage: SharedStorage<T, C>,
     head: CachePadded<AtomicUsize>,
@@ -68,7 +90,7 @@ impl<T, C: Container<T>> SharedRb<T, C> {
     /// # Safety
     ///
     /// The items in container inside `head..tail` range must be initialized, items outside this range must be uninitialized.
-    /// `head` and `tail` values must be valid (see [`Counter`](`crate::counter::Counter`)).
+    /// `head` and `tail` values must be valid (see [`RbBase`](`crate::ring_buffer::RbBase`)).
     pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
         Self {
             storage: SharedStorage::new(container),

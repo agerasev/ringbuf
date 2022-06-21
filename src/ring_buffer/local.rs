@@ -6,6 +6,30 @@ use core::{cell::Cell, mem::MaybeUninit, num::NonZeroUsize, ptr};
 use alloc::rc::Rc;
 
 /// Ring buffer for using in single thread.
+///
+/// Does *not* implement [`Sync`]. And its [`Producer`] and [`Consumer`] do *not* implement [`Send`].
+///
+#[cfg_attr(
+    feature = "std",
+    doc = r##"
+This code must fail to compile:
+
+```compile_fail
+use std::{thread, vec::Vec};
+use ringbuf::LocalRb;
+
+let (mut prod, mut cons) = LocalRb::<i32, Vec<_>>::new(256).split();
+thread::spawn(move || {
+    prod.push(123).unwrap();
+})
+.join();
+thread::spawn(move || {
+    assert_eq!(cons.pop().unwrap(), 123);
+})
+.join();
+```
+"##
+)]
 pub struct LocalRb<T, C: Container<T>> {
     storage: SharedStorage<T, C>,
     head: Cell<usize>,
@@ -62,7 +86,7 @@ impl<T, C: Container<T>> LocalRb<T, C> {
     /// # Safety
     ///
     /// The items in container inside `head..tail` range must be initialized, items outside this range must be uninitialized.
-    /// `head` and `tail` values must be valid (see [`Counter`](`crate::counter::Counter`)).
+    /// `head` and `tail` values must be valid (see [`RbBase`](`crate::ring_buffer::RbBase`)).
     ///
     /// Container and counter must have the same `len`.
     pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
