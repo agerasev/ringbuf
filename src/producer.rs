@@ -132,9 +132,19 @@ where
     /// Appends an item to the ring buffer.
     ///
     /// On failure returns an `Err` containing the item that hasn't been appended.
-    #[inline]
     pub fn push(&mut self, elem: T) -> Result<(), T> {
-        unsafe { self.target.push(elem) }
+        if !self.is_full() {
+            unsafe {
+                self.free_space_as_slices()
+                    .0
+                    .get_unchecked_mut(0)
+                    .write(elem)
+            };
+            unsafe { self.advance(1) };
+            Ok(())
+        } else {
+            Err(elem)
+        }
     }
 
     /// Appends items from an iterator to the ring buffer.

@@ -161,7 +161,18 @@ where
     ///
     /// Returns `None` if the ring buffer is empty.
     pub fn pop(&mut self) -> Option<T> {
-        unsafe { self.target.pop() }
+        if !self.is_empty() {
+            let elem = unsafe {
+                self.as_uninit_slices()
+                    .0
+                    .get_unchecked(0)
+                    .assume_init_read()
+            };
+            unsafe { self.advance(1) };
+            Some(elem)
+        } else {
+            None
+        }
     }
 
     /// Returns an iterator that removes items one by one from the ring buffer.
