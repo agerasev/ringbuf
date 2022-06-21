@@ -4,10 +4,10 @@ use std::io::Read;
 use std::thread;
 use std::time::Duration;
 
-use ringbuf::HeapRingBuffer;
+use ringbuf::HeapRb;
 
 fn main() {
-    let buf = HeapRingBuffer::<u8>::new(10);
+    let buf = HeapRb::<u8>::new(10);
     let (mut prod, mut cons) = buf.split();
 
     let smsg = "The quick brown fox jumps over the lazy dog";

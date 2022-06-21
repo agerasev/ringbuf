@@ -1,6 +1,6 @@
 [package]
 name = "ringbuf"
-version = "0.3.0"
+version = "0.3.0-rc.0"
 authors = ["Alexey Gerasev <alexey.gerasev@gmail.com>"]
 edition = "2021"
 
@@ -22,10 +22,10 @@ bench = []
 [dependencies]
 cache-padded = "1.2.0"
 
-#[[example]]
-#name = "simple"
-#required-features = ["alloc"]
-#
-#[[example]]
-#name = "message"
-#required-features = ["std"]
+[[example]]
+name = "simple"
+required-features = ["alloc"]
+
+[[example]]
+name = "message"
+required-features = ["std"]
