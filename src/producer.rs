@@ -18,7 +18,7 @@ use std::io::{self, Read, Write};
 ///
 /// + In immediate mode removed and inserted items are automatically synchronized with the other end.
 /// + In postponed mode synchronization occures only when [`sync`](`Self::sync`) or [`into_immediate`](`Self::into_immediate`) is called or when `Self` is dropped.
-///   The only reason to use postponed mode is that multiple subsequent operations are performed slightly faster due to less frequent cache synchronization.
+///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub struct Producer<T, R: RbRef>
 where
     R::Rb: RbWrite<T>,

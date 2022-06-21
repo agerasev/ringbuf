@@ -59,7 +59,7 @@ pub trait RbBase<T> {
     /// The number of vacant places in the buffer at the moment.
     fn vacant_len(&self) -> usize {
         let modulus = self.modulus();
-        (modulus.get() + self.head() - self.tail() - self.capacity().get()) % modulus
+        (self.capacity().get() + self.head() - self.tail()) % modulus
     }
 
     /// Checks if the occupied range is empty.
