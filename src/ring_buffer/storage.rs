@@ -53,25 +53,24 @@ unsafe impl<T> Container<T> for Vec<MaybeUninit<T>> {
 }
 
 pub(crate) struct SharedStorage<T, C: Container<T>> {
-    len: NonZeroUsize,
     container: UnsafeCell<C>,
-    phantom: PhantomData<T>,
+    _phantom: PhantomData<T>,
 }
 
 unsafe impl<T, C: Container<T>> Sync for SharedStorage<T, C> where T: Send {}
 
 impl<T, C: Container<T>> SharedStorage<T, C> {
     pub fn new(container: C) -> Self {
+        assert!(!container.is_empty());
         Self {
-            len: NonZeroUsize::new(container.len()).unwrap(),
             container: UnsafeCell::new(container),
-            phantom: PhantomData,
+            _phantom: PhantomData,
         }
     }
 
     #[inline]
     pub fn len(&self) -> NonZeroUsize {
-        self.len
+        unsafe { NonZeroUsize::new_unchecked((&*self.container.get()).len()) }
     }
 
     /// Returns underlying raw ring buffer memory as slice.
