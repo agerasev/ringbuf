@@ -11,7 +11,9 @@ use alloc::vec::Vec;
 ///
 /// # Safety
 ///
-/// *Container must not cause data race on concurrent [`as_mut_slice`]/[`as_mut_ptr`] calls.*
+/// *[`Self::len`]/[`Self::is_empty`] must always return the same value.*
+///
+/// *Container must not cause data race on concurrent [`Self::as_mut_slice`]/[`Self::as_mut_ptr`] calls.*
 pub unsafe trait Container<T> {
     /// Length of the container.
     fn len(&self) -> usize;

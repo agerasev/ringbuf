@@ -2,13 +2,13 @@
 //!
 //! # Overview
 //!
-//! The initial thing you probably want to start with is to choose some implementation if the [`Rb`](`crate::ring_buffer::Rb`) trait representing ring buffer itself.
+//! The initial thing you probably want to start with is to choose some implementation of the [`Rb`](`crate::ring_buffer::Rb`) trait representing ring buffer itself.
 //!
 //! Implementations of the [`Rb`](`crate::ring_buffer::Rb`) trait:
 //!
 //! + [`LocalRb`]. Only for single-threaded use.
 //! + [`SharedRb`]. Can be shared between threads.
-//!   + [`HeapRb`]. Contents are stored in dynamic memory. *Recommended for most use cases.*
+//!   + [`HeapRb`]. Contents are stored in dynamic memory. *Recommended for use in most cases.*
 //!   + [`StaticRb`]. Contents can be stored in statically-allocated memory.
 //!
 //! Ring buffer can be splitted into pair of [`Producer`] and [`Consumer`].
@@ -19,6 +19,8 @@
 //! Elements can be effectively appended/removed one by one or many at once.
 //! Also data could be loaded/stored directly into/from [`Read`](`std::io::Read`)/[`Write`](`std::io::Write`) instances.
 //! And finally, there are `unsafe` methods allowing thread-safe direct access to the inner memory being appended/removed.
+//!
+//! The crate can be used without `std` and even without `alloc` using only statically-allocated memory.
 //!
 //! When building with nightly toolchain it is possible to run benchmarks via `cargo bench --features bench`.
 #![cfg_attr(

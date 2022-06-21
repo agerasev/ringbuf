@@ -17,7 +17,7 @@ use std::io::{self, Read, Write};
 /// Modes could be switched using [`postponed`](`Self::postponed`)/[`into_postponed`](`Self::into_postponed`) and [`into_immediate`](`Self::into_immediate`) methods.
 ///
 /// + In immediate mode removed and inserted items are automatically synchronized with the other end.
-/// + In postponed mode synchronization occures only when [`sync`](`Self::sync`) or [`into_immediate`](`Self::into_immediate`) is called or when `Self` is dropped.
+/// + In postponed mode synchronization occurs only when [`sync`](`Self::sync`) or [`into_immediate`](`Self::into_immediate`) is called or when `Self` is dropped.
 ///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub struct Producer<T, R: RbRef>
 where
@@ -152,7 +152,7 @@ where
     ///
     /// Returns count of items been appended to the ring buffer.
     ///
-    /// *Inserted items are commited to the ring buffer all at once in the end,*
+    /// *Inserted items are committed to the ring buffer all at once in the end,*
     /// *e.g. when buffer is full or iterator has ended.*
     pub fn push_iter<I: Iterator<Item = T>>(&mut self, iter: &mut I) -> usize {
         let (left, right) = unsafe { self.free_space_as_slices() };

@@ -83,7 +83,7 @@ pub trait RbRead<T>: RbBase<T> {
     ///
     /// This call must cohere with ring buffer data modification.
     ///
-    /// It is recomended to use `Self::advance_head` instead.
+    /// It is recommended to use `Self::advance_head` instead.
     unsafe fn set_head(&self, value: usize);
 
     /// Move **head** position by `count` items forward.
@@ -178,7 +178,7 @@ pub trait RbWrite<T>: RbBase<T> {
     ///
     /// This call must cohere with ring buffer data modification.
     ///
-    /// It is recomended to use `Self::advance_tail` instead.
+    /// It is recommended to use `Self::advance_tail` instead.
     unsafe fn set_tail(&self, value: usize);
 
     /// Move **tail** position by `count` items forward.
