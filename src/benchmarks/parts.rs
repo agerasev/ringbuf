@@ -5,7 +5,7 @@ use test::{black_box, Bencher};
 const RB_SIZE: usize = 256;
 
 #[bench]
-fn postponed(b: &mut Bencher) {
+fn make_postponed(b: &mut Bencher) {
     let buf = SharedRb::<u64, [_; RB_SIZE]>::default();
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
@@ -27,7 +27,7 @@ fn advance(b: &mut Bencher) {
 }
 
 #[bench]
-fn acquire_advance(b: &mut Bencher) {
+fn advance_postponed(b: &mut Bencher) {
     let buf = SharedRb::<u64, [_; RB_SIZE]>::default();
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
