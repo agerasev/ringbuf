@@ -12,6 +12,7 @@ use alloc::vec::Vec;
 /// *Container must not cause data race on concurrent `.as_mut_slice()` calls.*
 pub unsafe trait Container<T> {
     fn len(&self) -> usize;
+    #[inline]
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -19,26 +20,33 @@ pub unsafe trait Container<T> {
 }
 
 unsafe impl<'a, T> Container<T> for &'a mut [MaybeUninit<T>] {
+    #[inline]
     fn len(&self) -> usize {
         <[_]>::len(self)
     }
+    #[inline]
     fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>] {
         self
     }
 }
+
 unsafe impl<T, const N: usize> Container<T> for [MaybeUninit<T>; N] {
+    #[inline]
     fn len(&self) -> usize {
         N
     }
+    #[inline]
     fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>] {
         self.as_mut()
     }
 }
 #[cfg(feature = "alloc")]
 unsafe impl<T> Container<T> for Vec<MaybeUninit<T>> {
+    #[inline]
     fn len(&self) -> usize {
         self.len()
     }
+    #[inline]
     fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>] {
         self.as_mut()
     }
@@ -76,6 +84,7 @@ impl<T, C: Container<T>> SharedStorage<T, C> {
     /// It is recommended to use [`Consumer::as_slices`](`crate::LocalConsumer::as_slices`) and
     /// [`Producer::free_space_as_slices`](`crate::LocalProducer::free_space_as_slices`) instead.
     #[allow(clippy::mut_from_ref)]
+    #[inline]
     pub unsafe fn as_slice(&self) -> &mut [MaybeUninit<T>] {
         (&mut *self.container.get()).as_mut_slice()
     }

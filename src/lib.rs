@@ -70,7 +70,7 @@ pub use transfer::transfer;
 #[cfg(test)]
 mod tests;
 
-//#[cfg(feature = "bench")]
-//extern crate test;
-//#[cfg(feature = "bench")]
-//mod benchmarks;
+#[cfg(feature = "bench")]
+extern crate test;
+#[cfg(feature = "bench")]
+mod benchmarks;
