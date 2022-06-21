@@ -166,6 +166,20 @@ pub trait RbRead<T>: RbBase<T> {
         self.advance_head(count);
         count
     }
+
+    unsafe fn pop(&self) -> Option<T> {
+        if !self.is_empty() {
+            let head = self.head();
+            let item = self
+                .data()
+                .get_unchecked(head % self.capacity())
+                .assume_init_read();
+            self.set_head((head + 1) % self.modulus());
+            Some(item)
+        } else {
+            None
+        }
+    }
 }
 
 /// Ring buffer write end.
@@ -230,6 +244,19 @@ pub trait RbWrite<T>: RbBase<T> {
             slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
             slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
         )
+    }
+
+    unsafe fn push(&self, item: T) -> Result<(), T> {
+        if !self.is_full() {
+            let tail = self.tail();
+            self.data()
+                .get_unchecked_mut(tail % self.capacity())
+                .write(item);
+            self.set_tail((tail + 1) % self.modulus());
+            Ok(())
+        } else {
+            Err(item)
+        }
     }
 }
 
