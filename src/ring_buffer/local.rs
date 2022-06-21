@@ -87,8 +87,6 @@ impl<T, C: Container<T>> LocalRb<T, C> {
     ///
     /// The items in container inside `head..tail` range must be initialized, items outside this range must be uninitialized.
     /// `head` and `tail` values must be valid (see [`RbBase`](`crate::ring_buffer::RbBase`)).
-    ///
-    /// Container and counter must have the same `len`.
     pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
         Self {
             storage: SharedStorage::new(container),
