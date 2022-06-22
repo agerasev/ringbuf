@@ -10,7 +10,7 @@ homepage = "https://github.com/agerasev/async-ringbuf"
 repository = "https://github.com/agerasev/async-ringbuf.git"
 readme = "README.md"
 keywords = ["async", "spsc", "ring-buffer", "rb", "fifo"]
-categories = ["concurrency", "data-structures", "no-std"]
+categories = ["asynchronous", "concurrency", "data-structures", "no-std"]
 license = "MIT/Apache-2.0"
 
 [features]
