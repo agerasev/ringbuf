@@ -2,12 +2,14 @@ use crate::{consumer::AsyncConsumer, producer::AsyncProducer};
 use core::{marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, task::Waker};
 use futures::task::AtomicWaker;
 use ringbuf::{
-    ring_buffer::{Container, Rb, RbBase, RbRead, RbWrite},
-    Consumer, LocalRb, Producer, SharedRb,
+    ring_buffer::{Rb, RbBase, RbRead, RbWrite},
+    Consumer, Producer,
 };
 
 #[cfg(feature = "alloc")]
 use alloc::{rc::Rc, sync::Arc};
+#[cfg(feature = "alloc")]
+use ringbuf::ring_buffer::{Container, LocalRb, SharedRb};
 #[cfg(feature = "alloc")]
 use ringbuf::HeapRb;
 

@@ -31,6 +31,7 @@ macro_rules! defer {
     { $code:expr } => { let _defer = Defer(Some(move || { $code })); }
 }
 
+#[allow(unused_macros)]
 macro_rules! execute {
     ( $( $tasks:expr ),* $(,)? ) => {
         futures::executor::block_on(async {

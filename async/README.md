@@ -15,7 +15,7 @@
 [github]: https://github.com/agerasev/async-ringbuf/actions/workflows/test.yml
 [license]: #license
 
-Single-producer single-consumer (SPSC) FIFO ring buffer with `async`/`.await` support.
+SPSC FIFO ring buffer with `async`/`.await` support.
 
 Built on top of [ringbuf](https://github.com/agerasev/ringbuf).
 

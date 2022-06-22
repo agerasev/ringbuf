@@ -5,15 +5,18 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-mod consumer;
-mod producer;
-mod ring_buffer;
+pub mod consumer;
+pub mod producer;
+pub mod ring_buffer;
+
 mod transfer;
 
-pub use consumer::*;
-pub use producer::*;
-pub use ring_buffer::*;
-pub use transfer::*;
+pub use consumer::AsyncConsumer;
+pub use producer::AsyncProducer;
+#[cfg(feature = "alloc")]
+pub use ring_buffer::AsyncHeapRb;
+pub use ring_buffer::AsyncRb;
+pub use transfer::async_transfer;
 
 #[cfg(feature = "std")]
 #[cfg(test)]
