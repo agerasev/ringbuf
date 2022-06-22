@@ -1,280 +1,269 @@
-use alloc::sync::Arc;
-use core::{
-    mem::{self, MaybeUninit},
-    ptr::copy_nonoverlapping,
-    slice,
-    sync::atomic::Ordering,
+use crate::{
+    ring_buffer::{RbBase, RbRef, RbWrap, RbWrite, RbWriteCache},
+    utils::write_slice,
 };
+use core::{marker::PhantomData, mem::MaybeUninit};
+
+#[cfg(feature = "std")]
+use crate::utils::slice_assume_init_mut;
+#[cfg(feature = "std")]
+use core::cmp;
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
-use crate::{consumer::Consumer, ring_buffer::*};
-
 /// Producer part of ring buffer.
-pub struct Producer<T> {
-    pub(crate) rb: Arc<RingBuffer<T>>,
+///
+/// # Mode
+///
+/// It can operate in immediate (by default) or postponed mode.
+/// Mode could be switched using [`Self::postponed`]/[`Self::into_postponed`] and [`Self::into_immediate`] methods.
+///
+/// + In immediate mode removed and inserted items are automatically synchronized with the other end.
+/// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
+///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
+pub struct Producer<T, R: RbRef>
+where
+    R::Rb: RbWrite<T>,
+{
+    target: R,
+    _phantom: PhantomData<T>,
 }
 
-impl<T: Sized> Producer<T> {
+impl<T, R: RbRef> Producer<T, R>
+where
+    R::Rb: RbWrite<T>,
+{
+    /// Creates producer from the ring buffer reference.
+    ///
+    /// # Safety
+    ///
+    /// There must be only one producer containing the same ring buffer reference.
+    pub unsafe fn new(target: R) -> Self {
+        Self {
+            target,
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Returns reference to the underlying ring buffer.
+    #[inline]
+    pub fn rb(&self) -> &R::Rb {
+        &self.target
+    }
+
+    /// Consumes `self` and returns underlying ring buffer reference.
+    pub fn into_rb_ref(self) -> R {
+        self.target
+    }
+
+    /// Returns postponed producer that borrows [`Self`].
+    pub fn postponed(&mut self) -> PostponedProducer<T, &R::Rb> {
+        unsafe { Producer::new(RbWrap(RbWriteCache::new(&self.target))) }
+    }
+
+    /// Transforms [`Self`] into postponed producer.
+    pub fn into_postponed(self) -> PostponedProducer<T, R> {
+        unsafe { Producer::new(RbWrap(RbWriteCache::new(self.target))) }
+    }
+
     /// Returns capacity of the ring buffer.
     ///
     /// The capacity of the buffer is constant.
+    #[inline]
     pub fn capacity(&self) -> usize {
-        self.rb.capacity()
+        self.target.capacity().get()
     }
 
     /// Checks if the ring buffer is empty.
-    ///
-    /// The result is relevant until you push items to the producer.
+    #[inline]
     pub fn is_empty(&self) -> bool {
-        self.rb.is_empty()
+        self.target.is_empty()
     }
 
     /// Checks if the ring buffer is full.
     ///
-    /// *The result may become irrelevant at any time because of concurring activity of the consumer.*
+    /// *The result may become irrelevant at any time because of concurring consumer activity.*
+    #[inline]
     pub fn is_full(&self) -> bool {
-        self.rb.is_full()
+        self.target.is_full()
     }
 
-    /// The length of the data stored in the buffer.
+    /// The number of items stored in the buffer.
     ///
-    /// Actual length may be equal to or less than the returned value.
+    /// *Actual number may be less than the returned value because of concurring consumer activity.*
+    #[inline]
     pub fn len(&self) -> usize {
-        self.rb.len()
+        self.target.occupied_len()
     }
 
-    /// The remaining space in the buffer.
+    /// The number of remaining free places in the buffer.
     ///
-    /// Actual remaining space may be equal to or greater than the returning value.
-    pub fn remaining(&self) -> usize {
-        self.rb.remaining()
+    /// *Actual number may be greater than the returning value because of concurring consumer activity.*
+    #[inline]
+    pub fn free_len(&self) -> usize {
+        self.target.vacant_len()
     }
 
-    /// Allows to write into ring buffer memory directly.
-    ///
-    /// *This function is unsafe because it gives access to possibly uninitialized memory*
-    ///
-    /// The method takes a function `f` as argument.
-    /// `f` takes two slices of ring buffer content (the second one or both of them may be empty).
-    /// First slice contains older elements.
-    ///
-    /// `f` should return number of elements been written.
-    /// *There is no checks for returned number - it remains on the developer's conscience.*
-    ///
-    /// The method **always** calls `f` even if ring buffer is full.
-    ///
-    /// The method returns number returned from `f`.
+    /// Provides a direct access to the ring buffer vacant memory.
+    /// Returns a pair of slices of uninitialized memory, the second one may be empty.
     ///
     /// # Safety
     ///
-    /// The method gives access to ring buffer underlying memory which may be uninitialized.
+    /// Vacant memory is uninitialized. Initialized items must be put starting from the beginning of first slice.
+    /// When first slice is fully filled then items must be put to the beginning of the second slice.
     ///
-    pub unsafe fn push_access<F>(&mut self, f: F) -> usize
-    where
-        F: FnOnce(&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) -> usize,
-    {
-        let head = self.rb.head.load(Ordering::Acquire);
-        let tail = self.rb.tail.load(Ordering::Acquire);
-        let len = self.rb.data.len();
-
-        let ranges = if tail >= head {
-            if head > 0 {
-                (tail..len, 0..(head - 1))
-            } else if tail < len - 1 {
-                (tail..(len - 1), 0..0)
-            } else {
-                (0..0, 0..0)
-            }
-        } else if tail < head - 1 {
-            (tail..(head - 1), 0..0)
-        } else {
-            (0..0, 0..0)
-        };
-
-        let ptr = self.rb.data.get_mut().as_mut_ptr();
-
-        let slices = (
-            slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
-            slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
-        );
-
-        let n = f(slices.0, slices.1);
-
-        if n > 0 {
-            let new_tail = (tail + n) % len;
-            self.rb.tail.store(new_tail, Ordering::Release);
-        }
-        n
+    /// *This method must be followed by `Self::advance` call with the number of items being put previously as argument.*
+    /// *No other mutating calls allowed before that.*
+    #[inline]
+    pub unsafe fn free_space_as_slices(
+        &mut self,
+    ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+        self.target.vacant_slices()
     }
 
-    /// Copies data from the slice to the ring buffer in byte-to-byte manner.
-    ///
-    /// The `elems` slice should contain **initialized** data before the method call.
-    /// After the call the copied part of data in `elems` should be interpreted as **un-initialized**.
-    ///
-    /// Returns the number of items been copied.
+    /// Moves `tail` counter by `count` places.
     ///
     /// # Safety
     ///
-    /// The method copies raw data into the ring buffer.
-    ///
-    /// *You should properly fill the slice and manage remaining elements after copy.*
-    ///
-    pub unsafe fn push_copy(&mut self, elems: &[MaybeUninit<T>]) -> usize {
-        self.push_access(|left, right| -> usize {
-            if elems.len() < left.len() {
-                copy_nonoverlapping(elems.as_ptr(), left.as_mut_ptr(), elems.len());
-                elems.len()
-            } else {
-                copy_nonoverlapping(elems.as_ptr(), left.as_mut_ptr(), left.len());
-                if elems.len() < left.len() + right.len() {
-                    copy_nonoverlapping(
-                        elems.as_ptr().add(left.len()),
-                        right.as_mut_ptr(),
-                        elems.len() - left.len(),
-                    );
-                    elems.len()
-                } else {
-                    copy_nonoverlapping(
-                        elems.as_ptr().add(left.len()),
-                        right.as_mut_ptr(),
-                        right.len(),
-                    );
-                    left.len() + right.len()
-                }
-            }
-        })
+    /// First `count` items in free space must be initialized.
+    #[inline]
+    pub unsafe fn advance(&mut self, count: usize) {
+        self.target.advance_tail(count)
     }
 
-    /// Appends an element to the ring buffer.
-    /// On failure returns an error containing the element that hasn't been appended.
+    /// Appends an item to the ring buffer.
+    ///
+    /// On failure returns an `Err` containing the item that hasn't been appended.
     pub fn push(&mut self, elem: T) -> Result<(), T> {
-        let mut elem_mu = MaybeUninit::new(elem);
-        let n = unsafe {
-            self.push_access(|slice, _| {
-                if !slice.is_empty() {
-                    mem::swap(slice.get_unchecked_mut(0), &mut elem_mu);
-                    1
-                } else {
-                    0
-                }
-            })
-        };
-        match n {
-            0 => Err(unsafe { elem_mu.assume_init() }),
-            1 => Ok(()),
-            _ => unreachable!(),
+        if !self.is_full() {
+            unsafe {
+                self.free_space_as_slices()
+                    .0
+                    .get_unchecked_mut(0)
+                    .write(elem)
+            };
+            unsafe { self.advance(1) };
+            Ok(())
+        } else {
+            Err(elem)
         }
     }
 
-    /// Repeatedly calls the closure `f` and pushes elements returned from it to the ring buffer.
-    ///
-    /// The closure is called until it returns `None` or the ring buffer is full.
-    ///
-    /// The method returns number of elements been put into the buffer.
-    pub fn push_each<F: FnMut() -> Option<T>>(&mut self, mut f: F) -> usize {
-        unsafe {
-            self.push_access(|left, right| {
-                for (i, dst) in left.iter_mut().enumerate() {
-                    match f() {
-                        Some(e) => dst.as_mut_ptr().write(e),
-                        None => return i,
-                    };
-                }
-                for (i, dst) in right.iter_mut().enumerate() {
-                    match f() {
-                        Some(e) => dst.as_mut_ptr().write(e),
-                        None => return i + left.len(),
-                    };
-                }
-                left.len() + right.len()
-            })
-        }
-    }
-
-    /// Appends elements from an iterator to the ring buffer.
+    /// Appends items from an iterator to the ring buffer.
     /// Elements that haven't been added to the ring buffer remain in the iterator.
     ///
-    /// Returns count of elements been appended to the ring buffer.
-    pub fn push_iter<I: Iterator<Item = T>>(&mut self, elems: &mut I) -> usize {
-        self.push_each(|| elems.next())
-    }
-
-    /// Removes at most `count` elements from the consumer and appends them to the producer.
-    /// If `count` is `None` then as much as possible elements will be moved.
-    /// The producer and consumer parts may be of different buffers as well as of the same one.
+    /// Returns count of items been appended to the ring buffer.
     ///
-    /// On success returns number of elements been moved.
-    pub fn move_from(&mut self, other: &mut Consumer<T>, count: Option<usize>) -> usize {
-        move_items(other, self, count)
+    /// *Inserted items are committed to the ring buffer all at once in the end,*
+    /// *e.g. when buffer is full or iterator has ended.*
+    pub fn push_iter<I: Iterator<Item = T>>(&mut self, iter: &mut I) -> usize {
+        let (left, right) = unsafe { self.free_space_as_slices() };
+        let mut count = 0;
+        for place in left.iter_mut().chain(right.iter_mut()) {
+            match iter.next() {
+                Some(elem) => unsafe { place.as_mut_ptr().write(elem) },
+                None => break,
+            }
+            count += 1;
+        }
+        unsafe { self.advance(count) };
+        count
     }
 }
 
-impl<T: Sized + Copy> Producer<T> {
-    /// Appends elements from slice to the ring buffer.
-    /// Elements should be [`Copy`](https://doc.rust-lang.org/std/marker/trait.Copy.html).
+impl<'a, T: Copy, R: RbRef> Producer<T, R>
+where
+    R::Rb: RbWrite<T>,
+{
+    /// Appends items from slice to the ring buffer.
+    /// Elements should be `Copy`.
     ///
-    /// Returns count of elements been appended to the ring buffer.
+    /// Returns count of items been appended to the ring buffer.
     pub fn push_slice(&mut self, elems: &[T]) -> usize {
-        unsafe { self.push_copy(&*(elems as *const [T] as *const [MaybeUninit<T>])) }
+        let (left, right) = unsafe { self.free_space_as_slices() };
+        let count = if elems.len() < left.len() {
+            write_slice(&mut left[..elems.len()], elems);
+            elems.len()
+        } else {
+            let (left_elems, elems) = elems.split_at(left.len());
+            write_slice(left, left_elems);
+            left.len()
+                + if elems.len() < right.len() {
+                    write_slice(&mut right[..elems.len()], elems);
+                    elems.len()
+                } else {
+                    write_slice(right, &elems[..right.len()]);
+                    right.len()
+                }
+        };
+        unsafe { self.advance(count) };
+        count
+    }
+}
+
+/// Postponed producer.
+pub type PostponedProducer<T, R> = Producer<T, RbWrap<RbWriteCache<T, R>>>;
+
+impl<T, R: RbRef> PostponedProducer<T, R>
+where
+    R::Rb: RbWrite<T>,
+{
+    /// Create new postponed producer.
+    ///
+    /// # Safety
+    ///
+    /// There must be only one producer containing the same ring buffer reference.
+    pub unsafe fn new_postponed(target: R) -> Self {
+        Producer::new(RbWrap(RbWriteCache::new(target)))
+    }
+
+    /// Synchronize changes with the ring buffer.
+    ///
+    /// Postponed producer requires manual synchronization to make pushed items visible for the consumer.
+    pub fn sync(&mut self) {
+        self.target.0.sync();
+    }
+
+    /// Synchronize and transform back to immediate producer.
+    pub fn into_immediate(self) -> Producer<T, R> {
+        unsafe { Producer::new(self.target.0.release()) }
     }
 }
 
 #[cfg(feature = "std")]
-impl Producer<u8> {
-    /// Reads at most `count` bytes
-    /// from [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) instance
-    /// and appends them to the ring buffer.
+impl<R: RbRef> Producer<u8, R>
+where
+    R::Rb: RbWrite<u8>,
+{
+    /// Reads at most `count` bytes from `Read` instance and appends them to the ring buffer.
     /// If `count` is `None` then as much as possible bytes will be read.
     ///
     /// Returns `Ok(n)` if `read` succeeded. `n` is number of bytes been read.
     /// `n == 0` means that either `read` returned zero or ring buffer is full.
     ///
-    /// If `read` is failed or returned an invalid number then error is returned.
-    pub fn read_from(&mut self, reader: &mut dyn Read, count: Option<usize>) -> io::Result<usize> {
-        let mut err = None;
-        let n = unsafe {
-            self.push_access(|left, _| -> usize {
-                let left = match count {
-                    Some(c) => {
-                        if c < left.len() {
-                            &mut left[0..c]
-                        } else {
-                            left
-                        }
-                    }
-                    None => left,
-                };
-                match reader
-                    .read(&mut *(left as *mut [MaybeUninit<u8>] as *mut [u8]))
-                    .and_then(|n| {
-                        if n <= left.len() {
-                            Ok(n)
-                        } else {
-                            Err(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                "Read operation returned an invalid number",
-                            ))
-                        }
-                    }) {
-                    Ok(n) => n,
-                    Err(e) => {
-                        err = Some(e);
-                        0
-                    }
-                }
-            })
-        };
-        match err {
-            Some(e) => Err(e),
-            None => Ok(n),
-        }
+    /// If `read` is failed then original error is returned. In this case it is guaranteed that no items was read from the reader.
+    /// To achieve this we read only one contiguous slice at once. So this call may read less than `remaining` items in the buffer even if the reader is ready to provide more.
+    pub fn read_from<P: Read>(
+        &mut self,
+        reader: &mut P,
+        count: Option<usize>,
+    ) -> io::Result<usize> {
+        let (left, _) = unsafe { self.free_space_as_slices() };
+        let count = cmp::min(count.unwrap_or(left.len()), left.len());
+        let left_init = unsafe { slice_assume_init_mut(&mut left[..count]) };
+
+        let read_count = reader.read(left_init)?;
+        assert!(read_count <= count);
+        unsafe { self.advance(read_count) };
+        Ok(read_count)
     }
 }
 
 #[cfg(feature = "std")]
-impl Write for Producer<u8> {
+impl<R: RbRef> Write for Producer<u8, R>
+where
+    R::Rb: RbWrite<u8>,
+{
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         let n = self.push_slice(buffer);
         if n == 0 && !buffer.is_empty() {

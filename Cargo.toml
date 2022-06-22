@@ -1,6 +1,6 @@
 [package]
 name = "ringbuf"
-version = "0.2.8"
+version = "0.3.0-rc.0"
 authors = ["Alexey Gerasev <alexey.gerasev@gmail.com>"]
 edition = "2021"
 
@@ -14,16 +14,18 @@ categories = ["concurrency", "data-structures", "no-std"]
 license = "MIT/Apache-2.0"
 
 [features]
-default = ["std"]
-std = []
-benchmark = []
+default = ["alloc", "std"]
+alloc = []
+std = ["alloc"]
+bench = []
+
+[dependencies]
+cache-padded = "1.2.0"
 
 [[example]]
 name = "simple"
+required-features = ["alloc"]
 
 [[example]]
 name = "message"
 required-features = ["std"]
-
-[dependencies]
-cache-padded = "1.2.0"

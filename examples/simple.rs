@@ -1,9 +1,7 @@
-extern crate ringbuf;
-
-use ringbuf::RingBuffer;
+use ringbuf::HeapRb;
 
 fn main() {
-    let rb = RingBuffer::<i32>::new(2);
+    let rb = HeapRb::<i32>::new(2);
     let (mut prod, mut cons) = rb.split();
 
     prod.push(0).unwrap();

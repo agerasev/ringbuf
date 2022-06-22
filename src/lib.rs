@@ -1,67 +1,126 @@
-//! Lock-free single-producer single-consumer (SPSC) FIFO ring buffer with direct access to inner data.
+//! Lock-free SPSC FIFO ring buffer with direct access to inner data.
 //!
-//! # Overview
+//! # Features
 //!
-//! `RingBuffer` is the initial structure representing ring buffer itself.
-//! Ring buffer can be splitted into pair of `Producer` and `Consumer`.
+//! + Lock-free operations - they succeed or fail immediately without blocking or waiting.
+//! + Arbitrary item type (not only [`Copy`]).
+//! + Items can be inserted and removed one by one or many at once.
+//! + Thread-safe direct access to the internal ring buffer memory.
+//! + [`Read`](`std::io::Read`) and [`Write`](`std::io::Write`) implementation.
+//! + Can be used without `std` and even without `alloc` (using only statically-allocated memory).
 //!
-//! `Producer` and `Consumer` are used to append/remove elements to/from the ring buffer accordingly. They can be safely sent between threads.
-//! Operations with `Producer` and `Consumer` are lock-free - they succeed or fail immediately without blocking or waiting.
+//! # Usage
 //!
-//! Elements can be effectively appended/removed one by one or many at once.
-//! Also data could be loaded/stored directly into/from [`Read`]/[`Write`] instances.
-//! And finally, there are `unsafe` methods allowing thread-safe direct access in place to the inner memory being appended/removed.
+//! At first you need to create the ring buffer itself. [`HeapRb`] is recommended but you may [choose another one](#types).
 //!
-//! [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
-//! [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
+//! After the ring buffer is created it may be splitted into pair of [`Producer`] and [`Consumer`].
+//! [`Producer`] is used to insert items to the ring buffer, [`Consumer`] - to remove items from it.
+//! For [`SharedRb`] and its derivatives they can be used in different threads.
 //!
-//! When building with nightly toolchain it is possible to run benchmarks via `cargo bench --features benchmark`.
+//! # Types
+//!
+//! There are several types of ring buffers provided:
+//!
+//! + [`LocalRb`]. Only for single-threaded use.
+//! + [`SharedRb`]. Can be shared between threads. Its derivatives:
+//!   + [`HeapRb`]. Contents are stored in dynamic memory. *Recommended for use in most cases.*
+//!   + [`StaticRb`]. Contents can be stored in statically-allocated memory.
+//!
+//! # Performance
+//!
+//! [`SharedRb`] needs to synchronize CPU cache between CPU cores. This synchronization has some overhead.
+//! To avoid multiple unnecessary synchronizations you may use postponed mode of operation (see description for [`Producer#mode`] and [`Consumer#mode`])
+//! or methods that operates many items at once ([`Producer::push_slice`]/[`Producer::push_iter`], [`Consumer::pop_slice`], etc.).
+//!
+//! For single-threaded usage [`LocalRb`] is recommended because it is faster than [`SharedRb`] due to absence of CPU cache synchronization.
+//!
+//! ## Benchmarks
+//!
+//! You may see typical performance of different methods in benchmarks:
+//!
+//! ```bash
+//! cargo +nightly bench --features bench
+//! ```
+//!
+//! Nightly toolchain is required.
 //!
 //! # Examples
 //!
-//! ## Simple example
-//!
-//! ```rust
-//! # extern crate ringbuf;
-//! use ringbuf::RingBuffer;
-//! # fn main() {
-//! let rb = RingBuffer::<i32>::new(2);
-//! let (mut prod, mut cons) = rb.split();
-//!
-//! prod.push(0).unwrap();
-//! prod.push(1).unwrap();
-//! assert_eq!(prod.push(2), Err(2));
-//!
-//! assert_eq!(cons.pop().unwrap(), 0);
-//!
-//! prod.push(2).unwrap();
-//!
-//! assert_eq!(cons.pop().unwrap(), 1);
-//! assert_eq!(cons.pop().unwrap(), 2);
-//! assert_eq!(cons.pop(), None);
-//! # }
-//! ```
+#![cfg_attr(
+    feature = "alloc",
+    doc = r##"
+## Simple
 
+```rust
+use ringbuf::HeapRb;
+
+# fn main() {
+let rb = HeapRb::<i32>::new(2);
+let (mut prod, mut cons) = rb.split();
+
+prod.push(0).unwrap();
+prod.push(1).unwrap();
+assert_eq!(prod.push(2), Err(2));
+
+assert_eq!(cons.pop(), Some(0));
+
+prod.push(2).unwrap();
+
+assert_eq!(cons.pop(), Some(1));
+assert_eq!(cons.pop(), Some(2));
+assert_eq!(cons.pop(), None);
+# }
+```
+"##
+)]
+#![doc = r##"
+## No heap
+
+```rust
+use ringbuf::StaticRb;
+
+# fn main() {
+const RB_SIZE: usize = 1;
+let mut rb = StaticRb::<i32, RB_SIZE>::default();
+let (mut prod, mut cons) = rb.split_ref();
+
+assert_eq!(prod.push(123), Ok(()));
+assert_eq!(prod.push(321), Err(321));
+
+assert_eq!(cons.pop(), Some(123));
+assert_eq!(cons.pop(), None);
+# }
+```
+"##]
 #![no_std]
-#![cfg_attr(feature = "benchmark", feature(test))]
+#![cfg_attr(feature = "bench", feature(test))]
 
+#[cfg(feature = "alloc")]
 extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-#[cfg(feature = "benchmark")]
-extern crate test;
+mod utils;
 
-#[cfg(feature = "benchmark")]
-mod benchmark;
+/// [`Consumer`] and additional types.
+pub mod consumer;
+/// [`Producer`] and additional types.
+pub mod producer;
+/// Ring buffer traits and implementations.
+pub mod ring_buffer;
+mod transfer;
+
+pub use consumer::Consumer;
+pub use producer::Producer;
+#[cfg(feature = "alloc")]
+pub use ring_buffer::HeapRb;
+pub use ring_buffer::{LocalRb, SharedRb, StaticRb};
+pub use transfer::transfer;
 
 #[cfg(test)]
 mod tests;
 
-mod consumer;
-mod producer;
-mod ring_buffer;
-
-pub use consumer::*;
-pub use producer::*;
-pub use ring_buffer::*;
+#[cfg(feature = "bench")]
+extern crate test;
+#[cfg(feature = "bench")]
+mod benchmarks;
