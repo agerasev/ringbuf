@@ -1,6 +1,12 @@
 use super::{RbBase, RbRead, RbRef, RbWrite};
 use core::{cell::Cell, marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, ptr};
 
+/// Caching read end of some ring buffer.
+///
+/// A free space of removed items is not visible for an opposite write end until [`Self::commit`]/[`Self::sync`] is called or `Self` is dropped.
+/// Items inserted by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
+///
+/// Used to implement [`PostponedConsumer`](`crate::consumer::PostponedConsumer`).
 pub struct RbReadCache<T, R: RbRef>
 where
     R::Rb: RbRead<T>,
@@ -11,6 +17,12 @@ where
     _phantom: PhantomData<T>,
 }
 
+/// Caching write end of some ring buffer.
+///
+/// Inserted items is not visible for an opposite write end until [`Self::commit`]/[`Self::sync`] is called or `Self` is dropped.
+/// A free space of items removed by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
+///
+/// Used to implement [`PostponedConsumer`](`crate::consumer::PostponedConsumer`).
 pub struct RbWriteCache<T, R: RbRef>
 where
     R::Rb: RbWrite<T>,
@@ -127,15 +139,18 @@ where
         }
     }
 
+    /// Commit changes to the ring buffer.
     pub fn commit(&mut self) {
         unsafe { self.target.set_head(self.head.get()) }
     }
 
+    /// Commit changes and fetch updates from the ring buffer.
     pub fn sync(&mut self) {
         self.commit();
         self.tail = self.target.tail();
     }
 
+    /// Commit and destroy `Self` returning underlying ring buffer.
     pub fn release(mut self) -> R {
         self.commit();
         let self_uninit = MaybeUninit::new(self);
@@ -162,15 +177,18 @@ where
         }
     }
 
+    /// Commit changes to the ring buffer.
     pub fn commit(&mut self) {
         unsafe { self.target.set_tail(self.tail.get()) }
     }
 
+    /// Commit changes and fetch updates from the ring buffer.
     pub fn sync(&mut self) {
         self.commit();
         self.head = self.target.head();
     }
 
+    /// Commit and destroy `Self` returning underlying ring buffer.
     pub fn release(mut self) -> R {
         self.commit();
         let self_uninit = MaybeUninit::new(self);

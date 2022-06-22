@@ -5,8 +5,8 @@ use crate::{
 };
 
 /// Moves at most `count` items from the `src` consumer to the `dst` producer.
-/// Consumer and producer may be of different buffers as well as of the same one.
 ///
+/// Consumer and producer may be of different buffers as well as of the same one.
 /// `count` is the number of items being moved, if `None` - as much as possible items will be moved.
 ///
 /// Returns number of items been moved.

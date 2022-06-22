@@ -1,38 +1,59 @@
-//! Lock-free single-producer single-consumer (SPSC) FIFO ring buffer with direct access to inner data.
+//! Lock-free SPSC FIFO ring buffer with direct access to inner data.
 //!
-//! # Overview
+//! # Features
 //!
-//! The initial thing you probably want to start with is to choose some implementation of the [`Rb`](`crate::ring_buffer::Rb`) trait representing ring buffer itself.
+//! + Lock-free operations - they succeed or fail immediately without blocking or waiting.
+//! + Arbitrary item type (not only [`Copy`]).
+//! + Items can be inserted and removed one by one or many at once.
+//! + Thread-safe direct access to the internal ring buffer memory.
+//! + [`Read`](`std::io::Read`) and [`Write`](`std::io::Write`) implementation.
+//! + Can be used without `std` and even without `alloc` (using only statically-allocated memory).
 //!
-//! Implementations of the [`Rb`](`crate::ring_buffer::Rb`) trait:
+//! # Usage
+//!
+//! At first you need to create the ring buffer itself. [`HeapRb`] is recommended but you may [choose another one](#types).
+//!
+//! After the ring buffer is created it may be splitted into pair of [`Producer`] and [`Consumer`].
+//! [`Producer`] is used to insert items to the ring buffer, [`Consumer`] - to remove items from it.
+//! For [`SharedRb`] and its derivatives they can be used in different threads.
+//!
+//! # Types
+//!
+//! There are several types of ring buffers provided:
 //!
 //! + [`LocalRb`]. Only for single-threaded use.
-//! + [`SharedRb`]. Can be shared between threads.
+//! + [`SharedRb`]. Can be shared between threads. Its derivatives:
 //!   + [`HeapRb`]. Contents are stored in dynamic memory. *Recommended for use in most cases.*
 //!   + [`StaticRb`]. Contents can be stored in statically-allocated memory.
 //!
-//! Ring buffer can be splitted into pair of [`Producer`] and [`Consumer`].
+//! # Performance
 //!
-//! [`Producer`] and [`Consumer`] are used to append/remove items to/from the ring buffer accordingly. For [`SharedRb`] they can be safely sent between threads.
-//! Operations with [`Producer`] and [`Consumer`] are lock-free - they succeed or fail immediately without blocking or waiting.
+//! [`SharedRb`] needs to synchronize CPU cache between CPU cores. This synchronization has some overhead.
+//! To avoid multiple unnecessary synchronizations you may use postponed mode of operation (see description for [`Producer#mode`] and [`Consumer#mode`])
+//! or methods that operates many items at once ([`Producer::push_slice`]/[`Producer::push_iter`], [`Consumer::pop_slice`], etc.).
 //!
-//! Elements can be effectively appended/removed one by one or many at once.
-//! Also data could be loaded/stored directly into/from [`Read`](`std::io::Read`)/[`Write`](`std::io::Write`) instances.
-//! And finally, there are `unsafe` methods allowing thread-safe direct access to the inner memory being appended/removed.
+//! For single-threaded usage [`LocalRb`] is recommended because it is faster than [`SharedRb`] due to absence of CPU cache synchronization.
 //!
-//! The crate can be used without `std` and even without `alloc` using only statically-allocated memory.
+//! ## Benchmarks
 //!
-//! When building with nightly toolchain it is possible to run benchmarks via `cargo bench --features bench`.
+//! You may see typical performance of different methods in benchmarks:
+//!
+//! ```bash
+//! cargo +nightly bench --features bench
+//! ```
+//!
+//! Nightly toolchain is required.
+//!
+//! # Examples
+//!
 #![cfg_attr(
     feature = "alloc",
     doc = r##"
-# Examples
-
-## Simple example
+## Simple
 
 ```rust
-# extern crate ringbuf;
 use ringbuf::HeapRb;
+
 # fn main() {
 let rb = HeapRb::<i32>::new(2);
 let (mut prod, mut cons) = rb.split();
@@ -52,6 +73,25 @@ assert_eq!(cons.pop(), None);
 ```
 "##
 )]
+#![doc = r##"
+## No heap
+
+```rust
+use ringbuf::StaticRb;
+
+# fn main() {
+const RB_SIZE: usize = 1;
+let mut rb = StaticRb::<i32, RB_SIZE>::default();
+let (mut prod, mut cons) = rb.split_ref();
+
+assert_eq!(prod.push(123), Ok(()));
+assert_eq!(prod.push(321), Err(321));
+
+assert_eq!(cons.pop(), Some(123));
+assert_eq!(cons.pop(), None);
+# }
+```
+"##]
 #![no_std]
 #![cfg_attr(feature = "bench", feature(test))]
 

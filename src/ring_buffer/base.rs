@@ -9,22 +9,28 @@ use core::{
 #[cfg(feature = "alloc")]
 use alloc::{rc::Rc, sync::Arc};
 
-/// Basic ring buffer trait.
+/// Basic ring buffer functionality.
 ///
-/// Provides raw head/tail pointers and access to underlying memory.
+/// Provides an access to raw underlying memory and `head`/`tail` counters.
 ///
-/// # Mechanism
+/// *It is recommended not to use this trait directly. Use [`Producer`](`crate::Producer`) and [`Consumer`](`crate::Consumer`) instead.*
 ///
-/// When an item is extracted from the ring buffer it is taken from the **head** side. New items are appended to the **tail** side.
+/// # Details
 ///
-/// The valid values for `head` and `tail` are allowed be less than `2 * len` (instead of `len`).
-/// It allows us to distinguish situations when the buffer is empty (`head == tail`) and when the buffer is full (`tail - head == len` modulo `2 * len`) without using an extra space in container.
+/// The ring buffer consists of an array (of `capacity` size) and two counters: `head` and `tail`.
+/// When an item is extracted from the ring buffer it is taken from the `head` position and after that `head` is incremented.
+/// New item is appended to the `tail` position and `tail` is incremented after that.
+///
+/// The `head` and `tail` counters are modulo `2 * capacity` (not just `capacity`).
+/// It allows us to distinguish situations when the buffer is empty (`head == tail`) and when the buffer is full (`tail - head` modulo `2 * capacity` equals to `capacity`)
+/// without using the space for an extra element in container.
+/// And obviously we cannot store more than `capacity` items in the buffer, so `tail - head` modulo `2 * capacity` is not allowed to be greater than `capacity`.
 pub trait RbBase<T> {
     /// Returns underlying raw ring buffer memory as slice.
     ///
     /// # Safety
     ///
-    /// All operations on this data must cohere with the counter.
+    /// Modifications of this data must properly update `head` and `tail` positions.
     ///
     /// *Accessing raw data is extremely unsafe.*
     /// It is recommended to use [`Consumer::as_slices`](`crate::Consumer::as_slices`) and [`Producer::free_space_as_slices`](`crate::Producer::free_space_as_slices`) instead.
@@ -75,7 +81,9 @@ pub trait RbBase<T> {
 
 /// Ring buffer read end.
 ///
-/// Provides reading mechanism and access to occupied memory.
+/// Provides access to occupied memory and mechanism of item extraction.
+///
+/// *It is recommended not to use this trait directly. Use [`Producer`](`crate::Producer`) and [`Consumer`](`crate::Consumer`) instead.*
 pub trait RbRead<T>: RbBase<T> {
     /// Sets the new **head** position.
     ///
@@ -170,7 +178,9 @@ pub trait RbRead<T>: RbBase<T> {
 
 /// Ring buffer write end.
 ///
-/// Provides writing mechanism and access to vacant memory.
+/// Provides access to vacant memory and mechanism of item insertion.
+///
+/// *It is recommended not to use this trait directly. Use [`Producer`](`crate::Producer`) and [`Consumer`](`crate::Consumer`) instead.*
 pub trait RbWrite<T>: RbBase<T> {
     /// Sets the new **tail** position.
     ///
@@ -233,10 +243,10 @@ pub trait RbWrite<T>: RbBase<T> {
     }
 }
 
-/// The whole ring buffer.
+/// An abstract ring buffer.
 pub trait Rb<T>: RbRead<T> + RbWrite<T> {}
 
-/// Reference to the ring buffer.
+/// An abstract reference to the ring buffer.
 pub trait RbRef: Deref<Target = Self::Rb> {
     type Rb;
 }

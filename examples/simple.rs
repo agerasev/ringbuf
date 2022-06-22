@@ -1,5 +1,3 @@
-extern crate ringbuf;
-
 use ringbuf::HeapRb;
 
 fn main() {

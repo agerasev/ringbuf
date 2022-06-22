@@ -1,8 +1,4 @@
-extern crate ringbuf;
-
-use std::io::Read;
-use std::thread;
-use std::time::Duration;
+use std::{io::Read, thread, time::Duration};
 
 use ringbuf::HeapRb;
 

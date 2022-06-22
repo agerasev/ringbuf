@@ -70,6 +70,7 @@ unsafe impl<T> Container<T> for Vec<MaybeUninit<T>> {
     }
 }
 
+/// Wrapper for container that provides multiple write access to it.
 pub(crate) struct SharedStorage<T, C: Container<T>> {
     container: UnsafeCell<C>,
     _phantom: PhantomData<T>,
@@ -99,7 +100,7 @@ impl<T, C: Container<T>> SharedStorage<T, C> {
     ///
     /// # Safety
     ///
-    /// All operations on this data must cohere with the counter.
+    /// All operations on this data must cohere with the `head`/`tail`.
     ///
     /// **Accessing raw data is extremely unsafe.**
     /// It is recommended to use [`Consumer::as_slices`](`crate::LocalConsumer::as_slices`) and

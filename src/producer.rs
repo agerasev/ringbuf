@@ -13,11 +13,13 @@ use std::io::{self, Read, Write};
 
 /// Producer part of ring buffer.
 ///
-/// It can operate in immediate (by default) and postponed modes.
-/// Modes could be switched using [`postponed`](`Self::postponed`)/[`into_postponed`](`Self::into_postponed`) and [`into_immediate`](`Self::into_immediate`) methods.
+/// # Mode
+///
+/// It can operate in immediate (by default) or postponed mode.
+/// Mode could be switched using [`Self::postponed`]/[`Self::into_postponed`] and [`Self::into_immediate`] methods.
 ///
 /// + In immediate mode removed and inserted items are automatically synchronized with the other end.
-/// + In postponed mode synchronization occurs only when [`sync`](`Self::sync`) or [`into_immediate`](`Self::into_immediate`) is called or when `Self` is dropped.
+/// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
 ///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub struct Producer<T, R: RbRef>
 where
@@ -54,12 +56,12 @@ where
         self.target
     }
 
-    /// Returns caching consumer that borrows [`Self`].
+    /// Returns postponed producer that borrows [`Self`].
     pub fn postponed(&mut self) -> PostponedProducer<T, &R::Rb> {
         unsafe { Producer::new(RbWrap(RbWriteCache::new(&self.target))) }
     }
 
-    /// Transforms [`Self`] into caching consumer.
+    /// Transforms [`Self`] into postponed producer.
     pub fn into_postponed(self) -> PostponedProducer<T, R> {
         unsafe { Producer::new(RbWrap(RbWriteCache::new(self.target))) }
     }
@@ -200,7 +202,7 @@ where
 }
 
 /// Postponed producer.
-type PostponedProducer<T, R> = Producer<T, RbWrap<RbWriteCache<T, R>>>;
+pub type PostponedProducer<T, R> = Producer<T, RbWrap<RbWriteCache<T, R>>>;
 
 impl<T, R: RbRef> PostponedProducer<T, R>
 where
