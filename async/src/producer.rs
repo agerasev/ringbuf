@@ -289,14 +289,14 @@ where
         assert!(!self.closed);
         self.register_waker(cx.waker());
         if self.is_closed() {
+            Poll::Ready(Ok(0))
+        } else {
             let count = self.base.push_slice(buf);
             if count == 0 {
                 Poll::Pending
             } else {
                 Poll::Ready(Ok(count))
             }
-        } else {
-            Poll::Ready(Ok(0))
         }
     }
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {

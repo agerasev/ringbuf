@@ -1,6 +1,6 @@
 use crate::{async_transfer, AsyncHeapRb};
 use futures::task::{noop_waker_ref, AtomicWaker};
-use std::{sync::mpsc, vec, vec::Vec};
+use std::{vec, vec::Vec};
 
 #[test]
 fn atomic_waker() {
@@ -16,18 +16,6 @@ fn atomic_waker() {
     assert!(waker.take().is_none());
 }
 
-struct Defer<F: FnOnce()>(Option<F>);
-impl<F: FnOnce()> Drop for Defer<F> {
-    fn drop(&mut self) {
-        self.0.take().unwrap()();
-    }
-}
-
-macro_rules! defer {
-    { $code:expr } => { let _defer = Defer(Some(move || { $code })); }
-}
-
-#[allow(unused_macros)]
 macro_rules! execute {
     ( $( $tasks:expr ),* $(,)? ) => {
         futures::executor::block_on(async {
@@ -36,35 +24,12 @@ macro_rules! execute {
     };
 }
 
-macro_rules! execute_concurrently {
-    ( $pool_size:expr, $( $tasks:expr ),* $(,)? ) => {{
-        let pool = futures::executor::ThreadPool::builder()
-            .pool_size($pool_size)
-            .create()
-            .unwrap();
-        let (tx, rx) = mpsc::channel();
-        let mut cnt = 0;
-        $(
-            let ltx = tx.clone();
-            pool.spawn_ok(async move {
-                defer!{ ltx.send(()).unwrap() };
-                $tasks.await;
-            });
-            cnt += 1;
-        )*
-        for _ in 0..cnt {
-            rx.recv().unwrap();
-        }
-    }};
-}
-
-const COUNT: usize = 1024;
+const COUNT: usize = 16;
 
 #[test]
 fn push_pop() {
     let (prod, cons) = AsyncHeapRb::<usize>::new(2).split();
-    execute_concurrently!(
-        2,
+    execute!(
         async move {
             let mut prod = prod;
             for i in 0..COUNT {
@@ -84,8 +49,7 @@ fn push_pop() {
 #[test]
 fn push_pop_slice() {
     let (prod, cons) = AsyncHeapRb::<usize>::new(3).split();
-    execute_concurrently!(
-        2,
+    execute!(
         async move {
             let mut prod = prod;
             let data = (0..COUNT).collect::<Vec<_>>();
@@ -108,8 +72,7 @@ fn sink_stream() {
         stream::{self, StreamExt},
     };
     let (prod, cons) = AsyncHeapRb::<usize>::new(2).split();
-    execute_concurrently!(
-        2,
+    execute!(
         async move {
             let mut prod = prod;
             let mut input = stream::iter(0..COUNT).map(Ok);
@@ -135,8 +98,7 @@ fn read_write() {
     let (prod, cons) = AsyncHeapRb::<u8>::new(3).split();
     let input = (0..255).cycle().take(COUNT);
     let output = input.clone();
-    execute_concurrently!(
-        2,
+    execute!(
         async move {
             let mut prod = prod;
             let data = input.collect::<Vec<_>>();
@@ -144,7 +106,7 @@ fn read_write() {
         },
         async move {
             let mut cons = cons;
-            let mut data = vec![0; COUNT + 1];
+            let mut data = Vec::new();
             let count = cons.read_to_end(&mut data).await.unwrap();
             assert_eq!(count, COUNT);
             assert!(data.into_iter().take(COUNT).eq(output));
@@ -157,8 +119,7 @@ fn transfer() {
     use futures::stream::StreamExt;
     let (src_prod, src_cons) = AsyncHeapRb::<usize>::new(3).split();
     let (dst_prod, dst_cons) = AsyncHeapRb::<usize>::new(5).split();
-    execute_concurrently!(
-        3,
+    execute!(
         async move {
             let mut prod = src_prod;
             prod.push_iter(0..COUNT).await.unwrap();
