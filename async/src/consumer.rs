@@ -172,6 +172,7 @@ where
     }
 }
 
+#[cfg(feature = "std")]
 impl<R: RbRef> AsyncRead for AsyncConsumer<u8, R>
 where
     R::Rb: AsyncRbRead<u8>,
@@ -191,6 +192,7 @@ where
         }
     }
 }
+#[cfg(feature = "std")]
 impl<R: RbRef> AsyncBufRead for AsyncConsumer<u8, R>
 where
     R::Rb: AsyncRbRead<u8>,
