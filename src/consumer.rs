@@ -15,7 +15,7 @@ use std::io::{self, Read, Write};
 /// Mode could be switched using [`Self::postponed`]/[`Self::into_postponed`] and [`Self::into_immediate`] methods.
 ///
 /// + In immediate mode removed and inserted items are automatically synchronized with the other end.
-/// + In postponed mode synchronization occurs only when [`Self::sync`] or [Self::into_immediate`] is called or when `Self` is dropped.
+/// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
 ///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub struct Consumer<T, R: RbRef>
 where

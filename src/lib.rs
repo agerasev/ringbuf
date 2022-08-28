@@ -30,7 +30,7 @@
 //!
 //! [`SharedRb`] needs to synchronize CPU cache between CPU cores. This synchronization has some overhead.
 //! To avoid multiple unnecessary synchronizations you may use postponed mode of operation (see description for [`Producer#mode`] and [`Consumer#mode`])
-//! or methods that operates many items at once ([`Producer::push_slice`]/[`Producer::push_iter`], [`Consumer::pop_slice`], etc.).
+//! or methods that operate many items at once ([`Producer::push_slice`]/[`Producer::push_iter`], [`Consumer::pop_slice`], etc.).
 //!
 //! For single-threaded usage [`LocalRb`] is recommended because it is faster than [`SharedRb`] due to absence of CPU cache synchronization.
 //!
