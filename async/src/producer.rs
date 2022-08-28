@@ -4,16 +4,22 @@ use core::{
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-//#[cfg(feature = "std")]
-//use futures::io::Write;
-use futures::{future::FusedFuture, never::Never, sink::Sink};
+#[cfg(feature = "std")]
+use futures::io::AsyncWrite;
+use futures::{future::FusedFuture, sink::Sink};
 use ringbuf::{ring_buffer::RbRef, Producer};
+#[cfg(feature = "std")]
+use std::io;
 
 pub struct AsyncProducer<T, R: RbRef>
 where
     R::Rb: AsyncRbWrite<T>,
 {
     base: Producer<T, R>,
+    /// Flag that marks that *producer* is in closed state.
+    ///
+    /// *Don't be confused with an atomic [`AsyncRb::closed`].*
+    closed: bool,
 }
 
 impl<T, R: RbRef> AsyncProducer<T, R>
@@ -21,7 +27,10 @@ where
     R::Rb: AsyncRbWrite<T>,
 {
     pub fn from_sync(base: Producer<T, R>) -> Self {
-        Self { base }
+        Self {
+            base,
+            closed: false,
+        }
     }
     pub fn as_sync(&self) -> &Producer<T, R> {
         &self.base
@@ -30,9 +39,14 @@ where
         &mut self.base
     }
 
+    /// Closes the producer. *All subsequent writes will panic.*
+    pub fn close(&mut self) {
+        unsafe { self.base.rb().close_tail() };
+        self.closed = true;
+    }
     /// Check if the corresponding consumer is dropped.
     pub fn is_closed(&self) -> bool {
-        self.base.rb().is_closed()
+        self.closed || self.base.rb().is_closed()
     }
 
     fn register_waker(&self, waker: &Waker) {
@@ -45,6 +59,7 @@ where
     /// + `Ok` - item successfully pushed.
     /// + `Err(item)` - the corresponding consumer was dropped, item is returned back.
     pub fn push(&mut self, item: T) -> PushFuture<'_, T, R> {
+        assert!(!self.closed);
         PushFuture {
             owner: self,
             item: Some(item),
@@ -57,6 +72,7 @@ where
     /// + `Ok` - iterator ended.
     /// + `Err(iter)` - the corresponding consumer was dropped, remaining iterator is returned back.
     pub fn push_iter<I: Iterator<Item = T>>(&mut self, iter: I) -> PushIterFuture<'_, T, R, I> {
+        assert!(!self.closed);
         PushIterFuture {
             owner: self,
             iter: Some(iter),
@@ -74,6 +90,7 @@ where
     /// + `Ok` - all slice contents are copied.
     /// + `Err(count)` - the corresponding consumer was dropped, number of copied items returned.
     pub fn push_slice<'a: 'b, 'b>(&'a mut self, slice: &'b [T]) -> PushSliceFuture<'a, 'b, T, R> {
+        assert!(!self.closed);
         PushSliceFuture {
             owner: self,
             slice: Some(slice),
@@ -224,24 +241,72 @@ impl<T, R: RbRef> Sink<T> for AsyncProducer<T, R>
 where
     R::Rb: AsyncRbWrite<T>,
 {
-    type Error = Never;
+    type Error = ();
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        assert!(!self.closed);
         self.register_waker(cx.waker());
-        if self.base.is_full() {
-            Poll::Pending
+        if self.is_closed() {
+            Poll::Ready(Err(()))
         } else {
-            Poll::Ready(Ok(()))
+            if self.base.is_full() {
+                Poll::Pending
+            } else {
+                Poll::Ready(Ok(()))
+            }
         }
     }
     fn start_send(mut self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
+        assert!(!self.closed);
         assert!(self.base.push(item).is_ok());
         Ok(())
     }
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        assert!(!self.closed);
+        // Don't need to be flushed.
         Poll::Ready(Ok(()))
     }
-    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        assert!(!self.closed);
+        self.close();
+        Poll::Ready(Ok(()))
+    }
+}
+
+#[cfg(feature = "std")]
+impl<R: RbRef> AsyncWrite for AsyncProducer<u8, R>
+where
+    R::Rb: AsyncRbWrite<u8>,
+{
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        assert!(!self.closed);
+        self.register_waker(cx.waker());
+        if self.is_closed() {
+            let count = self.base.push_slice(buf);
+            if count == 0 {
+                Poll::Pending
+            } else {
+                Poll::Ready(Ok(count))
+            }
+        } else {
+            Poll::Ready(Ok(0))
+        }
+    }
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        assert!(!self.closed);
+        // Don't need to be flushed.
+        Poll::Ready(Ok(()))
+    }
+    fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        assert!(!self.closed);
+        self.close();
         Poll::Ready(Ok(()))
     }
 }

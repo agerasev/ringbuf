@@ -4,8 +4,12 @@ use core::{
     pin::Pin,
     task::{Context, Poll, Waker},
 };
+#[cfg(feature = "std")]
+use futures::io::{AsyncBufRead, AsyncRead};
 use futures::stream::Stream;
 use ringbuf::{ring_buffer::RbRef, Consumer};
+#[cfg(feature = "std")]
+use std::io;
 
 pub struct AsyncConsumer<T, R: RbRef>
 where
@@ -77,7 +81,7 @@ where
     }
 }
 
-impl<T: Copy, R: RbRef> Unpin for AsyncConsumer<T, R> where R::Rb: AsyncRbRead<T> {}
+impl<T, R: RbRef> Unpin for AsyncConsumer<T, R> where R::Rb: AsyncRbRead<T> {}
 
 pub struct PopFuture<'a, T, R: RbRef>
 where
@@ -146,7 +150,7 @@ where
     }
 }
 
-impl<T: Copy, R: RbRef> Stream for AsyncConsumer<T, R>
+impl<T, R: RbRef> Stream for AsyncConsumer<T, R>
 where
     R::Rb: AsyncRbRead<T>,
 {
@@ -165,5 +169,43 @@ where
                 }
             }
         }
+    }
+}
+
+impl<R: RbRef> AsyncRead for AsyncConsumer<u8, R>
+where
+    R::Rb: AsyncRbRead<u8>,
+{
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
+        self.register_waker(cx.waker());
+        let closed = self.is_closed();
+        let len = self.base.pop_slice(buf);
+        if len != 0 || closed {
+            Poll::Ready(Ok(len))
+        } else {
+            Poll::Pending
+        }
+    }
+}
+impl<R: RbRef> AsyncBufRead for AsyncConsumer<u8, R>
+where
+    R::Rb: AsyncRbRead<u8>,
+{
+    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
+        self.register_waker(cx.waker());
+        let closed = self.is_closed();
+        let (slice, _) = Pin::into_inner(self).base.as_slices();
+        if slice.len() != 0 || closed {
+            Poll::Ready(Ok(slice))
+        } else {
+            Poll::Pending
+        }
+    }
+    fn consume(mut self: Pin<&mut Self>, amt: usize) {
+        self.base.skip(amt);
     }
 }
