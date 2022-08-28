@@ -1,5 +1,11 @@
 use crate::{consumer::AsyncConsumer, producer::AsyncProducer};
-use core::{marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, task::Waker};
+use core::{
+    marker::PhantomData,
+    mem::MaybeUninit,
+    num::NonZeroUsize,
+    sync::atomic::{AtomicBool, Ordering},
+    task::Waker,
+};
 use futures::task::AtomicWaker;
 use ringbuf::{
     ring_buffer::{Rb, RbBase, RbRead, RbWrite},
@@ -19,9 +25,22 @@ pub struct Wakers {
     pub tail: AtomicWaker,
 }
 
+pub trait AsyncRbBase<T>: RbBase<T> {
+    fn is_closed(&self) -> bool;
+}
+pub trait AsyncRbRead<T>: RbRead<T> + AsyncRbBase<T> {
+    unsafe fn register_tail_waker(&self, waker: &Waker);
+    unsafe fn close_head(&self);
+}
+pub trait AsyncRbWrite<T>: RbWrite<T> + AsyncRbBase<T> {
+    unsafe fn register_head_waker(&self, waker: &Waker);
+    unsafe fn close_tail(&self);
+}
+
 pub struct AsyncRb<T, B: Rb<T>> {
     base: B,
     wakers: Wakers,
+    closed: AtomicBool,
     _phantom: PhantomData<T>,
 }
 
@@ -57,21 +76,27 @@ impl<T, B: Rb<T>> RbWrite<T> for AsyncRb<T, B> {
     }
 }
 
-pub trait AsyncRbRead<T>: RbRead<T> {
-    fn register_tail_waker(&self, waker: &Waker);
-}
-impl<T, B: Rb<T>> AsyncRbRead<T> for AsyncRb<T, B> {
-    fn register_tail_waker(&self, waker: &Waker) {
-        self.wakers.tail.register(waker);
+impl<T, B: Rb<T>> AsyncRbBase<T> for AsyncRb<T, B> {
+    fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::Acquire)
     }
 }
-
-pub trait AsyncRbWrite<T>: RbWrite<T> {
-    fn register_head_waker(&self, waker: &Waker);
+impl<T, B: Rb<T>> AsyncRbRead<T> for AsyncRb<T, B> {
+    unsafe fn register_tail_waker(&self, waker: &Waker) {
+        self.wakers.tail.register(waker);
+    }
+    unsafe fn close_head(&self) {
+        self.closed.store(true, Ordering::Release);
+        self.wakers.head.wake();
+    }
 }
 impl<T, B: Rb<T>> AsyncRbWrite<T> for AsyncRb<T, B> {
-    fn register_head_waker(&self, waker: &Waker) {
+    unsafe fn register_head_waker(&self, waker: &Waker) {
         self.wakers.head.register(waker);
+    }
+    unsafe fn close_tail(&self) {
+        self.closed.store(true, Ordering::Release);
+        self.wakers.tail.wake();
     }
 }
 
@@ -82,6 +107,7 @@ impl<T, B: Rb<T>> AsyncRb<T, B> {
         Self {
             base,
             wakers: Wakers::default(),
+            closed: AtomicBool::new(false),
             _phantom: PhantomData,
         }
     }

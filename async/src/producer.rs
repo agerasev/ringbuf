@@ -1,9 +1,11 @@
-use crate::ring_buffer::AsyncRbWrite;
+use crate::ring_buffer::{AsyncRbBase, AsyncRbWrite};
 use core::{
     future::Future,
     pin::Pin,
     task::{Context, Poll, Waker},
 };
+//#[cfg(feature = "std")]
+//use futures::io::Write;
 use futures::{future::FusedFuture, never::Never, sink::Sink};
 use ringbuf::{ring_buffer::RbRef, Producer};
 
@@ -21,9 +23,6 @@ where
     pub fn from_sync(base: Producer<T, R>) -> Self {
         Self { base }
     }
-    pub fn into_sync(self) -> Producer<T, R> {
-        self.base
-    }
     pub fn as_sync(&self) -> &Producer<T, R> {
         &self.base
     }
@@ -31,10 +30,20 @@ where
         &mut self.base
     }
 
-    fn register_waker(&self, waker: &Waker) {
-        self.base.rb().register_head_waker(waker);
+    /// Check if the corresponding consumer is dropped.
+    pub fn is_closed(&self) -> bool {
+        self.base.rb().is_closed()
     }
 
+    fn register_waker(&self, waker: &Waker) {
+        unsafe { self.base.rb().register_head_waker(waker) };
+    }
+
+    /// Push item to the ring buffer waiting asynchronously if the buffer is full.
+    ///
+    /// Future returns:
+    /// + `Ok` - item successfully pushed.
+    /// + `Err(item)` - the corresponding consumer was dropped, item is returned back.
     pub fn push(&mut self, item: T) -> PushFuture<'_, T, R> {
         PushFuture {
             owner: self,
@@ -42,15 +51,16 @@ where
         }
     }
 
+    /// Push items from iterator waiting asynchronously if the buffer is full.
+    ///
+    /// Future returns:
+    /// + `Ok` - iterator ended.
+    /// + `Err(iter)` - the corresponding consumer was dropped, remaining iterator is returned back.
     pub fn push_iter<I: Iterator<Item = T>>(&mut self, iter: I) -> PushIterFuture<'_, T, R, I> {
         PushIterFuture {
             owner: self,
             iter: Some(iter),
         }
-    }
-
-    pub fn sink(&mut self) -> PushSink<'_, T, R> {
-        PushSink { owner: self }
     }
 }
 
@@ -58,13 +68,30 @@ impl<T: Copy, R: RbRef> AsyncProducer<T, R>
 where
     R::Rb: AsyncRbWrite<T>,
 {
+    /// Copy slice contents to the buffer waiting asynchronously if the buffer is full.
+    ///
+    /// Future returns:
+    /// + `Ok` - all slice contents are copied.
+    /// + `Err(count)` - the corresponding consumer was dropped, number of copied items returned.
     pub fn push_slice<'a: 'b, 'b>(&'a mut self, slice: &'b [T]) -> PushSliceFuture<'a, 'b, T, R> {
         PushSliceFuture {
             owner: self,
             slice: Some(slice),
+            count: 0,
         }
     }
 }
+
+impl<T, R: RbRef> Drop for AsyncProducer<T, R>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
+    fn drop(&mut self) {
+        unsafe { self.base.rb().close_tail() };
+    }
+}
+
+impl<T, R: RbRef> Unpin for AsyncProducer<T, R> where R::Rb: AsyncRbWrite<T> {}
 
 pub struct PushFuture<'a, T, R: RbRef>
 where
@@ -86,17 +113,21 @@ impl<'a, T, R: RbRef> Future for PushFuture<'a, T, R>
 where
     R::Rb: AsyncRbWrite<T>,
 {
-    type Output = ();
+    type Output = Result<(), T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let item = self.item.take().unwrap();
         self.owner.register_waker(cx.waker());
-        match self.owner.base.push(item) {
-            Err(item) => {
-                self.item.replace(item);
-                Poll::Pending
+        if self.owner.is_closed() {
+            Poll::Ready(Err(item))
+        } else {
+            match self.owner.base.push(item) {
+                Err(item) => {
+                    self.item.replace(item);
+                    Poll::Pending
+                }
+                Ok(()) => Poll::Ready(Ok(())),
             }
-            Ok(()) => Poll::Ready(()),
         }
     }
 }
@@ -107,6 +138,7 @@ where
 {
     owner: &'a mut AsyncProducer<T, R>,
     slice: Option<&'b [T]>,
+    count: usize,
 }
 impl<'a, 'b, T: Copy, R: RbRef> Unpin for PushSliceFuture<'a, 'b, T, R> where R::Rb: AsyncRbWrite<T> {}
 impl<'a, 'b, T: Copy, R: RbRef> FusedFuture for PushSliceFuture<'a, 'b, T, R>
@@ -121,18 +153,23 @@ impl<'a, 'b, T: Copy, R: RbRef> Future for PushSliceFuture<'a, 'b, T, R>
 where
     R::Rb: AsyncRbWrite<T>,
 {
-    type Output = ();
+    type Output = Result<(), usize>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.owner.register_waker(cx.waker());
         let mut slice = self.slice.take().unwrap();
-        let len = self.owner.base.push_slice(slice);
-        slice = &slice[len..];
-        if slice.is_empty() {
-            Poll::Ready(())
+        if self.owner.is_closed() {
+            Poll::Ready(Err(self.count))
         } else {
-            self.slice.replace(slice);
-            Poll::Pending
+            let len = self.owner.base.push_slice(slice);
+            slice = &slice[len..];
+            self.count += len;
+            if slice.is_empty() {
+                Poll::Ready(Ok(()))
+            } else {
+                self.slice.replace(slice);
+                Poll::Pending
+            }
         }
     }
 }
@@ -160,48 +197,45 @@ impl<'a, T, R: RbRef, I: Iterator<Item = T>> Future for PushIterFuture<'a, T, R,
 where
     R::Rb: AsyncRbWrite<T>,
 {
-    type Output = ();
+    type Output = Result<(), I>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.owner.register_waker(cx.waker());
         let mut iter = self.iter.take().unwrap();
-        let iter_ended = {
-            let mut local = self.owner.base.postponed();
-            local.push_iter(&mut iter);
-            !local.is_full()
-        };
-        if iter_ended {
-            Poll::Ready(())
+        if self.owner.is_closed() {
+            Poll::Ready(Err(iter))
         } else {
-            self.iter.replace(iter);
-            Poll::Pending
+            let iter_ended = {
+                let mut local = self.owner.base.postponed();
+                local.push_iter(&mut iter);
+                !local.is_full()
+            };
+            if iter_ended {
+                Poll::Ready(Ok(()))
+            } else {
+                self.iter.replace(iter);
+                Poll::Pending
+            }
         }
     }
 }
 
-pub struct PushSink<'a, T, R: RbRef>
-where
-    R::Rb: AsyncRbWrite<T>,
-{
-    owner: &'a mut AsyncProducer<T, R>,
-}
-impl<'a, T, R: RbRef> Unpin for PushSink<'a, T, R> where R::Rb: AsyncRbWrite<T> {}
-impl<'a, T, R: RbRef> Sink<T> for PushSink<'a, T, R>
+impl<T, R: RbRef> Sink<T> for AsyncProducer<T, R>
 where
     R::Rb: AsyncRbWrite<T>,
 {
     type Error = Never;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.owner.register_waker(cx.waker());
-        if self.owner.base.is_full() {
+        self.register_waker(cx.waker());
+        if self.base.is_full() {
             Poll::Pending
         } else {
             Poll::Ready(Ok(()))
         }
     }
     fn start_send(mut self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
-        assert!(self.owner.base.push(item).is_ok());
+        assert!(self.base.push(item).is_ok());
         Ok(())
     }
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {

@@ -6,16 +6,19 @@ use ringbuf::StaticRb;
 async fn async_main() {
     const RB_SIZE: usize = 1;
     let mut rb = AsyncRb::from_base(StaticRb::<i32, RB_SIZE>::default());
-    let (mut prod, mut cons) = rb.split_ref();
+    let (prod, cons) = rb.split_ref();
 
     join!(
         async move {
-            prod.push(123).await;
-            prod.push(321).await;
+            let mut prod = prod;
+            prod.push(123).await.unwrap();
+            prod.push(321).await.unwrap();
         },
         async move {
-            assert_eq!(cons.pop().await, 123);
-            assert_eq!(cons.pop().await, 321);
+            let mut cons = cons;
+            assert_eq!(cons.pop().await, Some(123));
+            assert_eq!(cons.pop().await, Some(321));
+            assert_eq!(cons.pop().await, None);
         },
     );
 }

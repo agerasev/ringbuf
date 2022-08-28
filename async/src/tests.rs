@@ -66,57 +66,63 @@ const COUNT: usize = 1024;
 
 #[test]
 fn push_pop() {
-    let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(2).split();
+    let (prod, cons) = AsyncHeapRb::<usize>::new(2).split();
     execute_concurrently!(
         2,
         async move {
+            let mut prod = prod;
             for i in 0..COUNT {
-                prod.push(i).await;
+                prod.push(i).await.unwrap();
             }
         },
         async move {
+            let mut cons = cons;
             for i in 0..COUNT {
-                assert_eq!(cons.pop().await, i);
+                assert_eq!(cons.pop().await.unwrap(), i);
             }
+            assert!(cons.pop().await.is_none());
         },
     );
 }
 
 #[test]
 fn push_pop_slice() {
-    let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(3).split();
+    let (prod, cons) = AsyncHeapRb::<usize>::new(3).split();
     execute_concurrently!(
         2,
         async move {
+            let mut prod = prod;
             let data = (0..COUNT).collect::<Vec<_>>();
-            prod.push_slice(&data).await;
+            prod.push_slice(&data).await.unwrap();
         },
         async move {
-            let mut data = vec![0; COUNT];
-            cons.pop_slice(&mut data).await;
-            assert!(data.into_iter().eq(0..COUNT));
+            let mut cons = cons;
+            let mut data = vec![0; COUNT + 1];
+            let count = cons.pop_slice(&mut data).await.unwrap_err();
+            assert_eq!(count, COUNT);
+            assert!(data.into_iter().take(COUNT).eq(0..COUNT));
         },
     );
 }
 
 #[test]
 fn sink_stream() {
-    let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(2).split();
+    let (prod, cons) = AsyncHeapRb::<usize>::new(2).split();
     execute_concurrently!(
         2,
         async move {
-            let mut src = stream::iter(0..COUNT).map(Ok);
-            prod.sink().send_all(&mut src).await.unwrap();
+            let mut prod = prod;
+            let mut input = stream::iter(0..COUNT).map(Ok);
+            prod.send_all(&mut input).await.unwrap();
         },
         async move {
+            let cons = cons;
             assert_eq!(
-                cons.stream()
-                    .take(COUNT)
-                    .fold(0, |s, x| async move {
-                        assert_eq!(s, x);
-                        s + 1
-                    })
-                    .await,
+                cons.fold(0, |s, x| async move {
+                    assert_eq!(s, x);
+                    s + 1
+                })
+                .await,
                 COUNT
             );
         },
@@ -125,25 +131,28 @@ fn sink_stream() {
 
 #[test]
 fn transfer() {
-    let (mut src_prod, mut src_cons) = AsyncHeapRb::<usize>::new(3).split();
-    let (mut dst_prod, mut dst_cons) = AsyncHeapRb::<usize>::new(5).split();
+    let (src_prod, src_cons) = AsyncHeapRb::<usize>::new(3).split();
+    let (dst_prod, dst_cons) = AsyncHeapRb::<usize>::new(5).split();
     execute_concurrently!(
         3,
-        async move { async_transfer(&mut src_cons, &mut dst_prod, Some(COUNT)).await },
         async move {
-            let mut src = stream::iter(0..COUNT).map(Ok);
-            src_prod.sink().send_all(&mut src).await.unwrap();
+            let mut prod = src_prod;
+            let mut input = stream::iter(0..COUNT).map(Ok);
+            prod.send_all(&mut input).await.unwrap();
         },
         async move {
+            let mut src = src_cons;
+            let mut dst = dst_prod;
+            async_transfer(&mut src, &mut dst, None).await
+        },
+        async move {
+            let cons = dst_cons;
             assert_eq!(
-                dst_cons
-                    .stream()
-                    .take(COUNT)
-                    .fold(0, |s, x| async move {
-                        assert_eq!(s, x);
-                        s + 1
-                    })
-                    .await,
+                cons.fold(0, |s, x| async move {
+                    assert_eq!(s, x);
+                    s + 1
+                })
+                .await,
                 COUNT
             );
         },
