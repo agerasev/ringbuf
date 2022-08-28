@@ -1,6 +1,11 @@
 use super::{Container, Rb, RbBase, RbRead, RbWrite, SharedStorage};
 use crate::{consumer::Consumer, producer::Producer};
-use core::{cell::Cell, mem::MaybeUninit, num::NonZeroUsize, ptr};
+use core::{
+    cell::Cell,
+    mem::{ManuallyDrop, MaybeUninit},
+    num::NonZeroUsize,
+    ptr,
+};
 
 #[cfg(feature = "alloc")]
 use alloc::rc::Rc;
@@ -102,13 +107,8 @@ impl<T, C: Container<T>> LocalRb<T, C> {
     /// Initialized contents of the container must be properly dropped.
     pub unsafe fn into_raw_parts(self) -> (C, usize, usize) {
         let (head, tail) = (self.head(), self.tail());
-        let self_uninit = MaybeUninit::new(self);
-        (
-            ptr::read(&self_uninit.assume_init_ref().storage).into_inner(),
-            head,
-            tail,
-        )
-        // `Self::drop` is not called.
+        let self_ = ManuallyDrop::new(self);
+        (ptr::read(&self_.storage).into_inner(), head, tail)
     }
 
     /// Splits ring buffer into producer and consumer.
