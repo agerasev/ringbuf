@@ -248,12 +248,10 @@ where
         self.register_waker(cx.waker());
         if self.is_closed() {
             Poll::Ready(Err(()))
+        } else if self.base.is_full() {
+            Poll::Pending
         } else {
-            if self.base.is_full() {
-                Poll::Pending
-            } else {
-                Poll::Ready(Ok(()))
-            }
+            Poll::Ready(Ok(()))
         }
     }
     fn start_send(mut self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {

@@ -201,7 +201,7 @@ where
         self.register_waker(cx.waker());
         let closed = self.is_closed();
         let (slice, _) = Pin::into_inner(self).base.as_slices();
-        if slice.len() != 0 || closed {
+        if !slice.is_empty() || closed {
             Poll::Ready(Ok(slice))
         } else {
             Poll::Pending
