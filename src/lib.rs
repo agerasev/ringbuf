@@ -8,6 +8,7 @@
 //! + Thread-safe direct access to the internal ring buffer memory.
 //! + [`Read`](`std::io::Read`) and [`Write`](`std::io::Write`) implementation.
 //! + Can be used without `std` and even without `alloc` (using only statically-allocated memory).
+//! + [Experimental `async`/`.await` support](https://github.com/agerasev/async-ringbuf).
 //!
 //! # Usage
 //!
@@ -92,6 +93,11 @@ assert_eq!(cons.pop(), None);
 # }
 ```
 "##]
+//! ## `async`/`.await`
+//!
+//! There is an experimental crate [`async-ringbuf`](https://github.com/agerasev/async-ringbuf)
+//! which is built on top of `ringbuf` and implements asynchronous ring buffer operations.
+//!
 #![no_std]
 #![cfg_attr(feature = "bench", feature(test))]
 

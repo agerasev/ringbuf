@@ -171,7 +171,7 @@ where
     }
 }
 
-impl<'a, T: Copy, R: RbRef> Producer<T, R>
+impl<T: Copy, R: RbRef> Producer<T, R>
 where
     R::Rb: RbWrite<T>,
 {

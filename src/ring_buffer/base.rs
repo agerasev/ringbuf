@@ -106,11 +106,7 @@ pub trait RbRead<T>: RbBase<T> {
         self.set_head((self.head() + count) % self.modulus());
     }
 
-    /// Returns a pair of slices which contain, in order, the occupied cells in the ring buffer.
-    ///
-    /// All items in slices are guaranteed to be **initialized**.
-    ///
-    /// *The slices may not include items pushed to the buffer by the concurring producer right after this call.*
+    /// Returns a pair of ranges of [`Self::occupied_slices`] location in underlying container.
     fn occupied_ranges(&self) -> (Range<usize>, Range<usize>) {
         let head = self.head();
         let tail = self.tail();
@@ -203,11 +199,7 @@ pub trait RbWrite<T>: RbBase<T> {
         self.set_tail((self.tail() + count) % self.modulus());
     }
 
-    /// Returns a pair of slices which contain, in order, the vacant cells in the ring buffer.
-    ///
-    /// All items in slices are guaranteed to be *un-initialized*.
-    ///
-    /// *The slices may not include cells freed by the concurring consumer right after this call.*
+    /// Returns a pair of ranges of [`Self::vacant_slices`] location in underlying container.
     fn vacant_ranges(&self) -> (Range<usize>, Range<usize>) {
         let head = self.head();
         let tail = self.tail();
@@ -251,7 +243,7 @@ pub trait RbRef: Deref<Target = Self::Rb> {
     type Rb;
 }
 
-impl<'a, B> RbRef for RbWrap<B> {
+impl<B> RbRef for RbWrap<B> {
     type Rb = B;
 }
 impl<'a, B> RbRef for &'a B {

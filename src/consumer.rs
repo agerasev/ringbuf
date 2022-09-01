@@ -255,7 +255,7 @@ where
     }
 }
 
-impl<'a, T: Copy, R: RbRef> Consumer<T, R>
+impl<T: Copy, R: RbRef> Consumer<T, R>
 where
     R::Rb: RbRead<T>,
 {
@@ -315,7 +315,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<'a, R: RbRef> Consumer<u8, R>
+impl<R: RbRef> Consumer<u8, R>
 where
     R::Rb: RbRead<u8>,
 {
@@ -344,7 +344,7 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<'a, R: RbRef> Read for Consumer<u8, R>
+impl<R: RbRef> Read for Consumer<u8, R>
 where
     R::Rb: RbRead<u8>,
 {

@@ -25,6 +25,7 @@ Lock-free SPSC FIFO ring buffer with direct access to inner data.
 + Thread-safe direct access to the internal ring buffer memory.
 + `Read` and `Write` implementation.
 + Can be used without `std` and even without `alloc` (using only statically-allocated memory).
++ [Experimental `async`/`.await` support](https://github.com/agerasev/async-ringbuf).
 
 ## Usage
 
@@ -103,6 +104,11 @@ assert_eq!(cons.pop(), Some(123));
 assert_eq!(cons.pop(), None);
 # }
 ```
+
+## `async`/`.await`
+
+There is an experimental crate [`async-ringbuf`](https://github.com/agerasev/async-ringbuf)
+which is built on top of `ringbuf` and implements asynchronous ring buffer operations.
 
 ## License
 

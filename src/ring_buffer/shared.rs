@@ -2,7 +2,7 @@ use super::{Container, Rb, RbBase, RbRead, RbWrite, SharedStorage};
 use crate::{consumer::Consumer, producer::Producer};
 use cache_padded::CachePadded;
 use core::{
-    mem::{self, ManuallyDrop, MaybeUninit},
+    mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
     ptr,
     sync::atomic::{AtomicUsize, Ordering},
@@ -107,10 +107,6 @@ impl<T, C: Container<T>> SharedRb<T, C> {
     pub unsafe fn into_raw_parts(self) -> (C, usize, usize) {
         let (head, tail) = (self.head(), self.tail());
         let self_ = ManuallyDrop::new(self);
-
-        // In case if `AtomicUsize` implements `Drop`.
-        mem::drop(ptr::read(&self_.head));
-        mem::drop(ptr::read(&self_.tail));
 
         (ptr::read(&self_.storage).into_inner(), head, tail)
     }
