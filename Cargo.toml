@@ -20,7 +20,7 @@ std = ["alloc"]
 bench = []
 
 [dependencies]
-cache-padded = "1.2.0"
+crossbeam-utils = { version = "0.8.11", default-features = false }
 
 [[example]]
 name = "simple"
