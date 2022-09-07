@@ -1,12 +1,12 @@
 use super::{Container, Rb, RbBase, RbRead, RbWrite, SharedStorage};
 use crate::{consumer::Consumer, producer::Producer};
-use cache_padded::CachePadded;
 use core::{
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
     ptr,
     sync::atomic::{AtomicUsize, Ordering},
 };
+use crossbeam_utils::CachePadded;
 
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
