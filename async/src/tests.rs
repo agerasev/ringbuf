@@ -1,4 +1,5 @@
 use crate::{async_transfer, AsyncHeapRb};
+use core::sync::atomic::{AtomicUsize, Ordering};
 use futures::task::{noop_waker_ref, AtomicWaker};
 use std::{vec, vec::Vec};
 
@@ -139,6 +140,28 @@ fn transfer() {
                 .await,
                 COUNT
             );
+        },
+    );
+}
+
+#[test]
+fn wait() {
+    let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(3).split();
+    let stage = AtomicUsize::new(0);
+    execute!(
+        async {
+            prod.push(0).await.unwrap();
+            assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 0);
+            prod.push(1).await.unwrap();
+
+            prod.wait_free(2).await;
+            assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 2);
+        },
+        async {
+            cons.wait(2).await;
+            assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 1);
+
+            cons.pop().await.unwrap();
         },
     );
 }

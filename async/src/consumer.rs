@@ -6,7 +6,7 @@ use core::{
 };
 #[cfg(feature = "std")]
 use futures::io::{AsyncBufRead, AsyncRead};
-use futures::stream::Stream;
+use futures::{future::FusedFuture, stream::Stream};
 use ringbuf::{ring_buffer::RbRef, Consumer};
 #[cfg(feature = "std")]
 use std::io;
@@ -32,6 +32,22 @@ where
         &mut self.base
     }
 
+    pub fn capacity(&self) -> usize {
+        self.base.capacity()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.base.is_empty()
+    }
+    pub fn is_full(&self) -> bool {
+        self.base.is_full()
+    }
+    pub fn len(&self) -> usize {
+        self.base.len()
+    }
+    pub fn free_len(&self) -> usize {
+        self.base.free_len()
+    }
+
     pub(crate) fn register_waker(&self, waker: &Waker) {
         unsafe { self.base.rb().register_tail_waker(waker) };
     }
@@ -49,6 +65,18 @@ where
     pub fn pop(&mut self) -> PopFuture<'_, T, R> {
         PopFuture {
             owner: self,
+            done: false,
+        }
+    }
+
+    /// Wait for the buffer to contain at least `len` items or to close.
+    ///
+    /// Panics if `len` is greater than buffer capacity.
+    pub fn wait(&self, len: usize) -> WaitFuture<'_, T, R> {
+        assert!(len <= self.capacity());
+        WaitFuture {
+            owner: self,
+            len,
             done: false,
         }
     }
@@ -91,6 +119,14 @@ where
     done: bool,
 }
 impl<'a, T, R: RbRef> Unpin for PopFuture<'a, T, R> where R::Rb: AsyncRbRead<T> {}
+impl<'a, T, R: RbRef> FusedFuture for PopFuture<'a, T, R>
+where
+    R::Rb: AsyncRbRead<T>,
+{
+    fn is_terminated(&self) -> bool {
+        self.done
+    }
+}
 impl<'a, T, R: RbRef> Future for PopFuture<'a, T, R>
 where
     R::Rb: AsyncRbRead<T>,
@@ -126,6 +162,14 @@ where
     count: usize,
 }
 impl<'a, 'b, T: Copy, R: RbRef> Unpin for PopSliceFuture<'a, 'b, T, R> where R::Rb: AsyncRbRead<T> {}
+impl<'a, 'b, T: Copy, R: RbRef> FusedFuture for PopSliceFuture<'a, 'b, T, R>
+where
+    R::Rb: AsyncRbRead<T>,
+{
+    fn is_terminated(&self) -> bool {
+        self.slice.is_none()
+    }
+}
 impl<'a, 'b, T: Copy, R: RbRef> Future for PopSliceFuture<'a, 'b, T, R>
 where
     R::Rb: AsyncRbRead<T>,
@@ -145,6 +189,41 @@ where
             Poll::Ready(Err(self.count))
         } else {
             self.slice.replace(slice);
+            Poll::Pending
+        }
+    }
+}
+
+pub struct WaitFuture<'a, T, R: RbRef>
+where
+    R::Rb: AsyncRbRead<T>,
+{
+    owner: &'a AsyncConsumer<T, R>,
+    len: usize,
+    done: bool,
+}
+impl<'a, T, R: RbRef> Unpin for WaitFuture<'a, T, R> where R::Rb: AsyncRbRead<T> {}
+impl<'a, T, R: RbRef> FusedFuture for WaitFuture<'a, T, R>
+where
+    R::Rb: AsyncRbRead<T>,
+{
+    fn is_terminated(&self) -> bool {
+        self.done
+    }
+}
+impl<'a, T, R: RbRef> Future for WaitFuture<'a, T, R>
+where
+    R::Rb: AsyncRbRead<T>,
+{
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        assert!(!self.done);
+        self.owner.register_waker(cx.waker());
+        let closed = self.owner.is_closed();
+        if self.len <= self.owner.len() || closed {
+            Poll::Ready(())
+        } else {
             Poll::Pending
         }
     }

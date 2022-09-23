@@ -39,6 +39,22 @@ where
         &mut self.base
     }
 
+    pub fn capacity(&self) -> usize {
+        self.base.capacity()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.base.is_empty()
+    }
+    pub fn is_full(&self) -> bool {
+        self.base.is_full()
+    }
+    pub fn len(&self) -> usize {
+        self.base.len()
+    }
+    pub fn free_len(&self) -> usize {
+        self.base.free_len()
+    }
+
     /// Closes the producer. *All subsequent writes will panic.*
     pub fn close(&mut self) {
         unsafe { self.base.rb().close_tail() };
@@ -76,6 +92,18 @@ where
         PushIterFuture {
             owner: self,
             iter: Some(iter),
+        }
+    }
+
+    /// Wait for the buffer to have at least `free_len` free places for items or to close.
+    ///
+    /// Panics if `free_len` is greater than buffer capacity.
+    pub fn wait_free(&self, free_len: usize) -> WaitFreeFuture<'_, T, R> {
+        assert!(free_len <= self.capacity());
+        WaitFreeFuture {
+            owner: self,
+            free_len,
+            done: false,
         }
     }
 }
@@ -233,6 +261,41 @@ where
                 self.iter.replace(iter);
                 Poll::Pending
             }
+        }
+    }
+}
+
+pub struct WaitFreeFuture<'a, T, R: RbRef>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
+    owner: &'a AsyncProducer<T, R>,
+    free_len: usize,
+    done: bool,
+}
+impl<'a, T, R: RbRef> Unpin for WaitFreeFuture<'a, T, R> where R::Rb: AsyncRbWrite<T> {}
+impl<'a, T, R: RbRef> FusedFuture for WaitFreeFuture<'a, T, R>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
+    fn is_terminated(&self) -> bool {
+        self.done
+    }
+}
+impl<'a, T, R: RbRef> Future for WaitFreeFuture<'a, T, R>
+where
+    R::Rb: AsyncRbWrite<T>,
+{
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        assert!(!self.done);
+        self.owner.register_waker(cx.waker());
+        let closed = self.owner.is_closed();
+        if self.free_len <= self.owner.free_len() || closed {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
         }
     }
 }
