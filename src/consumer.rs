@@ -2,7 +2,13 @@ use crate::{
     ring_buffer::{RbBase, RbRead, RbReadCache, RbRef, RbWrap},
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
-use core::{cmp, marker::PhantomData, mem::MaybeUninit};
+use core::{
+    cmp,
+    iter::{Chain, ExactSizeIterator},
+    marker::PhantomData,
+    mem::MaybeUninit,
+    slice,
+};
 
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
@@ -178,8 +184,12 @@ where
     }
 
     /// Returns an iterator that removes items one by one from the ring buffer.
+    ///
+    /// *Iterator provides only items that are available for consumer at the moment of `pop_iter` call, it will not contain new items added after it was created.*
+    ///
+    /// *Information about removed items is commited to the buffer only when iterator is destroyed.*
     pub fn pop_iter(&mut self) -> PopIterator<'_, T, R> {
-        PopIterator { consumer: self }
+        PopIterator::new(&self.target)
     }
 
     /// Returns a front-to-back iterator containing references to items in the ring buffer.
@@ -242,7 +252,24 @@ pub struct PopIterator<'a, T, R: RbRef>
 where
     R::Rb: RbRead<T>,
 {
-    consumer: &'a mut Consumer<T, R>,
+    target: &'a R,
+    iter: Chain<slice::Iter<'a, MaybeUninit<T>>, slice::Iter<'a, MaybeUninit<T>>>,
+
+    len: usize,
+}
+
+impl<'a, T, R: RbRef> PopIterator<'a, T, R>
+where
+    R::Rb: RbRead<T>,
+{
+    fn new(target: &'a R) -> Self {
+        let slices = unsafe { target.occupied_slices() };
+        Self {
+            target,
+            len: slices.0.len() + slices.1.len(),
+            iter: slices.0.iter().chain(slices.1.iter()),
+        }
+    }
 }
 
 impl<'a, T, R: RbRef> Iterator for PopIterator<'a, T, R>
@@ -250,8 +277,24 @@ where
     R::Rb: RbRead<T>,
 {
     type Item = T;
+    #[inline]
     fn next(&mut self) -> Option<T> {
-        self.consumer.pop()
+        self.iter.next().map(|x| unsafe { x.assume_init_read() })
+    }
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+}
+
+impl<'a, T, R: RbRef> ExactSizeIterator for PopIterator<'a, T, R> where R::Rb: RbRead<T> {}
+
+impl<'a, T, R: RbRef> Drop for PopIterator<'a, T, R>
+where
+    R::Rb: RbRead<T>,
+{
+    fn drop(&mut self) {
+        unsafe { self.target.advance_head(self.len - self.iter.size_hint().0) };
     }
 }
 

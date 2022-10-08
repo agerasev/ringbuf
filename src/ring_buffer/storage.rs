@@ -93,7 +93,7 @@ impl<T, C: Container<T>> SharedStorage<T, C> {
     /// Get the length of the container.
     #[inline]
     pub fn len(&self) -> NonZeroUsize {
-        unsafe { NonZeroUsize::new_unchecked((&*self.container.get()).len()) }
+        unsafe { NonZeroUsize::new_unchecked((*self.container.get()).len()) }
     }
 
     /// Returns underlying raw ring buffer memory as slice.
@@ -108,7 +108,7 @@ impl<T, C: Container<T>> SharedStorage<T, C> {
     #[allow(clippy::mut_from_ref)]
     #[inline]
     pub unsafe fn as_slice(&self) -> &mut [MaybeUninit<T>] {
-        (&mut *self.container.get()).as_mut_slice()
+        (*self.container.get()).as_mut_slice()
     }
 
     /// Returns underlying container.
