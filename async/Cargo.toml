@@ -1,6 +1,6 @@
 [package]
 name = "async-ringbuf"
-version = "0.1.0-rc.0"
+version = "0.1.0-rc.1"
 edition = "2021"
 resolver = "2"
 
@@ -19,7 +19,7 @@ alloc = ["ringbuf/alloc"]
 std = ["alloc", "ringbuf/std", "futures/std"]
 
 [dependencies]
-ringbuf = { version = "0.3.0-rc.1", default-features = false }
+ringbuf = { version = "0.3.0", default-features = false }
 futures = { version = "0.3.23", default-features = false }
 
 [dev-dependencies]

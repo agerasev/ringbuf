@@ -26,16 +26,16 @@ impl<T, R: RbRef> AsyncProducer<T, R>
 where
     R::Rb: AsyncRbWrite<T>,
 {
-    pub fn from_sync(base: Producer<T, R>) -> Self {
+    pub fn from_base(base: Producer<T, R>) -> Self {
         Self {
             base,
             closed: false,
         }
     }
-    pub fn as_sync(&self) -> &Producer<T, R> {
+    pub fn as_base(&self) -> &Producer<T, R> {
         &self.base
     }
-    pub fn as_mut_sync(&mut self) -> &mut Producer<T, R> {
+    pub fn as_mut_base(&mut self) -> &mut Producer<T, R> {
         &mut self.base
     }
 

@@ -22,13 +22,13 @@ impl<T, R: RbRef> AsyncConsumer<T, R>
 where
     R::Rb: AsyncRbRead<T>,
 {
-    pub fn from_sync(base: Consumer<T, R>) -> Self {
+    pub fn from_base(base: Consumer<T, R>) -> Self {
         Self { base }
     }
-    pub fn as_sync(&self) -> &Consumer<T, R> {
+    pub fn as_base(&self) -> &Consumer<T, R> {
         &self.base
     }
-    pub fn as_mut_sync(&mut self) -> &mut Consumer<T, R> {
+    pub fn as_mut_base(&mut self) -> &mut Consumer<T, R> {
         &mut self.base
     }
 

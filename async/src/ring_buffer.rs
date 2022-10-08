@@ -119,8 +119,8 @@ impl<T, B: Rb<T>> AsyncRb<T, B> {
     pub fn split_ref(&mut self) -> (AsyncProducer<T, &Self>, AsyncConsumer<T, &Self>) {
         unsafe {
             (
-                AsyncProducer::from_sync(Producer::new(self)),
-                AsyncConsumer::from_sync(Consumer::new(self)),
+                AsyncProducer::from_base(Producer::new(self)),
+                AsyncConsumer::from_base(Consumer::new(self)),
             )
         }
     }
@@ -132,8 +132,8 @@ impl<T, C: Container<T>> AsyncRb<T, LocalRb<T, C>> {
         let rc = Rc::new(self);
         unsafe {
             (
-                AsyncProducer::from_sync(Producer::new(rc.clone())),
-                AsyncConsumer::from_sync(Consumer::new(rc)),
+                AsyncProducer::from_base(Producer::new(rc.clone())),
+                AsyncConsumer::from_base(Consumer::new(rc)),
             )
         }
     }
@@ -145,8 +145,8 @@ impl<T, C: Container<T>> AsyncRb<T, SharedRb<T, C>> {
         let arc = Arc::new(self);
         unsafe {
             (
-                AsyncProducer::from_sync(Producer::new(arc.clone())),
-                AsyncConsumer::from_sync(Consumer::new(arc)),
+                AsyncProducer::from_base(Producer::new(arc.clone())),
+                AsyncConsumer::from_base(Consumer::new(arc)),
             )
         }
     }
