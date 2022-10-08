@@ -1,6 +1,6 @@
 [package]
 name = "ringbuf"
-version = "0.3.0-rc.1"
+version = "0.3.0"
 authors = ["Alexey Gerasev <alexey.gerasev@gmail.com>"]
 edition = "2021"
 
@@ -20,7 +20,7 @@ std = ["alloc"]
 bench = []
 
 [dependencies]
-crossbeam-utils = { version = "0.8.11", default-features = false }
+crossbeam-utils = { version = "0.8", default-features = false }
 
 [[example]]
 name = "simple"
