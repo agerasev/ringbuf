@@ -38,12 +38,3 @@ impl<T> SharedRb<T, Vec<MaybeUninit<T>>> {
         unsafe { Self::from_raw_parts(data, 0, 0) }
     }
 }
-
-/// Stack-allocated ring buffer with static capacity.
-///
-/// *Capacity (`N`) must be greater that zero.*
-pub type StaticRb<T, const N: usize> = SharedRb<T, [MaybeUninit<T>; N]>;
-
-/// Heap-allocated ring buffer.
-#[cfg(feature = "alloc")]
-pub type HeapRb<T> = SharedRb<T, Vec<MaybeUninit<T>>>;

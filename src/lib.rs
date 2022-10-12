@@ -106,6 +106,7 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+mod alias;
 mod utils;
 
 /// [`Consumer`] and additional types.
@@ -116,11 +117,12 @@ pub mod producer;
 pub mod ring_buffer;
 mod transfer;
 
+#[cfg(feature = "alloc")]
+pub use alias::{HeapConsumer, HeapProducer, HeapRb};
+pub use alias::{StaticConsumer, StaticProducer, StaticRb};
 pub use consumer::Consumer;
 pub use producer::Producer;
-#[cfg(feature = "alloc")]
-pub use ring_buffer::HeapRb;
-pub use ring_buffer::{LocalRb, SharedRb, StaticRb};
+pub use ring_buffer::{LocalRb, SharedRb};
 pub use transfer::transfer;
 
 #[cfg(test)]
