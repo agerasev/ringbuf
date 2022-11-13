@@ -10,6 +10,8 @@ use futures::{future::FusedFuture, stream::Stream};
 use ringbuf::{ring_buffer::RbRef, Consumer};
 #[cfg(feature = "std")]
 use std::io;
+#[cfg(feature = "impl-tokio")]
+use tokio::io::{AsyncBufRead as TokioBufRead, AsyncRead as TokioRead};
 
 pub struct AsyncConsumer<T, R: RbRef>
 where
@@ -288,5 +290,33 @@ where
     }
     fn consume(mut self: Pin<&mut Self>, amt: usize) {
         self.base.skip(amt);
+    }
+}
+
+#[cfg(feature = "impl-tokio")]
+impl<R: RbRef> TokioRead for AsyncConsumer<u8, R>
+where
+    R::Rb: AsyncRbRead<u8>,
+{
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let len = futures::ready!(AsyncRead::poll_read(self, cx, buf.initialize_unfilled())?);
+        buf.advance(len);
+        Poll::Ready(Ok(()))
+    }
+}
+#[cfg(feature = "impl-tokio")]
+impl<R: RbRef> TokioBufRead for AsyncConsumer<u8, R>
+where
+    R::Rb: AsyncRbRead<u8>,
+{
+    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
+        AsyncBufRead::poll_fill_buf(self, cx)
+    }
+    fn consume(self: Pin<&mut Self>, amt: usize) {
+        AsyncBufRead::consume(self, amt)
     }
 }

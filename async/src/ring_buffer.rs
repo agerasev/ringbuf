@@ -1,3 +1,5 @@
+#![allow(clippy::missing_safety_doc)]
+
 use crate::{consumer::AsyncConsumer, producer::AsyncProducer};
 use core::{
     marker::PhantomData,

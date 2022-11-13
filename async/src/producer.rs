@@ -10,6 +10,8 @@ use futures::{future::FusedFuture, sink::Sink};
 use ringbuf::{ring_buffer::RbRef, Producer};
 #[cfg(feature = "std")]
 use std::io;
+#[cfg(feature = "impl-tokio")]
+use tokio::io::AsyncWrite as TokioWrite;
 
 pub struct AsyncProducer<T, R: RbRef>
 where
@@ -369,5 +371,27 @@ where
         assert!(!self.closed);
         self.close();
         Poll::Ready(Ok(()))
+    }
+}
+
+#[cfg(feature = "impl-tokio")]
+impl<R: RbRef> TokioWrite for AsyncProducer<u8, R>
+where
+    R::Rb: AsyncRbWrite<u8>,
+{
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        AsyncWrite::poll_write(self, cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        AsyncWrite::poll_flush(self, cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        AsyncWrite::poll_close(self, cx)
     }
 }
