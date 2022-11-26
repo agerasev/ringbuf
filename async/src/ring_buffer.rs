@@ -155,10 +155,7 @@ impl<T, C: Container<T>> AsyncRb<T, SharedRb<T, C>> {
 }
 
 #[cfg(feature = "alloc")]
-pub type AsyncHeapRb<T> = AsyncRb<T, HeapRb<T>>;
-
-#[cfg(feature = "alloc")]
-impl<T> AsyncHeapRb<T> {
+impl<T> AsyncRb<T, HeapRb<T>> {
     pub fn new(capacity: usize) -> Self {
         Self::from_base(HeapRb::new(capacity))
     }

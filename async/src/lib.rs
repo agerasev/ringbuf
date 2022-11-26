@@ -9,12 +9,14 @@ pub mod consumer;
 pub mod producer;
 pub mod ring_buffer;
 
+#[cfg(feature = "alloc")]
+mod alias;
 mod transfer;
 
+#[cfg(feature = "alloc")]
+pub use alias::{AsyncHeapConsumer, AsyncHeapProducer, AsyncHeapRb};
 pub use consumer::AsyncConsumer;
 pub use producer::AsyncProducer;
-#[cfg(feature = "alloc")]
-pub use ring_buffer::AsyncHeapRb;
 pub use ring_buffer::AsyncRb;
 pub use transfer::async_transfer;
 
