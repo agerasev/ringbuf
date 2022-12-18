@@ -1,4 +1,4 @@
-use super::{Container, Rb, RbBase, RbRead, RbWrite, SharedStorage};
+use super::{Container, Rb, RbBase, RbRead, RbWrite, Storage};
 use crate::{consumer::Consumer, producer::Producer};
 use core::{
     cell::Cell,
@@ -36,7 +36,7 @@ thread::spawn(move || {
 "##
 )]
 pub struct LocalRb<T, C: Container<T>> {
-    storage: SharedStorage<T, C>,
+    storage: Storage<T, C>,
     head: Cell<usize>,
     tail: Cell<usize>,
 }
@@ -94,7 +94,7 @@ impl<T, C: Container<T>> LocalRb<T, C> {
     /// `head` and `tail` values must be valid (see [`RbBase`](`crate::ring_buffer::RbBase`)).
     pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
         Self {
-            storage: SharedStorage::new(container),
+            storage: Storage::new(container),
             head: Cell::new(head),
             tail: Cell::new(tail),
         }

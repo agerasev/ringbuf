@@ -1,4 +1,4 @@
-use super::{Container, Rb, RbBase, RbRead, RbWrite, SharedStorage};
+use super::{Container, Rb, RbBase, RbRead, RbWrite, Storage};
 use crate::{consumer::Consumer, producer::Producer};
 use core::{
     mem::{ManuallyDrop, MaybeUninit},
@@ -34,13 +34,13 @@ thread::spawn(move || {
 ```
 "##
 )]
-pub struct SharedRb<T, C: Container<T>> {
-    storage: SharedStorage<T, C>,
+pub struct SharedRb<T: Send, C: Container<T>> {
+    storage: Storage<T, C>,
     head: CachePadded<AtomicUsize>,
     tail: CachePadded<AtomicUsize>,
 }
 
-impl<T, C: Container<T>> RbBase<T> for SharedRb<T, C> {
+impl<T: Send, C: Container<T>> RbBase<T> for SharedRb<T, C> {
     #[inline]
     unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
         self.storage.as_slice()
@@ -62,29 +62,29 @@ impl<T, C: Container<T>> RbBase<T> for SharedRb<T, C> {
     }
 }
 
-impl<T, C: Container<T>> RbRead<T> for SharedRb<T, C> {
+impl<T: Send, C: Container<T>> RbRead<T> for SharedRb<T, C> {
     #[inline]
     unsafe fn set_head(&self, value: usize) {
         self.head.store(value, Ordering::Release)
     }
 }
 
-impl<T, C: Container<T>> RbWrite<T> for SharedRb<T, C> {
+impl<T: Send, C: Container<T>> RbWrite<T> for SharedRb<T, C> {
     #[inline]
     unsafe fn set_tail(&self, value: usize) {
         self.tail.store(value, Ordering::Release)
     }
 }
 
-impl<T, C: Container<T>> Rb<T> for SharedRb<T, C> {}
+impl<T: Send, C: Container<T>> Rb<T> for SharedRb<T, C> {}
 
-impl<T, C: Container<T>> Drop for SharedRb<T, C> {
+impl<T: Send, C: Container<T>> Drop for SharedRb<T, C> {
     fn drop(&mut self) {
         unsafe { self.skip(None) };
     }
 }
 
-impl<T, C: Container<T>> SharedRb<T, C> {
+impl<T: Send, C: Container<T>> SharedRb<T, C> {
     /// Constructs ring buffer from container and counters.
     ///
     /// # Safety
@@ -93,7 +93,7 @@ impl<T, C: Container<T>> SharedRb<T, C> {
     /// `head` and `tail` values must be valid (see [`RbBase`](`crate::ring_buffer::RbBase`)).
     pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
         Self {
-            storage: SharedStorage::new(container),
+            storage: Storage::new(container),
             head: CachePadded::new(AtomicUsize::new(head)),
             tail: CachePadded::new(AtomicUsize::new(tail)),
         }

@@ -2,7 +2,7 @@ use crate::{ring_buffer::RbBase as _, HeapRb};
 #[cfg(feature = "std")]
 use std::thread;
 
-fn head_tail<T>(ring_buffer: &HeapRb<T>) -> (usize, usize) {
+fn head_tail<T: Send>(ring_buffer: &HeapRb<T>) -> (usize, usize) {
     (ring_buffer.head(), ring_buffer.tail())
 }
 

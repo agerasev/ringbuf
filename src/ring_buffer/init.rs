@@ -10,7 +10,7 @@ impl<T, const N: usize> Default for LocalRb<T, [MaybeUninit<T>; N]> {
         unsafe { Self::from_raw_parts(uninit_array(), 0, 0) }
     }
 }
-impl<T, const N: usize> Default for SharedRb<T, [MaybeUninit<T>; N]> {
+impl<T: Send, const N: usize> Default for SharedRb<T, [MaybeUninit<T>; N]> {
     fn default() -> Self {
         unsafe { Self::from_raw_parts(uninit_array(), 0, 0) }
     }
@@ -28,7 +28,7 @@ impl<T> LocalRb<T, Vec<MaybeUninit<T>>> {
     }
 }
 #[cfg(feature = "alloc")]
-impl<T> SharedRb<T, Vec<MaybeUninit<T>>> {
+impl<T: Send> SharedRb<T, Vec<MaybeUninit<T>>> {
     /// Creates a new instance of a ring buffer.
     ///
     /// *Panics if `capacity` is zero.*

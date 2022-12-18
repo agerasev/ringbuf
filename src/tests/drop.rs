@@ -1,5 +1,5 @@
-use crate::{Consumer, HeapRb};
-use alloc::collections::BTreeSet;
+use crate::{Consumer, LocalRb};
+use alloc::{collections::BTreeSet, vec::Vec};
 use core::cell::RefCell;
 
 #[derive(Debug)]
@@ -30,7 +30,7 @@ fn single() {
     let set = RefCell::new(BTreeSet::new());
 
     let cap = 3;
-    let buf = HeapRb::new(cap);
+    let buf = LocalRb::<_, Vec<_>>::new(cap);
 
     assert_eq!(set.borrow().len(), 0);
 
@@ -62,7 +62,7 @@ fn transaction() {
     let set = RefCell::new(BTreeSet::new());
 
     let cap = 5;
-    let buf = HeapRb::new(cap);
+    let buf = LocalRb::<_, Vec<_>>::new(cap);
 
     assert_eq!(set.borrow().len(), 0);
     {

@@ -1,5 +1,5 @@
 use crate::HeapRb;
-use alloc::rc::Rc;
+use alloc::sync::Arc;
 
 #[test]
 fn skip() {
@@ -49,11 +49,11 @@ fn skip() {
 
 #[test]
 fn skip_drop() {
-    let rc = Rc::<()>::new(());
+    let rc = Arc::<()>::new(());
 
     static N: usize = 10;
 
-    let rb = HeapRb::<Rc<()>>::new(N);
+    let rb = HeapRb::<Arc<()>>::new(N);
     let (mut prod, mut cons) = rb.split();
 
     for _ in 0..N {
@@ -61,12 +61,12 @@ fn skip_drop() {
     }
 
     assert_eq!(cons.len(), N);
-    assert_eq!(Rc::strong_count(&rc), N + 1);
+    assert_eq!(Arc::strong_count(&rc), N + 1);
 
     assert_eq!(cons.skip(N), N);
 
     // Check ring buffer is empty
     assert_eq!(cons.len(), 0);
     // Check that items are dropped
-    assert_eq!(Rc::strong_count(&rc), 1);
+    assert_eq!(Arc::strong_count(&rc), 1);
 }

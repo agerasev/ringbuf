@@ -70,15 +70,15 @@ unsafe impl<T> Container<T> for Vec<MaybeUninit<T>> {
     }
 }
 
-/// Wrapper for container that provides multiple write access to it.
-pub(crate) struct SharedStorage<T, C: Container<T>> {
+/// Wrapper for container that unsafely shares write access to it.
+pub(crate) struct Storage<T, C: Container<T>> {
     container: UnsafeCell<C>,
     _phantom: PhantomData<T>,
 }
 
-unsafe impl<T, C: Container<T>> Sync for SharedStorage<T, C> where T: Send {}
+unsafe impl<T, C: Container<T>> Sync for Storage<T, C> where T: Send {}
 
-impl<T, C: Container<T>> SharedStorage<T, C> {
+impl<T, C: Container<T>> Storage<T, C> {
     /// Create new storage.
     ///
     /// *Panics if container is empty.*
