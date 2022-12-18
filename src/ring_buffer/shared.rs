@@ -13,8 +13,10 @@ use alloc::sync::Arc;
 
 /// Ring buffer that could be shared between threads.
 ///
-/// Implements [`Sync`]. And its [`Producer`] and [`Consumer`] implement [`Send`].
+/// Implements [`Sync`] *if `T` implements [`Send`]*. And therefore its [`Producer`] and [`Consumer`] implement [`Send`].
 ///
+/// Note that there is no explicit requirement of `T: Send`. Instead [`SharedRb`] will work just fine even with `T: !Send`
+/// until you try to send its [`Producer`] or [`Consumer`] to another thread.
 #[cfg_attr(
     feature = "std",
     doc = r##"

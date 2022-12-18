@@ -185,7 +185,7 @@ where
 
     /// Returns an iterator that removes items one by one from the ring buffer.
     ///
-    /// *Iterator provides only items that are available for consumer at the moment of `pop_iter` call, it will not contain new items added after it was created.*
+    /// Iterator provides only items that are available for consumer at the moment of `pop_iter` call, it will not contain new items added after it was created.
     ///
     /// *Information about removed items is commited to the buffer only when iterator is destroyed.*
     pub fn pop_iter(&mut self) -> PopIterator<'_, T, R> {

@@ -236,6 +236,10 @@ pub trait RbWrite<T>: RbBase<T> {
 }
 
 /// An abstract ring buffer.
+///
+/// This trait is just a combination of [`RbBase`], [`RbRead`] and [`RbWrite`].
+///
+/// See [`RbBase`] for details of internal implementation of the ring buffer.
 pub trait Rb<T>: RbRead<T> + RbWrite<T> {}
 
 /// An abstract reference to the ring buffer.
