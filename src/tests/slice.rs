@@ -1,4 +1,4 @@
-use crate::{transfer, HeapRb};
+use crate::{transfer, HeapRb, Rb};
 
 #[test]
 fn push_pop_slice() {
@@ -93,4 +93,20 @@ fn move_slice_count() {
 
     assert_eq!(cons1.pop_slice(&mut tmp), 4);
     assert_eq!(tmp[0..4], [6, 7, 8, 9]);
+}
+
+#[test]
+#[should_panic]
+fn push_slice_panic() {
+    let mut rb = HeapRb::<i32>::new(2);
+    rb.push_slice(&[1, 2, 3]);
+}
+
+#[test]
+#[should_panic]
+fn pop_slice_panic() {
+    let mut rb = HeapRb::<i32>::new(2);
+    rb.push(1).unwrap();
+    let mut tmp = [0; 2];
+    rb.pop_slice(&mut tmp);
 }

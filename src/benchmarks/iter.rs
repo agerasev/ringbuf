@@ -1,4 +1,4 @@
-use crate::ring_buffer::HeapRb;
+use crate::HeapRb;
 
 use test::{black_box, Bencher};
 

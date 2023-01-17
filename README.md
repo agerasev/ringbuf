@@ -24,6 +24,7 @@ Lock-free SPSC FIFO ring buffer with direct access to inner data.
 + Items can be inserted and removed one by one or many at once.
 + Thread-safe direct access to the internal ring buffer memory.
 + `Read` and `Write` implementation.
++ Overwriting mode support.
 + Can be used without `std` and even without `alloc` (using only statically-allocated memory).
 + [Experimental `async`/`.await` support](https://github.com/agerasev/async-ringbuf).
 
@@ -104,6 +105,29 @@ assert_eq!(cons.pop(), Some(123));
 assert_eq!(cons.pop(), None);
 # }
 ```
+
+## Overwrite
+
+Ring buffer can be used in overwriting mode when insertion overwrites the latest element if the buffer is full.
+
+```rust
+use ringbuf::{HeapRb, Rb};
+
+# fn main() {
+let mut rb = HeapRb::<i32>::new(2);
+
+assert_eq!(rb.push_overwrite(0), None);
+assert_eq!(rb.push_overwrite(1), None);
+assert_eq!(rb.push_overwrite(2), Some(0));
+
+assert_eq!(rb.pop(), Some(1));
+assert_eq!(rb.pop(), Some(2));
+assert_eq!(rb.pop(), None);
+# }
+```
+
+Note that [`push_overwrite`](`Rb::push_overwrite`) requires exclusive access to the ring buffer
+so to perform it concurrently you need to guard the ring buffer with [`Mutex`](`std::sync::Mutex`) or some other lock.
 
 ## `async`/`.await`
 

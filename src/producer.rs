@@ -71,7 +71,7 @@ where
     /// The capacity of the buffer is constant.
     #[inline]
     pub fn capacity(&self) -> usize {
-        self.target.capacity().get()
+        self.target.__capacity().get()
     }
 
     /// Checks if the ring buffer is empty.
@@ -176,7 +176,7 @@ where
     R::Rb: RbWrite<T>,
 {
     /// Appends items from slice to the ring buffer.
-    /// Elements should be `Copy`.
+    /// Elements must be [`Copy`].
     ///
     /// Returns count of items been appended to the ring buffer.
     pub fn push_slice(&mut self, elems: &[T]) -> usize {

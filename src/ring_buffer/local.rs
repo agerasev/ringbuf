@@ -48,7 +48,7 @@ impl<T, C: Container<T>> RbBase<T> for LocalRb<T, C> {
     }
 
     #[inline]
-    fn capacity(&self) -> NonZeroUsize {
+    fn __capacity(&self) -> NonZeroUsize {
         self.storage.len()
     }
 
@@ -81,7 +81,7 @@ impl<T, C: Container<T>> Rb<T> for LocalRb<T, C> {}
 
 impl<T, C: Container<T>> Drop for LocalRb<T, C> {
     fn drop(&mut self) {
-        unsafe { self.skip(None) };
+        self.clear();
     }
 }
 

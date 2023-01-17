@@ -49,7 +49,7 @@ impl<T, C: Container<T>> RbBase<T> for SharedRb<T, C> {
     }
 
     #[inline]
-    fn capacity(&self) -> NonZeroUsize {
+    fn __capacity(&self) -> NonZeroUsize {
         self.storage.len()
     }
 
@@ -82,7 +82,7 @@ impl<T, C: Container<T>> Rb<T> for SharedRb<T, C> {}
 
 impl<T, C: Container<T>> Drop for SharedRb<T, C> {
     fn drop(&mut self) {
-        unsafe { self.skip(None) };
+        self.clear();
     }
 }
 

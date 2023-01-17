@@ -1,16 +1,20 @@
-use crate::{ring_buffer::RbBase as _, HeapRb};
+use crate::HeapRb;
 #[cfg(feature = "std")]
 use std::thread;
 
 fn head_tail<T>(ring_buffer: &HeapRb<T>) -> (usize, usize) {
+    use crate::ring_buffer::RbBase;
+
     (ring_buffer.head(), ring_buffer.tail())
 }
 
 #[test]
 fn capacity() {
+    use crate::Rb;
+
     let cap = 13;
     let buf = HeapRb::<i32>::new(cap);
-    assert_eq!(buf.capacity().get(), cap);
+    assert_eq!(buf.capacity(), cap);
 }
 #[test]
 fn split_capacity() {

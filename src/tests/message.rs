@@ -1,7 +1,8 @@
-use crate::HeapRb;
+use crate::{HeapRb, Rb};
 use alloc::{string::String, vec::Vec};
 use std::{
     io::{self, Read, Write},
+    sync::{Arc, Mutex},
     thread,
     time::Duration,
 };
@@ -152,6 +153,49 @@ fn read_write() {
                         thread::sleep(Duration::from_millis(1));
                     }
                 }
+            }
+        }
+
+        assert_eq!(bytes.pop().unwrap(), 0);
+        String::from_utf8(bytes).unwrap()
+    });
+
+    pjh.join().unwrap();
+    let rmsg = cjh.join().unwrap();
+
+    assert_eq!(smsg, rmsg);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn blocking() {
+    let buf = Arc::new(Mutex::new(HeapRb::<u8>::new(7)));
+    let (prod, cons) = (buf.clone(), buf);
+
+    let smsg = THE_BOOK_FOREWORD;
+
+    let pjh = thread::spawn(move || {
+        let mut bytes = smsg.as_bytes().iter().copied();
+        while bytes.len() > 0 {
+            prod.lock().unwrap().push_iter(&mut bytes);
+            thread::sleep(Duration::from_millis(1))
+        }
+        loop {
+            match prod.lock().unwrap().push(0) {
+                Ok(()) => break,
+                Err(_) => thread::sleep(Duration::from_millis(1)),
+            }
+        }
+    });
+
+    let cjh = thread::spawn(move || {
+        let mut bytes = Vec::<u8>::new();
+        loop {
+            bytes.extend(cons.lock().unwrap().pop_iter());
+            if bytes.ends_with(&[0]) {
+                break;
+            } else {
+                thread::sleep(Duration::from_millis(1));
             }
         }
 

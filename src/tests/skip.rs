@@ -1,4 +1,4 @@
-use crate::HeapRb;
+use crate::{HeapRb, Rb};
 use alloc::rc::Rc;
 
 #[test]
@@ -69,4 +69,12 @@ fn skip_drop() {
     assert_eq!(cons.len(), 0);
     // Check that items are dropped
     assert_eq!(Rc::strong_count(&rc), 1);
+}
+
+#[test]
+#[should_panic]
+fn skip_panic() {
+    let mut rb = HeapRb::<i32>::new(2);
+    rb.push(1).unwrap();
+    rb.skip(2);
 }

@@ -73,7 +73,7 @@ where
     /// The capacity of the buffer is constant.
     #[inline]
     pub fn capacity(&self) -> usize {
-        self.target.capacity().get()
+        self.target.__capacity().get()
     }
 
     /// Checks if the ring buffer is empty.
@@ -235,7 +235,7 @@ assert_eq!(cons.skip(8), 0);
     )]
     pub fn skip(&mut self, count: usize) -> usize {
         let count = cmp::min(count, self.len());
-        assert_eq!(unsafe { self.target.skip(Some(count)) }, count);
+        assert_eq!(unsafe { self.target.__skip(Some(count)) }, count);
         count
     }
 
@@ -243,26 +243,25 @@ assert_eq!(cons.skip(8), 0);
     ///
     /// Returns the number of deleted items.
     pub fn clear(&mut self) -> usize {
-        unsafe { self.target.skip(None) }
+        unsafe { self.target.__skip(None) }
     }
 }
 
 /// An iterator that removes items from the ring buffer.
-pub struct PopIterator<'a, T, R: RbRef>
+pub struct PopIterator<'a, T, R: RbRef + ?Sized>
 where
     R::Rb: RbRead<T>,
 {
     target: &'a R,
     iter: Chain<slice::Iter<'a, MaybeUninit<T>>, slice::Iter<'a, MaybeUninit<T>>>,
-
     len: usize,
 }
 
-impl<'a, T, R: RbRef> PopIterator<'a, T, R>
+impl<'a, T, R: RbRef + ?Sized> PopIterator<'a, T, R>
 where
     R::Rb: RbRead<T>,
 {
-    fn new(target: &'a R) -> Self {
+    pub(crate) fn new(target: &'a R) -> Self {
         let slices = unsafe { target.occupied_slices() };
         Self {
             target,
@@ -272,7 +271,7 @@ where
     }
 }
 
-impl<'a, T, R: RbRef> Iterator for PopIterator<'a, T, R>
+impl<'a, T, R: RbRef + ?Sized> Iterator for PopIterator<'a, T, R>
 where
     R::Rb: RbRead<T>,
 {
@@ -287,9 +286,9 @@ where
     }
 }
 
-impl<'a, T, R: RbRef> ExactSizeIterator for PopIterator<'a, T, R> where R::Rb: RbRead<T> {}
+impl<'a, T, R: RbRef + ?Sized> ExactSizeIterator for PopIterator<'a, T, R> where R::Rb: RbRead<T> {}
 
-impl<'a, T, R: RbRef> Drop for PopIterator<'a, T, R>
+impl<'a, T, R: RbRef + ?Sized> Drop for PopIterator<'a, T, R>
 where
     R::Rb: RbRead<T>,
 {
@@ -305,7 +304,7 @@ where
     /// Removes first items from the ring buffer and writes them into a slice.
     /// Elements must be [`Copy`].
     ///
-    /// On success returns count of items been removed from the ring buffer.
+    /// Returns count of items been removed from the ring buffer.
     pub fn pop_slice(&mut self, elems: &mut [T]) -> usize {
         let (left, right) = unsafe { self.as_uninit_slices() };
         let count = if elems.len() < left.len() {

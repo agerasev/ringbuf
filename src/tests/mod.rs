@@ -7,6 +7,8 @@ mod drop;
 #[cfg(feature = "alloc")]
 mod iter;
 #[cfg(feature = "alloc")]
+mod overwrite;
+#[cfg(feature = "alloc")]
 mod skip;
 #[cfg(feature = "alloc")]
 mod slice;

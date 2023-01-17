@@ -1,6 +1,6 @@
 [package]
 name = "ringbuf"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["Alexey Gerasev <alexey.gerasev@gmail.com>"]
 edition = "2021"
 
@@ -24,6 +24,10 @@ crossbeam-utils = { version = "0.8", default-features = false }
 
 [[example]]
 name = "simple"
+required-features = ["alloc"]
+
+[[example]]
+name = "overwrite"
 required-features = ["alloc"]
 
 [[example]]

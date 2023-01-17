@@ -18,6 +18,8 @@
 //! [`Producer`] is used to insert items to the ring buffer, [`Consumer`] - to remove items from it.
 //! For [`SharedRb`] and its derivatives they can be used in different threads.
 //!
+//! Also you can use the ring buffer without splitting at all via methods provided by [`Rb`] trait.
+//!
 //! # Types
 //!
 //! There are several types of ring buffers provided:
@@ -93,6 +95,33 @@ assert_eq!(cons.pop(), None);
 # }
 ```
 "##]
+#![cfg_attr(
+    feature = "std",
+    doc = r##"
+## Overwrite
+
+Ring buffer can be used in overwriting mode when insertion overwrites the latest element if the buffer is full.
+
+```rust
+use ringbuf::{HeapRb, Rb};
+
+# fn main() {
+let mut rb = HeapRb::<i32>::new(2);
+
+assert_eq!(rb.push_overwrite(0), None);
+assert_eq!(rb.push_overwrite(1), None);
+assert_eq!(rb.push_overwrite(2), Some(0));
+
+assert_eq!(rb.pop(), Some(1));
+assert_eq!(rb.pop(), Some(2));
+assert_eq!(rb.pop(), None);
+# }
+```
+
+Note that [`push_overwrite`](`Rb::push_overwrite`) requires exclusive access to the ring buffer
+so to perform it concurrently you need to guard the ring buffer with [`Mutex`](`std::sync::Mutex`) or some other lock.
+"##
+)]
 //! ## `async`/`.await`
 //!
 //! There is an experimental crate [`async-ringbuf`](https://github.com/agerasev/async-ringbuf)
@@ -122,7 +151,7 @@ pub use alias::{HeapConsumer, HeapProducer, HeapRb};
 pub use alias::{StaticConsumer, StaticProducer, StaticRb};
 pub use consumer::Consumer;
 pub use producer::Producer;
-pub use ring_buffer::{LocalRb, SharedRb};
+pub use ring_buffer::{LocalRb, Rb, SharedRb};
 pub use transfer::transfer;
 
 #[cfg(test)]
