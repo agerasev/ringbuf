@@ -43,8 +43,8 @@ where
     }
 
     #[inline]
-    fn __capacity(&self) -> NonZeroUsize {
-        self.target.__capacity()
+    fn capacity_nonzero(&self) -> NonZeroUsize {
+        self.target.capacity_nonzero()
     }
 
     #[inline]
@@ -68,8 +68,8 @@ where
     }
 
     #[inline]
-    fn __capacity(&self) -> NonZeroUsize {
-        self.target.__capacity()
+    fn capacity_nonzero(&self) -> NonZeroUsize {
+        self.target.capacity_nonzero()
     }
 
     #[inline]

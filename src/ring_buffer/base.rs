@@ -31,7 +31,7 @@ pub trait RbBase<T> {
     /// Capacity of the ring buffer.
     ///
     /// It is constant during the whole ring buffer lifetime.
-    fn __capacity(&self) -> NonZeroUsize;
+    fn capacity_nonzero(&self) -> NonZeroUsize;
 
     /// Head position.
     fn head(&self) -> usize;
@@ -43,20 +43,20 @@ pub trait RbBase<T> {
     ///
     /// Equals to `2 * len`.
     #[inline]
-    fn __modulus(&self) -> NonZeroUsize {
-        unsafe { NonZeroUsize::new_unchecked(2 * self.__capacity().get()) }
+    fn modulus(&self) -> NonZeroUsize {
+        unsafe { NonZeroUsize::new_unchecked(2 * self.capacity_nonzero().get()) }
     }
 
     /// The number of items stored in the buffer at the moment.
     fn occupied_len(&self) -> usize {
-        let modulus = self.__modulus();
+        let modulus = self.modulus();
         (modulus.get() + self.tail() - self.head()) % modulus
     }
 
     /// The number of vacant places in the buffer at the moment.
     fn vacant_len(&self) -> usize {
-        let modulus = self.__modulus();
-        (self.__capacity().get() + self.head() - self.tail()) % modulus
+        let modulus = self.modulus();
+        (self.capacity_nonzero().get() + self.head() - self.tail()) % modulus
     }
 
     /// Checks if the occupied range is empty.
@@ -94,14 +94,14 @@ pub trait RbRead<T>: RbBase<T> {
     /// *In debug mode panics if `count` is greater than number of items in the ring buffer.*
     unsafe fn advance_head(&self, count: usize) {
         debug_assert!(count <= self.occupied_len());
-        self.set_head((self.head() + count) % self.__modulus());
+        self.set_head((self.head() + count) % self.modulus());
     }
 
     /// Returns a pair of ranges of [`Self::occupied_slices`] location in underlying container.
     fn occupied_ranges(&self) -> (Range<usize>, Range<usize>) {
         let head = self.head();
         let tail = self.tail();
-        let len = self.__capacity();
+        let len = self.capacity_nonzero();
 
         let (head_div, head_mod) = (head / len, head % len);
         let (tail_div, tail_mod) = (tail / len, tail % len);
@@ -146,7 +146,7 @@ pub trait RbRead<T>: RbBase<T> {
     /// # Safety
     ///
     /// Must not be called concurrently.
-    unsafe fn __skip(&self, count_or_all: Option<usize>) -> usize {
+    unsafe fn skip_internal(&self, count_or_all: Option<usize>) -> usize {
         let (left, right) = self.occupied_slices();
         let count = match count_or_all {
             Some(count) => {
@@ -187,14 +187,14 @@ pub trait RbWrite<T>: RbBase<T> {
     /// *In debug mode panics if `count` is greater than number of vacant places in the ring buffer.*
     unsafe fn advance_tail(&self, count: usize) {
         debug_assert!(count <= self.vacant_len());
-        self.set_tail((self.tail() + count) % self.__modulus());
+        self.set_tail((self.tail() + count) % self.modulus());
     }
 
     /// Returns a pair of ranges of [`Self::vacant_slices`] location in underlying container.
     fn vacant_ranges(&self) -> (Range<usize>, Range<usize>) {
         let head = self.head();
         let tail = self.tail();
-        let len = self.__capacity();
+        let len = self.capacity_nonzero();
 
         let (head_div, head_mod) = (head / len, head % len);
         let (tail_div, tail_mod) = (tail / len, tail % len);

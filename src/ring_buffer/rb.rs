@@ -28,7 +28,7 @@ pub trait Rb<T>: RbRead<T> + RbWrite<T> {
     /// The capacity of the buffer is constant.
     #[inline]
     fn capacity(&self) -> usize {
-        <Self as RbBase<T>>::__capacity(self).get()
+        <Self as RbBase<T>>::capacity_nonzero(self).get()
     }
 
     /// The number of items stored in the ring buffer.
@@ -94,7 +94,7 @@ pub trait Rb<T>: RbRead<T> + RbWrite<T> {
     /// *Panics if `n` is greater than number of items in the ring buffer.*
     fn skip(&mut self, count: usize) -> usize {
         assert!(count <= self.len());
-        unsafe { self.__skip(Some(count)) };
+        unsafe { self.skip_internal(Some(count)) };
         count
     }
 
@@ -103,7 +103,7 @@ pub trait Rb<T>: RbRead<T> + RbWrite<T> {
     /// Returns the number of deleted items.
     #[inline]
     fn clear(&mut self) -> usize {
-        unsafe { self.__skip(None) }
+        unsafe { self.skip_internal(None) }
     }
 
     /// Appends an item to the ring buffer.

@@ -48,7 +48,7 @@ impl<T, C: Container<T>> RbBase<T> for LocalRb<T, C> {
     }
 
     #[inline]
-    fn __capacity(&self) -> NonZeroUsize {
+    fn capacity_nonzero(&self) -> NonZeroUsize {
         self.storage.len()
     }
 

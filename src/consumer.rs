@@ -73,7 +73,7 @@ where
     /// The capacity of the buffer is constant.
     #[inline]
     pub fn capacity(&self) -> usize {
-        self.target.__capacity().get()
+        self.target.capacity_nonzero().get()
     }
 
     /// Checks if the ring buffer is empty.
@@ -235,7 +235,7 @@ assert_eq!(cons.skip(8), 0);
     )]
     pub fn skip(&mut self, count: usize) -> usize {
         let count = cmp::min(count, self.len());
-        assert_eq!(unsafe { self.target.__skip(Some(count)) }, count);
+        assert_eq!(unsafe { self.target.skip_internal(Some(count)) }, count);
         count
     }
 
@@ -243,7 +243,7 @@ assert_eq!(cons.skip(8), 0);
     ///
     /// Returns the number of deleted items.
     pub fn clear(&mut self) -> usize {
-        unsafe { self.target.__skip(None) }
+        unsafe { self.target.skip_internal(None) }
     }
 }
 
