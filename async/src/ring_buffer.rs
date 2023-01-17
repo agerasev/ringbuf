@@ -51,8 +51,8 @@ impl<T, B: Rb<T>> RbBase<T> for AsyncRb<T, B> {
         self.base.data()
     }
 
-    fn capacity(&self) -> NonZeroUsize {
-        self.base.capacity()
+    fn capacity_nonzero(&self) -> NonZeroUsize {
+        self.base.capacity_nonzero()
     }
 
     fn head(&self) -> usize {
