@@ -277,3 +277,17 @@ where
         Ok(())
     }
 }
+
+impl<R: RbRef> core::fmt::Write for Producer<u8, R>
+where
+    R::Rb: RbWrite<u8>,
+{
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        let n = self.push_slice(s.as_bytes());
+        if n != s.len() {
+            Err(core::fmt::Error::default())
+        } else {
+            Ok(())
+        }
+    }
+}
