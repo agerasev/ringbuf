@@ -1,4 +1,4 @@
-use super::{Container, Rb, RbBase, RbRead, RbWrite, SharedStorage};
+use super::{Container, ContainerFamily, Rb, RbBase, RbRead, RbWrite, SharedStorage};
 use crate::{consumer::Consumer, producer::Producer};
 use core::{
     cell::Cell,
@@ -35,13 +35,13 @@ thread::spawn(move || {
 ```
 "##
 )]
-pub struct LocalRb<T, C: Container<T>> {
+pub struct LocalRb<T, C: ContainerFamily> {
     storage: SharedStorage<T, C>,
     head: Cell<usize>,
     tail: Cell<usize>,
 }
 
-impl<T, C: Container<T>> RbBase<T> for LocalRb<T, C> {
+impl<T, C: ContainerFamily> RbBase<T> for LocalRb<T, C> {
     #[inline]
     unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
         self.storage.as_slice()
@@ -63,36 +63,36 @@ impl<T, C: Container<T>> RbBase<T> for LocalRb<T, C> {
     }
 }
 
-impl<T, C: Container<T>> RbRead<T> for LocalRb<T, C> {
+impl<T, C: ContainerFamily> RbRead<T> for LocalRb<T, C> {
     #[inline]
     unsafe fn set_head(&self, value: usize) {
         self.head.set(value);
     }
 }
 
-impl<T, C: Container<T>> RbWrite<T> for LocalRb<T, C> {
+impl<T, C: ContainerFamily> RbWrite<T> for LocalRb<T, C> {
     #[inline]
     unsafe fn set_tail(&self, value: usize) {
         self.tail.set(value);
     }
 }
 
-impl<T, C: Container<T>> Rb<T> for LocalRb<T, C> {}
+impl<T, C: ContainerFamily> Rb<T> for LocalRb<T, C> {}
 
-impl<T, C: Container<T>> Drop for LocalRb<T, C> {
+impl<T, C: ContainerFamily> Drop for LocalRb<T, C> {
     fn drop(&mut self) {
         self.clear();
     }
 }
 
-impl<T, C: Container<T>> LocalRb<T, C> {
+impl<T, C: ContainerFamily> LocalRb<T, C> {
     /// Constructs ring buffer from container and counters.
     ///
     /// # Safety
     ///
     /// The items in container inside `head..tail` range must be initialized, items outside this range must be uninitialized.
     /// `head` and `tail` values must be valid (see [`RbBase`](`crate::ring_buffer::RbBase`)).
-    pub unsafe fn from_raw_parts(container: C, head: usize, tail: usize) -> Self {
+    pub unsafe fn from_raw_parts(container: C::Container<T>, head: usize, tail: usize) -> Self {
         Self {
             storage: SharedStorage::new(container),
             head: Cell::new(head),
@@ -105,7 +105,7 @@ impl<T, C: Container<T>> LocalRb<T, C> {
     /// # Safety
     ///
     /// Initialized contents of the container must be properly dropped.
-    pub unsafe fn into_raw_parts(self) -> (C, usize, usize) {
+    pub unsafe fn into_raw_parts(self) -> (C::Container<T>, usize, usize) {
         let (head, tail) = (self.head(), self.tail());
         let self_ = ManuallyDrop::new(self);
         (ptr::read(&self_.storage).into_inner(), head, tail)

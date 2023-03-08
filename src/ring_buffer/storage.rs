@@ -5,6 +5,10 @@ use core::{
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
+pub trait ContainerFamily {
+    type Container<T>: Container<T>;
+}
+
 /// Abstract container for the ring buffer.
 ///
 /// Container items must be stored as a contiguous array.
@@ -45,6 +49,12 @@ unsafe impl<'a, T> Container<T> for &'a mut [MaybeUninit<T>] {
         self
     }
 }
+pub struct SliceFamily<'a> {
+    _unused: PhantomData<&'a ()>,
+}
+impl<'a> ContainerFamily for SliceFamily<'a> {
+    type Container<T> = &'a mut [MaybeUninit<T>];
+}
 
 unsafe impl<T, const N: usize> Container<T> for [MaybeUninit<T>; N] {
     #[inline]
@@ -57,6 +67,11 @@ unsafe impl<T, const N: usize> Container<T> for [MaybeUninit<T>; N] {
         self.as_mut()
     }
 }
+pub enum ArrayFamily<const N: usize> {}
+impl<const N: usize> ContainerFamily for ArrayFamily<N> {
+    type Container<T> = [MaybeUninit<T>; N];
+}
+
 #[cfg(feature = "alloc")]
 unsafe impl<T> Container<T> for Vec<MaybeUninit<T>> {
     #[inline]
@@ -69,20 +84,26 @@ unsafe impl<T> Container<T> for Vec<MaybeUninit<T>> {
         self.as_mut()
     }
 }
+#[cfg(feature = "alloc")]
+pub enum VecFamily {}
+#[cfg(feature = "alloc")]
+impl ContainerFamily for VecFamily {
+    type Container<T> = Vec<MaybeUninit<T>>;
+}
 
 /// Wrapper for container that provides multiple write access to it.
-pub(crate) struct SharedStorage<T, C: Container<T>> {
-    container: UnsafeCell<C>,
+pub(crate) struct SharedStorage<T, C: ContainerFamily> {
+    container: UnsafeCell<C::Container<T>>,
     _phantom: PhantomData<T>,
 }
 
-unsafe impl<T, C: Container<T>> Sync for SharedStorage<T, C> where T: Send {}
+unsafe impl<T, C: ContainerFamily> Sync for SharedStorage<T, C> where T: Send {}
 
-impl<T, C: Container<T>> SharedStorage<T, C> {
+impl<T, C: ContainerFamily> SharedStorage<T, C> {
     /// Create new storage.
     ///
     /// *Panics if container is empty.*
-    pub fn new(container: C) -> Self {
+    pub fn new(container: C::Container<T>) -> Self {
         assert!(!container.is_empty());
         Self {
             container: UnsafeCell::new(container),

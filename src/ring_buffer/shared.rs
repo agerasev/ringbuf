@@ -1,4 +1,4 @@
-use super::{Container, Rb, RbBase, RbRead, RbWrite, SharedStorage};
+use super::{Container, ContainerFamily, Rb, RbBase, RbRead, RbWrite, SharedStorage};
 use crate::{consumer::Consumer, producer::Producer};
 use core::{
     mem::{ManuallyDrop, MaybeUninit},
@@ -36,13 +36,13 @@ thread::spawn(move || {
 ```
 "##
 )]
-pub struct SharedRb<T, C: Container<T>> {
+pub struct SharedRb<T, C: ContainerFamily> {
     storage: SharedStorage<T, C>,
     head: CachePadded<AtomicUsize>,
     tail: CachePadded<AtomicUsize>,
 }
 
-impl<T, C: Container<T>> RbBase<T> for SharedRb<T, C> {
+impl<T, C: ContainerFamily> RbBase<T> for SharedRb<T, C> {
     #[inline]
     unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
         self.storage.as_slice()
@@ -64,29 +64,29 @@ impl<T, C: Container<T>> RbBase<T> for SharedRb<T, C> {
     }
 }
 
-impl<T, C: Container<T>> RbRead<T> for SharedRb<T, C> {
+impl<T, C: ContainerFamily> RbRead<T> for SharedRb<T, C> {
     #[inline]
     unsafe fn set_head(&self, value: usize) {
         self.head.store(value, Ordering::Release)
     }
 }
 
-impl<T, C: Container<T>> RbWrite<T> for SharedRb<T, C> {
+impl<T, C: ContainerFamily> RbWrite<T> for SharedRb<T, C> {
     #[inline]
     unsafe fn set_tail(&self, value: usize) {
         self.tail.store(value, Ordering::Release)
     }
 }
 
-impl<T, C: Container<T>> Rb<T> for SharedRb<T, C> {}
+impl<T, C: ContainerFamily> Rb<T> for SharedRb<T, C> {}
 
-impl<T, C: Container<T>> Drop for SharedRb<T, C> {
+impl<T, C: ContainerFamily> Drop for SharedRb<T, C> {
     fn drop(&mut self) {
         self.clear();
     }
 }
 
-impl<T, C: Container<T>> SharedRb<T, C> {
+impl<T, C: ContainerFamily> SharedRb<T, C> {
     /// Constructs ring buffer from container and counters.
     ///
     /// # Safety
