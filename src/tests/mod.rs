@@ -17,3 +17,5 @@ mod slice;
 mod message;
 #[cfg(feature = "std")]
 mod read_write;
+
+mod fmt_write;
