@@ -44,8 +44,12 @@ pub struct SharedRb<T, C: Container<T>> {
 
 impl<T, C: Container<T>> RbBase<T> for SharedRb<T, C> {
     #[inline]
-    unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
-        self.storage.as_slice()
+    unsafe fn slices(
+        &self,
+        head: usize,
+        tail: usize,
+    ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+        self.storage.as_mut_slices(head, tail)
     }
 
     #[inline]

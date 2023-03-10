@@ -38,8 +38,12 @@ where
     R::Rb: RbRead<T>,
 {
     #[inline]
-    unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
-        self.target.data()
+    unsafe fn slices(
+        &self,
+        head: usize,
+        tail: usize,
+    ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+        self.target.slices(head, tail)
     }
 
     #[inline]
@@ -63,8 +67,12 @@ where
     R::Rb: RbWrite<T>,
 {
     #[inline]
-    unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
-        self.target.data()
+    unsafe fn slices(
+        &self,
+        head: usize,
+        tail: usize,
+    ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+        self.target.slices(head, tail)
     }
 
     #[inline]

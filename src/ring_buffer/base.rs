@@ -1,4 +1,5 @@
-use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Range, ptr, slice};
+use crate::utils::ring_buffer_ranges;
+use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Range, ptr};
 
 /// Basic ring buffer functionality.
 ///
@@ -17,16 +18,23 @@ use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Range, ptr, slice};
 /// without using the space for an extra element in container.
 /// And obviously we cannot store more than `capacity` items in the buffer, so `tail - head` modulo `2 * capacity` is not allowed to be greater than `capacity`.
 pub trait RbBase<T> {
-    /// Returns underlying raw ring buffer memory as slice.
+    /// Returns part of underlying raw ring buffer memory as slices.
+    ///
+    /// For more information see [`SharedStorage::as_mut_slices`](`crate::ring_buffer::storage::SharedStorage::as_mut_slices`).
     ///
     /// # Safety
+    ///
+    /// Only non-overlapping slices allowed to exist at the same time.
     ///
     /// Modifications of this data must properly update `head` and `tail` positions.
     ///
     /// *Accessing raw data is extremely unsafe.*
     /// It is recommended to use [`Consumer::as_slices`](`crate::Consumer::as_slices`) and [`Producer::free_space_as_slices`](`crate::Producer::free_space_as_slices`) instead.
-    #[allow(clippy::mut_from_ref)]
-    unsafe fn data(&self) -> &mut [MaybeUninit<T>];
+    unsafe fn slices(
+        &self,
+        head: usize,
+        tail: usize,
+    ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]);
 
     /// Capacity of the ring buffer.
     ///
@@ -98,19 +106,9 @@ pub trait RbRead<T>: RbBase<T> {
     }
 
     /// Returns a pair of ranges of [`Self::occupied_slices`] location in underlying container.
+    #[inline]
     fn occupied_ranges(&self) -> (Range<usize>, Range<usize>) {
-        let head = self.head();
-        let tail = self.tail();
-        let len = self.capacity_nonzero();
-
-        let (head_div, head_mod) = (head / len, head % len);
-        let (tail_div, tail_mod) = (tail / len, tail % len);
-
-        if head_div == tail_div {
-            (head_mod..tail_mod, 0..0)
-        } else {
-            (head_mod..len.get(), 0..tail_mod)
-        }
+        ring_buffer_ranges(self.capacity_nonzero(), self.head(), self.tail())
     }
 
     /// Provides a direct mutable access to the ring buffer occupied memory.
@@ -125,13 +123,9 @@ pub trait RbRead<T>: RbBase<T> {
     ///
     /// *This method must be followed by [`Self::advance_head`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
+    #[inline]
     unsafe fn occupied_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
-        let ranges = self.occupied_ranges();
-        let ptr = self.data().as_mut_ptr();
-        (
-            slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
-            slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
-        )
+        self.slices(self.head(), self.tail())
     }
 
     /// Removes items from the head of ring buffer and drops them.
@@ -191,19 +185,13 @@ pub trait RbWrite<T>: RbBase<T> {
     }
 
     /// Returns a pair of ranges of [`Self::vacant_slices`] location in underlying container.
+    #[inline]
     fn vacant_ranges(&self) -> (Range<usize>, Range<usize>) {
-        let head = self.head();
-        let tail = self.tail();
-        let len = self.capacity_nonzero();
-
-        let (head_div, head_mod) = (head / len, head % len);
-        let (tail_div, tail_mod) = (tail / len, tail % len);
-
-        if head_div == tail_div {
-            (tail_mod..len.get(), 0..head_mod)
-        } else {
-            (tail_mod..head_mod, 0..0)
-        }
+        ring_buffer_ranges(
+            self.capacity_nonzero(),
+            self.tail(),
+            self.head() + self.capacity_nonzero().get(),
+        )
     }
 
     /// Provides a direct access to the ring buffer vacant memory.
@@ -216,12 +204,8 @@ pub trait RbWrite<T>: RbBase<T> {
     ///
     /// *This method must be followed by [`Self::advance_tail`] call with the number of items being put previously as argument.*
     /// *No other mutating calls allowed before that.*
+    #[inline]
     unsafe fn vacant_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
-        let ranges = self.vacant_ranges();
-        let ptr = self.data().as_mut_ptr();
-        (
-            slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
-            slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
-        )
+        self.slices(self.tail(), self.head() + self.capacity_nonzero().get())
     }
 }

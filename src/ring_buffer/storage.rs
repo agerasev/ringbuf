@@ -1,9 +1,7 @@
-use core::{
-    cell::UnsafeCell, convert::AsMut, marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize,
-};
-
+use crate::utils::ring_buffer_ranges;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
+use core::{cell::UnsafeCell, marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, slice};
 
 /// Abstract container for the ring buffer.
 ///
@@ -15,65 +13,91 @@ use alloc::vec::Vec;
 ///
 /// *Container must not cause data race on concurrent [`Self::as_mut_slice`]/[`Self::as_mut_ptr`] calls.*
 pub unsafe trait Container<T> {
-    /// Length of the container.
-    fn len(&self) -> usize;
+    /// Internal representation of the container.
+    ///
+    /// *Must not be aliased with its content.*
+    type Internal;
 
-    /// Checks if container is empty.
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    /// Return slice of all container items.
-    fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>];
+    /// Transform container to internal representation.
+    fn into_internal(self) -> Self::Internal;
+    /// Restore container from internal representation.
+    ///
+    /// # Safety
+    ///
+    /// `this` must be valid.
+    unsafe fn from_internal(this: Self::Internal) -> Self;
 
     /// Return pointer to the beginning of the container items.
-    #[inline]
-    fn as_mut_ptr(&mut self) -> *mut MaybeUninit<T> {
-        self.as_mut_slice().as_mut_ptr()
-    }
+    fn as_mut_ptr(this: &Self::Internal) -> *mut MaybeUninit<T>;
+    /// Length of the container.
+    fn len(this: &Self::Internal) -> usize;
 }
 
 unsafe impl<'a, T> Container<T> for &'a mut [MaybeUninit<T>] {
-    #[inline]
-    fn len(&self) -> usize {
-        <[_]>::len(self)
+    type Internal = (*mut MaybeUninit<T>, usize);
+
+    fn into_internal(self) -> Self::Internal {
+        (self.as_mut_ptr(), self.len())
+    }
+    unsafe fn from_internal(this: Self::Internal) -> Self {
+        slice::from_raw_parts_mut(this.0, this.1)
     }
 
     #[inline]
-    fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>] {
-        self
+    fn as_mut_ptr(this: &Self::Internal) -> *mut MaybeUninit<T> {
+        this.0
+    }
+    #[inline]
+    fn len(this: &Self::Internal) -> usize {
+        this.1
     }
 }
 
 unsafe impl<T, const N: usize> Container<T> for [MaybeUninit<T>; N] {
+    type Internal = UnsafeCell<[MaybeUninit<T>; N]>;
+
+    fn into_internal(self) -> Self::Internal {
+        UnsafeCell::new(self)
+    }
+    unsafe fn from_internal(this: Self::Internal) -> Self {
+        this.into_inner()
+    }
+
     #[inline]
-    fn len(&self) -> usize {
+    fn as_mut_ptr(this: &Self::Internal) -> *mut MaybeUninit<T> {
+        this.get() as *mut _
+    }
+    #[inline]
+    fn len(_: &Self::Internal) -> usize {
         N
     }
-
-    #[inline]
-    fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>] {
-        self.as_mut()
-    }
 }
+
 #[cfg(feature = "alloc")]
 unsafe impl<T> Container<T> for Vec<MaybeUninit<T>> {
-    #[inline]
-    fn len(&self) -> usize {
-        self.len()
+    type Internal = Self;
+
+    fn into_internal(self) -> Self::Internal {
+        self
+    }
+    unsafe fn from_internal(this: Self::Internal) -> Self {
+        this
     }
 
     #[inline]
-    fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>] {
-        self.as_mut()
+    fn as_mut_ptr(this: &Self::Internal) -> *mut MaybeUninit<T> {
+        this.as_ptr() as *mut _
+    }
+    #[inline]
+    fn len(this: &Self::Internal) -> usize {
+        this.len()
     }
 }
 
 /// Wrapper for container that provides multiple write access to it.
 pub(crate) struct SharedStorage<T, C: Container<T>> {
-    container: UnsafeCell<C>,
-    _phantom: PhantomData<T>,
+    container: C::Internal,
+    _p: PhantomData<T>,
 }
 
 unsafe impl<T, C: Container<T>> Sync for SharedStorage<T, C> where T: Send {}
@@ -83,36 +107,42 @@ impl<T, C: Container<T>> SharedStorage<T, C> {
     ///
     /// *Panics if container is empty.*
     pub fn new(container: C) -> Self {
-        assert!(!container.is_empty());
+        let internal = container.into_internal();
+        assert!(C::len(&internal) > 0);
         Self {
-            container: UnsafeCell::new(container),
-            _phantom: PhantomData,
+            container: internal,
+            _p: PhantomData,
         }
     }
 
     /// Get the length of the container.
     #[inline]
     pub fn len(&self) -> NonZeroUsize {
-        unsafe { NonZeroUsize::new_unchecked((*self.container.get()).len()) }
+        unsafe { NonZeroUsize::new_unchecked(C::len(&self.container)) }
     }
 
-    /// Returns underlying raw ring buffer memory as slice.
+    /// Returns a pair of slices between `head` and `tail` positions in the storage.
+    ///
+    /// For more information see [`ring_buffer_ranges`].
     ///
     /// # Safety
     ///
-    /// All operations on this data must cohere with the `head`/`tail`.
-    ///
-    /// **Accessing raw data is extremely unsafe.**
-    /// It is recommended to use [`Consumer::as_slices`](`crate::LocalConsumer::as_slices`) and
-    /// [`Producer::free_space_as_slices`](`crate::LocalProducer::free_space_as_slices`) instead.
-    #[allow(clippy::mut_from_ref)]
-    #[inline]
-    pub unsafe fn as_slice(&self) -> &mut [MaybeUninit<T>] {
-        (*self.container.get()).as_mut_slice()
+    /// There only single reference to any item allowed to exist at the time.
+    pub unsafe fn as_mut_slices(
+        &self,
+        head: usize,
+        tail: usize,
+    ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+        let ranges = ring_buffer_ranges(self.len(), head, tail);
+        let ptr = C::as_mut_ptr(&self.container);
+        (
+            slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
+            slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
+        )
     }
 
     /// Returns underlying container.
     pub fn into_inner(self) -> C {
-        self.container.into_inner()
+        unsafe { C::from_internal(self.container) }
     }
 }
