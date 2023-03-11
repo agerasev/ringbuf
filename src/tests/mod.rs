@@ -3,6 +3,8 @@ mod access;
 #[cfg(feature = "alloc")]
 mod basic;
 #[cfg(feature = "alloc")]
+mod cached;
+#[cfg(feature = "alloc")]
 mod drop;
 #[cfg(feature = "alloc")]
 mod iter;

@@ -190,6 +190,16 @@ where
         unsafe { self.target.set_tail(self.tail.get()) }
     }
 
+    /// Discard new items pushed since last sync.
+    pub fn discard(&mut self) {
+        let last_tail = self.target.tail();
+        let (first, second) = unsafe { self.target.slices(last_tail, self.tail.get()) };
+        for item_mut in first.iter_mut().chain(second.iter_mut()) {
+            unsafe { item_mut.assume_init_drop() };
+        }
+        self.tail.set(last_tail);
+    }
+
     /// Commit changes and fetch updates from the ring buffer.
     pub fn sync(&mut self) {
         self.commit();

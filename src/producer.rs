@@ -224,6 +224,11 @@ where
         self.target.0.sync();
     }
 
+    /// Don't publish and drop items inserted since last synchronization.
+    pub fn discard(&mut self) {
+        self.target.0.discard();
+    }
+
     /// Synchronize and transform back to immediate producer.
     pub fn into_immediate(self) -> Producer<T, R> {
         unsafe { Producer::new(self.target.0.release()) }
