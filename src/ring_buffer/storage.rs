@@ -121,13 +121,14 @@ impl<T, C: Container<T>> SharedStorage<T, C> {
         unsafe { NonZeroUsize::new_unchecked(C::len(&self.container)) }
     }
 
+    /// Returns an item at `index` position in the storage.
+    #[allow(clippy::mut_from_ref)]
+    pub unsafe fn get_mut(&self, index: usize) -> &mut MaybeUninit<T> {
+        let ptr = C::as_mut_ptr(&self.container);
+        &mut *ptr.add(index)
+    }
+
     /// Returns a pair of slices between `head` and `tail` positions in the storage.
-    ///
-    /// For more information see [`ring_buffer_ranges`].
-    ///
-    /// # Safety
-    ///
-    /// There only single reference to any item allowed to exist at the time.
     pub unsafe fn as_mut_slices(
         &self,
         head: usize,

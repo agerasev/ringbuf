@@ -44,6 +44,11 @@ pub struct SharedRb<T, C: Container<T>> {
 
 impl<T, C: Container<T>> RbBase<T> for SharedRb<T, C> {
     #[inline]
+    unsafe fn item(&self, index: usize) -> &mut MaybeUninit<T> {
+        self.storage.get_mut(index)
+    }
+
+    #[inline]
     unsafe fn slices(
         &self,
         head: usize,

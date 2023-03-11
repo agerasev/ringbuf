@@ -136,13 +136,7 @@ where
     /// On failure returns an `Err` containing the item that hasn't been appended.
     pub fn push(&mut self, elem: T) -> Result<(), T> {
         if !self.is_full() {
-            unsafe {
-                self.free_space_as_slices()
-                    .0
-                    .get_unchecked_mut(0)
-                    .write(elem)
-            };
-            unsafe { self.advance(1) };
+            unsafe { self.rb().push_unchecked(elem) };
             Ok(())
         } else {
             Err(elem)

@@ -38,6 +38,11 @@ where
     R::Rb: RbRead<T>,
 {
     #[inline]
+    unsafe fn item(&self, index: usize) -> &mut MaybeUninit<T> {
+        self.target.item(index)
+    }
+
+    #[inline]
     unsafe fn slices(
         &self,
         head: usize,
@@ -66,6 +71,11 @@ impl<T, R: RbRef> RbBase<T> for RbWriteCache<T, R>
 where
     R::Rb: RbWrite<T>,
 {
+    #[inline]
+    unsafe fn item(&self, index: usize) -> &mut MaybeUninit<T> {
+        self.target.item(index)
+    }
+
     #[inline]
     unsafe fn slices(
         &self,

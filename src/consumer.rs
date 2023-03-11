@@ -164,14 +164,7 @@ where
     /// Returns `None` if the ring buffer is empty.
     pub fn pop(&mut self) -> Option<T> {
         if !self.is_empty() {
-            let elem = unsafe {
-                self.as_uninit_slices()
-                    .0
-                    .get_unchecked(0)
-                    .assume_init_read()
-            };
-            unsafe { self.advance(1) };
-            Some(elem)
+            Some(unsafe { self.rb().pop_unchecked() })
         } else {
             None
         }

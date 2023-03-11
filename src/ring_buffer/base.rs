@@ -18,9 +18,17 @@ use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Range, ptr};
 /// without using the space for an extra element in container.
 /// And obviously we cannot store more than `capacity` items in the buffer, so `tail - head` modulo `2 * capacity` is not allowed to be greater than `capacity`.
 pub trait RbBase<T> {
-    /// Returns part of underlying raw ring buffer memory as slices.
+    /// Returns reference to one of ring buffer slot.
     ///
-    /// For more information see [`SharedStorage::as_mut_slices`](`crate::ring_buffer::storage::SharedStorage::as_mut_slices`).
+    /// # Safety
+    ///
+    /// Only one reference to one item allowed to exist at the time.
+    #[allow(clippy::mut_from_ref)]
+    unsafe fn item(&self, index: usize) -> &mut MaybeUninit<T>;
+
+    /// Returns part of underlying raw ring buffer contiguous memory as slices.
+    ///
+    /// For more information see [`ring_buffer_ranges`].
     ///
     /// # Safety
     ///
@@ -128,6 +136,18 @@ pub trait RbRead<T>: RbBase<T> {
         self.slices(self.head(), self.tail())
     }
 
+    /// Pop item from the ring buffer without checking that there are any items.
+    ///
+    /// # Safety
+    ///  
+    /// There must be at least one item in the buffer.
+    unsafe fn pop_unchecked(&self) -> T {
+        let head = self.head();
+        let item = self.item(head % self.capacity_nonzero()).assume_init_read();
+        self.set_head((head + 1) % self.modulus());
+        item
+    }
+
     /// Removes items from the head of ring buffer and drops them.
     ///
     /// + If `count_or_all` is `Some(count)` then exactly `count` items will be removed.
@@ -207,5 +227,16 @@ pub trait RbWrite<T>: RbBase<T> {
     #[inline]
     unsafe fn vacant_slices(&self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
         self.slices(self.tail(), self.head() + self.capacity_nonzero().get())
+    }
+
+    /// Pust an item to the ring buffer without checking that there are any free places.
+    ///
+    /// # Safety
+    ///  
+    /// There must be at least one free place in the buffer.
+    unsafe fn push_unchecked(&self, item: T) {
+        let tail = self.tail();
+        self.item(tail % self.capacity_nonzero()).write(item);
+        self.set_tail((tail + 1) % self.modulus());
     }
 }
