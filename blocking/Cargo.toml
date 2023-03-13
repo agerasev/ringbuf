@@ -1,0 +1,20 @@
+[package]
+name = "ringbuf-blocking"
+version = "0.3.3"
+edition.workspace = true
+authors.workspace = true
+description = "Blocking version of ringbuf"
+documentation = "https://docs.rs/ringbuf-blocking"
+repository.workspace = true
+keywords = ["blocking", "spsc", "ring-buffer", "rb", "fifo"]
+categories = ["concurrency", "data-structures"]
+license.workspace = true
+
+[dependencies]
+ringbuf = { workspace = true }
+derive_more = { version = "0.99.17", default-features = false, features = [
+    "deref",
+    "deref_mut",
+    "from",
+    "into",
+] }
