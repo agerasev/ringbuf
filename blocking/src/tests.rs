@@ -1,6 +1,6 @@
 use crate::Rb;
 use ringbuf::HeapRb;
-use std::{thread, time::Duration};
+use std::{iter::once, thread};
 
 const THE_BOOK_FOREWORD: &str = r#"
 It wasn't always so clear, but the Rust programming language is fundamentally about empowerment: no matter what kind of code you are writing now, Rust empowers you to reach farther, to program with confidence in a wider variety of domains than you did before.
@@ -15,7 +15,7 @@ This book fully embraces the potential of Rust to empower its users. It's a frie
 
 #[test]
 #[cfg_attr(miri, ignore)]
-fn push_pop_slice() {
+fn wait() {
     let buf = Rb::from(HeapRb::<u8>::new(7));
     let (mut prod, mut cons) = buf.split();
 
@@ -24,13 +24,12 @@ fn push_pop_slice() {
     let pjh = thread::spawn(move || {
         let mut bytes = smsg.as_bytes();
         while !bytes.is_empty() {
-            prod.wait(1);
+            prod.wait(1, None);
             let n = prod.push_slice(bytes);
             assert!(n > 0);
-            println!("prod: {:?}", &bytes[..n]);
             bytes = &bytes[n..bytes.len()]
         }
-        prod.wait(1);
+        prod.wait(1, None);
         prod.push(0).unwrap();
     });
 
@@ -38,16 +37,72 @@ fn push_pop_slice() {
         let mut bytes = Vec::<u8>::new();
         let mut buffer = [0; 5];
         loop {
-            cons.wait(1);
+            cons.wait(1, None);
             let n = cons.pop_slice(&mut buffer);
             assert!(n > 0);
-            println!("cons: {:?}", &buffer[..n]);
             bytes.extend_from_slice(&buffer[0..n]);
             if bytes.ends_with(&[0]) {
                 break;
             }
         }
         assert_eq!(bytes.pop().unwrap(), 0);
+        String::from_utf8(bytes).unwrap()
+    });
+
+    pjh.join().unwrap();
+    let rmsg = cjh.join().unwrap();
+
+    assert_eq!(smsg, rmsg);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn slice_all() {
+    let buf = Rb::from(HeapRb::<u8>::new(7));
+    let (mut prod, mut cons) = buf.split();
+
+    let smsg = THE_BOOK_FOREWORD;
+
+    let pjh = thread::spawn(move || {
+        let bytes = smsg.as_bytes();
+        assert_eq!(prod.push_slice_all(bytes, None), bytes.len());
+        prod.push_wait(0, None).unwrap();
+    });
+
+    let cjh = thread::spawn(move || {
+        let mut bytes = vec![0u8; smsg.as_bytes().len()];
+        assert_eq!(cons.pop_slice_all(&mut bytes, None), bytes.len());
+        assert_eq!(cons.pop_wait(None).unwrap(), 0);
+        String::from_utf8(bytes).unwrap()
+    });
+
+    pjh.join().unwrap();
+    let rmsg = cjh.join().unwrap();
+
+    assert_eq!(smsg, rmsg);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn iter_all() {
+    let buf = Rb::from(HeapRb::<u8>::new(7));
+    let (mut prod, mut cons) = buf.split();
+
+    let smsg = THE_BOOK_FOREWORD;
+
+    let pjh = thread::spawn(move || {
+        let bytes = smsg.as_bytes();
+        assert_eq!(
+            prod.push_iter_all(bytes.iter().copied().chain(once(0)), None),
+            bytes.len() + 1
+        );
+    });
+
+    let cjh = thread::spawn(move || {
+        let bytes = cons
+            .pop_iter_all(None)
+            .take_while(|x| *x != 0)
+            .collect::<Vec<_>>();
         String::from_utf8(bytes).unwrap()
     });
 
