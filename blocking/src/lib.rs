@@ -177,7 +177,7 @@ where
     R::Rb: RbWrite<T>;
 
 impl<T, B: BasicRb<T>, R: RbRef<Rb = Rb<T, B>>> Producer<T, R> {
-    unsafe fn new(target: R) -> Self {
+    pub unsafe fn new(target: R) -> Self {
         BasicProducer::new(target).into()
     }
 
@@ -235,7 +235,7 @@ where
     R::Rb: RbRead<T>;
 
 impl<T, B: BasicRb<T>, R: RbRef<Rb = Rb<T, B>>> Consumer<T, R> {
-    unsafe fn new(target: R) -> Self {
+    pub unsafe fn new(target: R) -> Self {
         BasicConsumer::new(target).into()
     }
 
