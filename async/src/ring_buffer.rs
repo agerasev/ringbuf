@@ -47,8 +47,12 @@ pub struct AsyncRb<T, B: Rb<T>> {
 }
 
 impl<T, B: Rb<T>> RbBase<T> for AsyncRb<T, B> {
-    unsafe fn data(&self) -> &mut [MaybeUninit<T>] {
-        self.base.data()
+    unsafe fn slices(
+        &self,
+        head: usize,
+        tail: usize,
+    ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+        self.base.slices(head, tail)
     }
 
     fn capacity_nonzero(&self) -> NonZeroUsize {
