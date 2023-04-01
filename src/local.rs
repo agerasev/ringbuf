@@ -1,6 +1,7 @@
 use super::{
     raw::{ranges, RawConsumer, RawProducer, RawRb},
     storage::{SharedStorage, Storage},
+    Consumer, Observer, Producer, RingBuffer,
 };
 use core::{
     cell::Cell,
@@ -52,7 +53,7 @@ impl<S: Storage> RawRb for LocalRb<S> {
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
     ) {
-        let (first, second) = ranges(self.capacity(), read, write);
+        let (first, second) = ranges(<Self as RawRb>::capacity(self), read, write);
         (
             self.storage.index_mut(first),
             self.storage.index_mut(second),
@@ -89,9 +90,25 @@ impl<S: Storage> RawProducer for LocalRb<S> {
     }
 }
 
+impl<S: Storage> Observer for LocalRb<S> {
+    type Item = S::Item;
+
+    type Raw = Self;
+
+    fn as_raw(&self) -> &Self::Raw {
+        self
+    }
+}
+
+impl<S: Storage> Consumer for LocalRb<S> {}
+
+impl<S: Storage> Producer for LocalRb<S> {}
+
+impl<S: Storage> RingBuffer for LocalRb<S> {}
+
 impl<S: Storage> Drop for LocalRb<S> {
     fn drop(&mut self) {
-        unimplemented!()
+        self.clear();
     }
 }
 

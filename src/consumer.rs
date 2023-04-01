@@ -1,7 +1,7 @@
 use crate::{
-    observer::Observer,
     raw::RawConsumer,
     utils::{slice_assume_init_mut, slice_assume_init_ref},
+    Observer,
 };
 use core::{cmp, iter::Chain, iter::ExactSizeIterator, mem::MaybeUninit, slice};
 

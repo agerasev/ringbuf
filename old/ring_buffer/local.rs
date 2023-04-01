@@ -1,14 +1,6 @@
 #[cfg(feature = "alloc")]
 use alloc::rc::Rc;
 
-impl<S: Storage> Rb<T> for LocalRb<S> {}
-
-impl<S: Storage> Drop for LocalRb<S> {
-    fn drop(&mut self) {
-        self.clear();
-    }
-}
-
 impl<S: Storage> LocalRb<S> {
     /// Splits ring buffer into producer and consumer.
     ///

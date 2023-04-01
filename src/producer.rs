@@ -1,4 +1,4 @@
-use crate::{observer::Observer, raw::RawProducer, utils::write_slice};
+use crate::{raw::RawProducer, utils::write_slice, Observer};
 use core::mem::MaybeUninit;
 
 /// Producer part of ring buffer.
