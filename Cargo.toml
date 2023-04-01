@@ -13,6 +13,9 @@ keywords = ["lock-free", "spsc", "ring-buffer", "rb", "fifo"]
 categories = ["concurrency", "data-structures", "no-std"]
 license = "MIT/Apache-2.0"
 
+[lib]
+path = "src/new_lib.rs"
+
 [features]
 default = ["alloc", "std"]
 alloc = []
@@ -22,14 +25,14 @@ bench = []
 [dependencies]
 crossbeam-utils = { version = "0.8", default-features = false }
 
-[[example]]
-name = "simple"
-required-features = ["alloc"]
-
-[[example]]
-name = "overwrite"
-required-features = ["alloc"]
-
-[[example]]
-name = "message"
-required-features = ["std"]
+# [[example]]
+# name = "simple"
+# required-features = ["alloc"]
+# 
+# [[example]]
+# name = "overwrite"
+# required-features = ["alloc"]
+# 
+# [[example]]
+# name = "message"
+# required-features = ["std"]
