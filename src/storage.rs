@@ -27,7 +27,7 @@ pub unsafe trait Storage {
     ///
     /// # Safety
     ///
-    /// `this` must be valid.
+    /// `this` must be a valid internal representation.
     unsafe fn from_internal(this: Self::Internal) -> Self;
 
     /// Return pointer to the beginning of the container items.

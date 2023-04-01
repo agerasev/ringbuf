@@ -1,5 +1,3 @@
-#![allow(clippy::type_complexity)]
-
 use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Range, ptr};
 
 /// Returns a pair of ranges between `begin` and `end` positions in a ring buffer with specific `capacity`.
@@ -38,6 +36,12 @@ pub fn ranges(capacity: NonZeroUsize, begin: usize, end: usize) -> (Range<usize>
 pub trait RawRb {
     type Item: Sized;
 
+    /// Read end position.
+    fn read_end(&self) -> usize;
+
+    /// Write ends position.
+    fn write_end(&self) -> usize;
+
     /// Returns part of underlying raw ring buffer memory as slices.
     ///
     /// For more information see [`SharedStorage::as_mut_slices`](`crate::ring_buffer::storage::SharedStorage::as_mut_slices`).
@@ -46,14 +50,14 @@ pub trait RawRb {
     ///
     /// Only non-overlapping slices allowed to exist at the same time.
     ///
-    /// Modifications of this data must properly update `read` and `write` positions.
+    /// Modifications of this data must properly update `begin` and `end` positions.
     ///
     /// *Accessing raw data is extremely unsafe.*
     /// It is recommended to use [`Consumer::as_slices`](`crate::Consumer::as_slices`) and [`Producer::free_space_as_slices`](`crate::Producer::free_space_as_slices`) instead.
     unsafe fn slices(
         &self,
-        read: usize,
-        write: usize,
+        begin: usize,
+        end: usize,
     ) -> (
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
@@ -64,14 +68,6 @@ pub trait RawRb {
     /// It is constant during the whole ring buffer lifetime.
     fn capacity(&self) -> NonZeroUsize;
 
-    /// Read end position.
-    fn read_end(&self) -> usize;
-
-    /// Write ends position.
-    fn write_end(&self) -> usize;
-}
-
-pub trait RawRbExt: RawRb {
     /// Modulus for `read` and `write` position values.
     ///
     /// Equals to `2 * len`.
@@ -103,8 +99,6 @@ pub trait RawRbExt: RawRb {
     }
 }
 
-impl<R: RawRb> RawRbExt for R {}
-
 /// Ring buffer read end.
 ///
 /// Provides access to occupied memory and mechanism of item extraction.
@@ -119,9 +113,7 @@ pub trait RawConsumer: RawRb {
     ///
     /// It is recommended to use `Self::move_read_end` instead.
     unsafe fn set_read_end(&self, value: usize);
-}
 
-pub trait RawConsumerExt: RawConsumer + RawRbExt {
     /// Move **read** position by `count` items forward.
     ///
     /// # Safety
@@ -185,8 +177,6 @@ pub trait RawConsumerExt: RawConsumer + RawRbExt {
     }
 }
 
-impl<R: RawConsumer> RawConsumerExt for R {}
-
 /// Ring buffer write end.
 ///
 /// Provides access to vacant memory and mechanism of item insertion.
@@ -201,9 +191,7 @@ pub trait RawProducer: RawRb {
     ///
     /// It is recommended to use `Self::move_write_end` instead.
     unsafe fn set_write_end(&self, value: usize);
-}
 
-pub trait RawProducerExt: RawProducer + RawRbExt {
     /// Move **write** position by `count` items forward.
     ///
     /// # Safety
@@ -236,5 +224,3 @@ pub trait RawProducerExt: RawProducer + RawRbExt {
         self.slices(self.write_end(), self.read_end() + self.capacity().get())
     }
 }
-
-impl<R: RawProducer> RawProducerExt for R {}
