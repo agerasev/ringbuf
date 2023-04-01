@@ -1,18 +1,21 @@
-use crate::utils::ring_buffer_ranges;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
-use core::{cell::UnsafeCell, marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, slice};
+use core::{
+    cell::UnsafeCell, marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, ops::Range, slice,
+};
 
 /// Abstract container for the ring buffer.
 ///
-/// Container items must be stored as a contiguous array.
+/// Storage items must be stored as a contiguous array.
 ///
 /// # Safety
 ///
 /// *[`Self::len`]/[`Self::is_empty`] must always return the same value.*
 ///
-/// *Container must not cause data race on concurrent [`Self::as_mut_slice`]/[`Self::as_mut_ptr`] calls.*
-pub unsafe trait Container<T> {
+/// *Storage must not cause data race on concurrent [`Self::as_mut_slice`]/[`Self::as_mut_ptr`] calls.*
+pub unsafe trait Storage {
+    type Item: Sized;
+
     /// Internal representation of the container.
     ///
     /// *Must not be aliased with its content.*
@@ -28,12 +31,15 @@ pub unsafe trait Container<T> {
     unsafe fn from_internal(this: Self::Internal) -> Self;
 
     /// Return pointer to the beginning of the container items.
-    fn as_mut_ptr(this: &Self::Internal) -> *mut MaybeUninit<T>;
+    fn as_mut_ptr(this: &Self::Internal) -> *mut MaybeUninit<Self::Item>;
+
     /// Length of the container.
     fn len(this: &Self::Internal) -> usize;
 }
 
-unsafe impl<'a, T> Container<T> for &'a mut [MaybeUninit<T>] {
+unsafe impl<'a, T> Storage for &'a mut [MaybeUninit<T>] {
+    type Item = T;
+
     type Internal = (*mut MaybeUninit<T>, usize);
 
     fn into_internal(self) -> Self::Internal {
@@ -47,13 +53,16 @@ unsafe impl<'a, T> Container<T> for &'a mut [MaybeUninit<T>] {
     fn as_mut_ptr(this: &Self::Internal) -> *mut MaybeUninit<T> {
         this.0
     }
+
     #[inline]
     fn len(this: &Self::Internal) -> usize {
         this.1
     }
 }
 
-unsafe impl<T, const N: usize> Container<T> for [MaybeUninit<T>; N] {
+unsafe impl<T, const N: usize> Storage for [MaybeUninit<T>; N] {
+    type Item = T;
+
     type Internal = UnsafeCell<[MaybeUninit<T>; N]>;
 
     fn into_internal(self) -> Self::Internal {
@@ -67,6 +76,7 @@ unsafe impl<T, const N: usize> Container<T> for [MaybeUninit<T>; N] {
     fn as_mut_ptr(this: &Self::Internal) -> *mut MaybeUninit<T> {
         this.get() as *mut _
     }
+
     #[inline]
     fn len(_: &Self::Internal) -> usize {
         N
@@ -74,7 +84,9 @@ unsafe impl<T, const N: usize> Container<T> for [MaybeUninit<T>; N] {
 }
 
 #[cfg(feature = "alloc")]
-unsafe impl<T> Container<T> for Vec<MaybeUninit<T>> {
+unsafe impl<T> Storage for Vec<MaybeUninit<T>> {
+    type Item = T;
+
     type Internal = Self;
 
     fn into_internal(self) -> Self::Internal {
@@ -88,6 +100,7 @@ unsafe impl<T> Container<T> for Vec<MaybeUninit<T>> {
     fn as_mut_ptr(this: &Self::Internal) -> *mut MaybeUninit<T> {
         this.as_ptr() as *mut _
     }
+
     #[inline]
     fn len(this: &Self::Internal) -> usize {
         this.len()
@@ -95,22 +108,22 @@ unsafe impl<T> Container<T> for Vec<MaybeUninit<T>> {
 }
 
 /// Wrapper for container that provides multiple write access to it.
-pub(crate) struct SharedStorage<T, C: Container<T>> {
-    container: C::Internal,
-    _p: PhantomData<T>,
+pub(crate) struct SharedStorage<S: Storage> {
+    internal: S::Internal,
+    _p: PhantomData<S::Item>,
 }
 
-unsafe impl<T, C: Container<T>> Sync for SharedStorage<T, C> where T: Send {}
+unsafe impl<S: Storage> Sync for SharedStorage<S> where S::Item: Send {}
 
-impl<T, C: Container<T>> SharedStorage<T, C> {
+impl<S: Storage> SharedStorage<S> {
     /// Create new storage.
     ///
     /// *Panics if container is empty.*
-    pub fn new(container: C) -> Self {
+    pub fn new(container: S) -> Self {
         let internal = container.into_internal();
-        assert!(C::len(&internal) > 0);
+        assert!(S::len(&internal) > 0);
         Self {
-            container: internal,
+            internal,
             _p: PhantomData,
         }
     }
@@ -118,31 +131,22 @@ impl<T, C: Container<T>> SharedStorage<T, C> {
     /// Get the length of the container.
     #[inline]
     pub fn len(&self) -> NonZeroUsize {
-        unsafe { NonZeroUsize::new_unchecked(C::len(&self.container)) }
+        unsafe { NonZeroUsize::new_unchecked(S::len(&self.internal)) }
     }
 
-    /// Returns a pair of slices between `head` and `tail` positions in the storage.
-    ///
-    /// For more information see [`ring_buffer_ranges`].
+    /// Returns a mutable slice of storage in specified `range`.
     ///
     /// # Safety
     ///
     /// There only single reference to any item allowed to exist at the time.
-    pub unsafe fn as_mut_slices(
-        &self,
-        head: usize,
-        tail: usize,
-    ) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
-        let ranges = ring_buffer_ranges(self.len(), head, tail);
-        let ptr = C::as_mut_ptr(&self.container);
-        (
-            slice::from_raw_parts_mut(ptr.add(ranges.0.start), ranges.0.len()),
-            slice::from_raw_parts_mut(ptr.add(ranges.1.start), ranges.1.len()),
-        )
+    #[allow(clippy::mut_from_ref)]
+    pub unsafe fn index_mut(&self, range: Range<usize>) -> &mut [MaybeUninit<S::Item>] {
+        let ptr = S::as_mut_ptr(&self.internal);
+        slice::from_raw_parts_mut(ptr.add(range.start), range.len())
     }
 
     /// Returns underlying container.
-    pub fn into_inner(self) -> C {
-        unsafe { C::from_internal(self.container) }
+    pub fn into_inner(self) -> S {
+        unsafe { S::from_internal(self.internal) }
     }
 }

@@ -13,9 +13,6 @@ keywords = ["lock-free", "spsc", "ring-buffer", "rb", "fifo"]
 categories = ["concurrency", "data-structures", "no-std"]
 license = "MIT/Apache-2.0"
 
-[lib]
-path = "src/new_lib.rs"
-
 [features]
 default = ["alloc", "std"]
 alloc = []
