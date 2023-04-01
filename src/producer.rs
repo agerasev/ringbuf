@@ -29,7 +29,7 @@ where
     /// Vacant memory is uninitialized. Initialized items must be put starting from the beginning of first slice.
     /// When first slice is fully filled then items must be put to the beginning of the second slice.
     ///
-    /// *This method must be followed by `Self::advance_write` call with the number of items being put previously as argument.*
+    /// *This method must be followed by [`Self::advance_write`] call with the number of items being put previously as argument.*
     /// *No other mutating calls allowed before that.*
     #[inline]
     fn vacant_slices_mut(
@@ -41,7 +41,7 @@ where
         unsafe { self.as_raw().vacant_slices() }
     }
 
-    /// Moves `write` position by `count` places.
+    /// Moves `write` pointer by `count` places forward.
     ///
     /// # Safety
     ///
@@ -73,7 +73,7 @@ where
     ///
     /// *Inserted items are committed to the ring buffer all at once in the end,*
     /// *e.g. when buffer is full or iterator has ended.*
-    fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, iter: &mut I) -> usize {
+    fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, mut iter: I) -> usize {
         let (left, right) = self.vacant_slices_mut();
         let mut count = 0;
         for place in left.iter_mut().chain(right.iter_mut()) {
