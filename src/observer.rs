@@ -1,6 +1,7 @@
 use crate::raw::{RawRb, RawStorage};
+use core::ops::Deref;
 
-pub trait Observer: Sized {
+pub trait Observer {
     type Item: Sized;
 
     type Raw: RawRb<Item = Self::Item>;
@@ -45,5 +46,29 @@ pub trait Observer: Sized {
     #[inline]
     fn vacant_len(&self) -> usize {
         self.as_raw().vacant_len()
+    }
+}
+
+pub struct Wrap<R> {
+    raw: R,
+}
+
+impl<R> Wrap<R>
+where
+    R: Sized,
+{
+    pub fn new(raw: R) -> Self {
+        Self { raw }
+    }
+}
+
+impl<R: Deref> Observer for Wrap<R>
+where
+    R::Target: RawRb + Sized,
+{
+    type Item = <R::Target as RawStorage>::Item;
+    type Raw = R::Target;
+    fn as_raw(&self) -> &Self::Raw {
+        &self.raw
     }
 }

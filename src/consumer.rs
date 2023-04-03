@@ -1,9 +1,9 @@
 use crate::{
-    raw::RawRb,
+    raw::{RawRb, RawStorage},
     utils::{slice_assume_init_mut, slice_assume_init_ref},
     Observer,
 };
-use core::{cmp, iter::Chain, iter::ExactSizeIterator, mem::MaybeUninit, slice};
+use core::{cmp, iter::Chain, iter::ExactSizeIterator, mem::MaybeUninit, ops::Deref, slice};
 
 /// Consumer part of ring buffer.
 ///
@@ -221,3 +221,32 @@ pub type Iter<'a, R: RawRb> = Chain<slice::Iter<'a, R::Item>, slice::Iter<'a, R:
 /// *Please do not rely on actual type, it may change in future.*
 #[allow(type_alias_bounds)]
 pub type IterMut<'a, R: RawRb> = Chain<slice::IterMut<'a, R::Item>, slice::IterMut<'a, R::Item>>;
+
+pub struct Wrap<R> {
+    raw: R,
+}
+
+impl<R> Wrap<R>
+where
+    R: Sized,
+{
+    /// # Safety
+    ///
+    /// There must be no more than one consumer wrapper.
+    pub unsafe fn new(raw: R) -> Self {
+        Self { raw }
+    }
+}
+
+impl<R: Deref> Observer for Wrap<R>
+where
+    R::Target: RawRb + Sized,
+{
+    type Item = <R::Target as RawStorage>::Item;
+    type Raw = R::Target;
+    fn as_raw(&self) -> &Self::Raw {
+        &self.raw
+    }
+}
+
+impl<R: Deref> Consumer for Wrap<R> where R::Target: RawRb + Sized {}

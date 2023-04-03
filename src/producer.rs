@@ -1,5 +1,9 @@
-use crate::{raw::RawRb, utils::write_slice, Observer};
-use core::mem::MaybeUninit;
+use crate::{
+    raw::{RawRb, RawStorage},
+    utils::write_slice,
+    Observer,
+};
+use core::{mem::MaybeUninit, ops::Deref};
 
 /// Producer part of ring buffer.
 ///
@@ -112,3 +116,32 @@ pub trait Producer: Observer {
         count
     }
 }
+
+pub struct Wrap<R> {
+    raw: R,
+}
+
+impl<R> Wrap<R>
+where
+    R: Sized,
+{
+    /// # Safety
+    ///
+    /// There must be no more than one consumer wrapper.
+    pub unsafe fn new(raw: R) -> Self {
+        Self { raw }
+    }
+}
+
+impl<R: Deref> Observer for Wrap<R>
+where
+    R::Target: RawRb + Sized,
+{
+    type Item = <R::Target as RawStorage>::Item;
+    type Raw = R::Target;
+    fn as_raw(&self) -> &Self::Raw {
+        &self.raw
+    }
+}
+
+impl<R: Deref> Producer for Wrap<R> where R::Target: RawRb + Sized {}

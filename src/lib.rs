@@ -19,8 +19,13 @@ mod utils;
 pub use consumer::Consumer;
 pub use observer::Observer;
 pub use producer::Producer;
-pub use ring_buffer::RingBuffer;
+pub use ring_buffer::{RingBuffer, Split};
 
 pub mod prelude {
-    pub use super::{Consumer, Observer, Producer, RingBuffer};
+    pub use super::{
+        consumer::Consumer,
+        observer::Observer,
+        producer::Producer,
+        ring_buffer::{RingBuffer, Split},
+    };
 }

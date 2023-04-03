@@ -1,9 +1,12 @@
 use crate::storage::StoredRb;
 
 use super::{
+    consumer::Consumer,
+    observer::Observer,
+    producer::Producer,
     raw::RawRb,
     storage::{Shared, Storage},
-    Consumer, Observer, Producer, RingBuffer,
+    RingBuffer,
 };
 use core::{cell::Cell, mem::ManuallyDrop, ptr};
 
