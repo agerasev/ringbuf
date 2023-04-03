@@ -17,7 +17,7 @@ pub fn ranges(capacity: NonZeroUsize, begin: usize, end: usize) -> (Range<usize>
     }
 }
 
-pub trait RawStorage {
+pub trait RawBuffer {
     type Item: Sized;
 
     /// Capacity of the ring buffer.
@@ -78,7 +78,7 @@ pub trait RawStorage {
 /// It allows us to distinguish situations when the buffer is empty (`read == write`) and when the buffer is full (`write - read` modulo `2 * capacity` equals to `capacity`)
 /// without using the space for an extra element in container.
 /// And obviously we cannot store more than `capacity` items in the buffer, so `write - read` modulo `2 * capacity` is not allowed to be greater than `capacity`.
-pub trait RawRb: RawStorage {
+pub trait RawRb: RawBuffer {
     /// Read end position.
     fn read_end(&self) -> usize;
 

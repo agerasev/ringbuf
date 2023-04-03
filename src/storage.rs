@@ -1,10 +1,9 @@
+use crate::stored::StoredRb;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 use core::{
     cell::UnsafeCell, marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, ops::Range, slice,
 };
-
-use crate::raw::RawStorage;
 
 /// Abstract storage for the ring buffer.
 ///
@@ -166,37 +165,6 @@ impl<S: Storage> Shared<S> {
     }
 }
 
-pub trait StoredRb {
-    type Storage: Storage;
-
-    /// Constructs ring buffer from storage and counters.
-    ///
-    /// # Safety
-    ///
-    /// The items in storage inside `read..write` range must be initialized, items outside this range must be uninitialized.
-    /// `read` and `write` positions must be valid (see [`RbBase`](`crate::ring_buffer::RbBase`)).
-    unsafe fn from_raw_parts(storage: Self::Storage, read: usize, write: usize) -> Self;
-
-    /// Destructures ring buffer into underlying storage and `read` and `write` counters.
-    ///
-    /// # Safety
-    ///
-    /// Initialized contents of the storage must be properly dropped.
-    unsafe fn into_raw_parts(self) -> (Self::Storage, usize, usize);
-
-    fn storage(&self) -> &Shared<Self::Storage>;
-}
-
-impl<R: StoredRb> RawStorage for R {
-    type Item = <R::Storage as Storage>::Item;
-
-    #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.storage().len()
-    }
-
-    #[inline]
-    unsafe fn slice(&self, range: Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
-        self.storage().slice(range)
-    }
-}
+pub type Static<T, const N: usize> = [MaybeUninit<T>; N];
+#[cfg(feature = "alloc")]
+pub type Heap<T> = Vec<MaybeUninit<T>>;

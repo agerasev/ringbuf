@@ -1,4 +1,4 @@
-use crate::raw::{RawRb, RawStorage};
+use crate::raw::{RawBuffer, RawRb};
 use core::ops::Deref;
 
 pub trait Observer {
@@ -66,7 +66,7 @@ impl<R: Deref> Observer for Wrap<R>
 where
     R::Target: RawRb + Sized,
 {
-    type Item = <R::Target as RawStorage>::Item;
+    type Item = <R::Target as RawBuffer>::Item;
     type Raw = R::Target;
     fn as_raw(&self) -> &Self::Raw {
         &self.raw

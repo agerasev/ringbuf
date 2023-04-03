@@ -1,12 +1,8 @@
-use crate::storage::StoredRb;
-
-use super::{
-    consumer::Consumer,
-    observer::Observer,
-    producer::Producer,
+use crate::{
     raw::RawRb,
     storage::{Shared, Storage},
-    RingBuffer,
+    stored::StoredRb,
+    Consumer, Observer, Producer, RingBuffer,
 };
 use core::{cell::Cell, mem::ManuallyDrop, ptr};
 
@@ -20,16 +16,17 @@ use core::{cell::Cell, mem::ManuallyDrop, ptr};
 This code must fail to compile:
 
 ```compile_fail
-use std::{thread, vec::Vec};
-use ringbuf::LocalRb;
+use std::{thread, sync::Arc};
+use ringbuf::{LocalRb, storage::Static, prelude::*};
 
-let (mut prod, mut cons) = LocalRb::<i32, Vec<_>>::new(256).split();
+let rb = LocalRb::<Static<i32, 16>>::default();
+let (mut prod, mut cons) = Split::<Arc<_>>::split(rb);
 thread::spawn(move || {
-    prod.push(123).unwrap();
+    prod.try_push(123).unwrap();
 })
 .join();
 thread::spawn(move || {
-    assert_eq!(cons.pop().unwrap(), 123);
+    assert_eq!(cons.try_pop().unwrap(), 123);
 })
 .join();
 ```
@@ -39,6 +36,29 @@ pub struct LocalRb<S: Storage> {
     storage: Shared<S>,
     read: Cell<usize>,
     write: Cell<usize>,
+}
+
+impl<S: Storage> StoredRb for LocalRb<S> {
+    type Storage = S;
+
+    unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
+        Self {
+            storage: Shared::new(storage),
+            read: Cell::new(read),
+            write: Cell::new(write),
+        }
+    }
+
+    unsafe fn into_raw_parts(self) -> (S, usize, usize) {
+        let (read, write) = (self.read_end(), self.write_end());
+        let self_ = ManuallyDrop::new(self);
+        (ptr::read(&self_.storage).into_inner(), read, write)
+    }
+
+    #[inline]
+    fn storage(&self) -> &Shared<Self::Storage> {
+        &self.storage
+    }
 }
 
 impl<S: Storage> RawRb for LocalRb<S> {
@@ -82,28 +102,5 @@ impl<S: Storage> RingBuffer for LocalRb<S> {}
 impl<S: Storage> Drop for LocalRb<S> {
     fn drop(&mut self) {
         self.clear();
-    }
-}
-
-impl<S: Storage> StoredRb for LocalRb<S> {
-    type Storage = S;
-
-    unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
-        Self {
-            storage: Shared::new(storage),
-            read: Cell::new(read),
-            write: Cell::new(write),
-        }
-    }
-
-    unsafe fn into_raw_parts(self) -> (S, usize, usize) {
-        let (read, write) = (self.read_end(), self.write_end());
-        let self_ = ManuallyDrop::new(self);
-        (ptr::read(&self_.storage).into_inner(), read, write)
-    }
-
-    #[inline]
-    fn storage(&self) -> &Shared<Self::Storage> {
-        &self.storage
     }
 }

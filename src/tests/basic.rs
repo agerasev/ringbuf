@@ -1,23 +1,20 @@
-use crate::{local::LocalRb, prelude::*};
-use core::mem::MaybeUninit;
+use crate::{prelude::*, storage::Static, LocalRb};
 
 fn head_tail(observer: &impl Observer) -> (usize, usize) {
     use crate::raw::RawRb;
     (observer.as_raw().read_end(), observer.as_raw().write_end())
 }
 
-type LocalStaticRb<T, const N: usize> = LocalRb<[MaybeUninit<T>; N]>;
-
 #[test]
 fn capacity() {
     const CAP: usize = 13;
-    let buf = LocalStaticRb::<i32, CAP>::default();
+    let buf = LocalRb::<Static<i32, CAP>>::default();
     assert_eq!(buf.capacity(), CAP);
 }
 #[test]
 fn split_capacity() {
     const CAP: usize = 13;
-    let mut buf = LocalStaticRb::<i32, CAP>::default();
+    let mut buf = LocalRb::<Static<i32, CAP>>::default();
     let (prod, cons) = (&mut buf).split();
 
     assert_eq!(prod.capacity(), CAP);
@@ -26,7 +23,7 @@ fn split_capacity() {
 
 #[test]
 fn try_push() {
-    let mut buf = LocalStaticRb::<i32, 2>::default();
+    let mut buf = LocalRb::<Static<i32, 2>>::default();
     let (mut prod, _) = (&mut buf).split();
 
     assert_eq!(head_tail(&prod), (0, 0));
@@ -43,7 +40,7 @@ fn try_push() {
 
 #[test]
 fn pop_empty() {
-    let mut buf = LocalStaticRb::<i32, 2>::default();
+    let mut buf = LocalRb::<Static<i32, 2>>::default();
     let (_, mut cons) = (&mut buf).split();
 
     assert_eq!(head_tail(&cons), (0, 0));
@@ -55,7 +52,7 @@ fn pop_empty() {
 #[test]
 fn push_pop_one() {
     const CAP: usize = 2;
-    let mut buf = LocalStaticRb::<i32, CAP>::default();
+    let mut buf = LocalRb::<Static<i32, CAP>>::default();
     let (mut prod, mut cons) = (&mut buf).split();
 
     const MOD: usize = 2 * CAP;
@@ -77,7 +74,7 @@ fn push_pop_one() {
 #[test]
 fn push_pop_all() {
     const CAP: usize = 2;
-    let mut buf = LocalStaticRb::<i32, CAP>::default();
+    let mut buf = LocalRb::<Static<i32, CAP>>::default();
     let (mut prod, mut cons) = (&mut buf).split();
 
     const MOD: usize = 2 * CAP;
@@ -107,7 +104,7 @@ fn push_pop_all() {
 
 #[test]
 fn empty_full() {
-    let mut buf = LocalStaticRb::<i32, 1>::default();
+    let mut buf = LocalRb::<Static<i32, 1>>::default();
     let (mut prod, cons) = (&mut buf).split();
 
     assert!(prod.is_empty());
@@ -125,7 +122,7 @@ fn empty_full() {
 
 #[test]
 fn len_remaining() {
-    let mut buf = LocalStaticRb::<i32, 2>::default();
+    let mut buf = LocalRb::<Static<i32, 2>>::default();
     let (mut prod, mut cons) = (&mut buf).split();
 
     assert_eq!(prod.occupied_len(), 0);

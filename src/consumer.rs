@@ -1,5 +1,5 @@
 use crate::{
-    raw::{RawRb, RawStorage},
+    raw::{RawBuffer, RawRb},
     utils::{slice_assume_init_mut, slice_assume_init_ref},
     Observer,
 };
@@ -127,18 +127,17 @@ pub trait Consumer: Observer {
     #[cfg_attr(
         feature = "alloc",
         doc = r##"
-```ignore
+```
 # extern crate ringbuf;
-# use ringbuf::HeapRb;
+# use ringbuf::{LocalRb, storage::Static, prelude::*};
 # fn main() {
-let target = HeapRb::<i32>::new(8);
-let (mut prod, mut cons) = target.split();
+let mut rb = LocalRb::<Static<i32, 8>>::default();
 
-assert_eq!(prod.push_iter(&mut (0..8)), 8);
+assert_eq!(rb.push_iter(&mut (0..8)), 8);
 
-assert_eq!(cons.skip(4), 4);
-assert_eq!(cons.skip(8), 4);
-assert_eq!(cons.skip(8), 0);
+assert_eq!(rb.skip(4), 4);
+assert_eq!(rb.skip(8), 4);
+assert_eq!(rb.skip(8), 0);
 # }
 ```
 "##
@@ -242,7 +241,7 @@ impl<R: Deref> Observer for Wrap<R>
 where
     R::Target: RawRb + Sized,
 {
-    type Item = <R::Target as RawStorage>::Item;
+    type Item = <R::Target as RawBuffer>::Item;
     type Raw = R::Target;
     fn as_raw(&self) -> &Self::Raw {
         &self.raw
