@@ -16,6 +16,9 @@ pub mod ring_buffer;
 pub mod storage;
 mod utils;
 
+#[cfg(test)]
+mod tests;
+
 pub use consumer::Consumer;
 pub use observer::Observer;
 pub use producer::Producer;

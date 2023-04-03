@@ -127,7 +127,7 @@ pub trait Consumer: Observer {
     #[cfg_attr(
         feature = "alloc",
         doc = r##"
-```rust
+```ignore
 # extern crate ringbuf;
 # use ringbuf::HeapRb;
 # fn main() {
