@@ -4,6 +4,8 @@ use core::{
     cell::UnsafeCell, marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, ops::Range, slice,
 };
 
+use crate::raw::RawStorage;
+
 /// Abstract storage for the ring buffer.
 ///
 /// Storage items must be stored as a contiguous array.
@@ -121,14 +123,14 @@ unsafe impl<T> Storage for Vec<MaybeUninit<T>> {
 }
 
 /// Wrapper for storage that provides multiple write access to it.
-pub(crate) struct SharedStorage<S: Storage> {
+pub struct Shared<S: Storage> {
     internal: S::Internal,
     _p: PhantomData<S::Item>,
 }
 
-unsafe impl<S: Storage> Sync for SharedStorage<S> where S::Item: Send {}
+unsafe impl<S: Storage> Sync for Shared<S> where S::Item: Send {}
 
-impl<S: Storage> SharedStorage<S> {
+impl<S: Storage> Shared<S> {
     /// Create new storage.
     ///
     /// *Panics if storage is empty.*
@@ -141,7 +143,7 @@ impl<S: Storage> SharedStorage<S> {
         }
     }
 
-    /// Get the length of the storage.
+    /// Get total length of the storage.
     #[inline]
     pub fn len(&self) -> NonZeroUsize {
         unsafe { NonZeroUsize::new_unchecked(S::len(&self.internal)) }
@@ -151,9 +153,9 @@ impl<S: Storage> SharedStorage<S> {
     ///
     /// # Safety
     ///
-    /// There only single reference to any item allowed to exist at the time.
+    /// Slices with overlapping lifetimes must not overlap.
     #[allow(clippy::mut_from_ref)]
-    pub unsafe fn index_mut(&self, range: Range<usize>) -> &mut [MaybeUninit<S::Item>] {
+    pub unsafe fn slice(&self, range: Range<usize>) -> &mut [MaybeUninit<S::Item>] {
         let ptr = S::as_mut_ptr(&self.internal);
         slice::from_raw_parts_mut(ptr.add(range.start), range.len())
     }
@@ -181,4 +183,20 @@ pub trait StoredRb {
     ///
     /// Initialized contents of the storage must be properly dropped.
     unsafe fn into_raw_parts(self) -> (Self::Storage, usize, usize);
+
+    fn storage(&self) -> &Shared<Self::Storage>;
+}
+
+impl<R: StoredRb> RawStorage for R {
+    type Item = <R::Storage as Storage>::Item;
+
+    #[inline]
+    fn capacity(&self) -> NonZeroUsize {
+        self.storage().len()
+    }
+
+    #[inline]
+    unsafe fn slice(&self, range: Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
+        self.storage().slice(range)
+    }
 }

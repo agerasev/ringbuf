@@ -1,4 +1,4 @@
-use crate::{raw::RawProducer, utils::write_slice, Observer};
+use crate::{raw::RawRb, utils::write_slice, Observer};
 use core::mem::MaybeUninit;
 
 /// Producer part of ring buffer.
@@ -11,10 +11,7 @@ use core::mem::MaybeUninit;
 /// + In immediate mode removed and inserted items are automatically synchronized with the other end.
 /// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
 ///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
-pub trait Producer: Observer
-where
-    Self::Raw: RawProducer,
-{
+pub trait Producer: Observer {
     /// Provides a direct access to the ring buffer vacant memory.
     ///
     /// Returns a pair of slices of uninitialized memory, the second one may be empty.

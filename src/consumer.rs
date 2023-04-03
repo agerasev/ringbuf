@@ -1,5 +1,5 @@
 use crate::{
-    raw::RawConsumer,
+    raw::RawRb,
     utils::{slice_assume_init_mut, slice_assume_init_ref},
     Observer,
 };
@@ -15,10 +15,7 @@ use core::{cmp, iter::Chain, iter::ExactSizeIterator, mem::MaybeUninit, slice};
 /// + In immediate mode removed and inserted items are automatically synchronized with the other end.
 /// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
 ///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
-pub trait Consumer: Observer
-where
-    Self::Raw: RawConsumer,
-{
+pub trait Consumer: Observer {
     /// Provides a direct access to the ring buffer occupied memory.
     /// The difference from [`Self::as_slices`] is that this method provides slices of [`MaybeUninit`], so items may be moved out of slices.  
     ///
@@ -161,13 +158,13 @@ assert_eq!(cons.skip(8), 0);
 }
 
 /// An iterator that removes items from the ring buffer.
-pub struct PopIter<'a, R: RawConsumer> {
+pub struct PopIter<'a, R: RawRb> {
     target: &'a R,
     slices: (&'a [MaybeUninit<R::Item>], &'a [MaybeUninit<R::Item>]),
     initial_len: usize,
 }
 
-impl<'a, R: RawConsumer> PopIter<'a, R> {
+impl<'a, R: RawRb> PopIter<'a, R> {
     unsafe fn new(target: &'a R) -> Self {
         let slices = unsafe { target.occupied_slices() };
         Self {
@@ -178,7 +175,7 @@ impl<'a, R: RawConsumer> PopIter<'a, R> {
     }
 }
 
-impl<'a, R: RawConsumer> Iterator for PopIter<'a, R> {
+impl<'a, R: RawRb> Iterator for PopIter<'a, R> {
     type Item = R::Item;
     #[inline]
     fn next(&mut self) -> Option<R::Item> {
@@ -201,13 +198,13 @@ impl<'a, R: RawConsumer> Iterator for PopIter<'a, R> {
     }
 }
 
-impl<'a, R: RawConsumer> ExactSizeIterator for PopIter<'a, R> {
+impl<'a, R: RawRb> ExactSizeIterator for PopIter<'a, R> {
     fn len(&self) -> usize {
         self.slices.0.len() + self.slices.1.len()
     }
 }
 
-impl<'a, R: RawConsumer> Drop for PopIter<'a, R> {
+impl<'a, R: RawRb> Drop for PopIter<'a, R> {
     fn drop(&mut self) {
         unsafe { self.target.move_read_end(self.initial_len - self.len()) };
     }
@@ -217,11 +214,10 @@ impl<'a, R: RawConsumer> Drop for PopIter<'a, R> {
 ///
 /// *Please do not rely on actual type, it may change in future.*
 #[allow(type_alias_bounds)]
-pub type Iter<'a, R: RawConsumer> = Chain<slice::Iter<'a, R::Item>, slice::Iter<'a, R::Item>>;
+pub type Iter<'a, R: RawRb> = Chain<slice::Iter<'a, R::Item>, slice::Iter<'a, R::Item>>;
 
 /// Mutable iterator over ring buffer contents.
 ///
 /// *Please do not rely on actual type, it may change in future.*
 #[allow(type_alias_bounds)]
-pub type IterMut<'a, R: RawConsumer> =
-    Chain<slice::IterMut<'a, R::Item>, slice::IterMut<'a, R::Item>>;
+pub type IterMut<'a, R: RawRb> = Chain<slice::IterMut<'a, R::Item>, slice::IterMut<'a, R::Item>>;

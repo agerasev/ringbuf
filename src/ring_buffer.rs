@@ -1,7 +1,4 @@
-use crate::{
-    raw::{RawConsumer, RawProducer},
-    Consumer, Producer,
-};
+use crate::{Consumer, Producer};
 
 /// An abstract ring buffer.
 ///
@@ -12,10 +9,7 @@ use crate::{
 /// There are `push*_overwrite` methods that cannot be used from [`Producer`].
 ///
 /// The ring buffer can be guarded with mutex or other synchronization primitive and be used from different threads without splitting (but now only in blocking mode, obviously).
-pub trait RingBuffer: Consumer + Producer
-where
-    Self::Raw: RawConsumer + RawProducer,
-{
+pub trait RingBuffer: Consumer + Producer {
     /// Pushes an item to the ring buffer overwriting the latest item if the buffer is full.
     ///
     /// Returns overwritten item if overwriting took place.

@@ -1,16 +1,11 @@
 use crate::storage::StoredRb;
 
 use super::{
-    raw::{ranges, RawConsumer, RawProducer, RawRb},
-    storage::{SharedStorage, Storage},
+    raw::RawRb,
+    storage::{Shared, Storage},
     Consumer, Observer, Producer, RingBuffer,
 };
-use core::{
-    cell::Cell,
-    mem::{ManuallyDrop, MaybeUninit},
-    num::NonZeroUsize,
-    ptr,
-};
+use core::{cell::Cell, mem::ManuallyDrop, ptr};
 
 /// Ring buffer for using in single thread.
 ///
@@ -38,35 +33,12 @@ thread::spawn(move || {
 "##
 )]
 pub struct LocalRb<S: Storage> {
-    storage: SharedStorage<S>,
+    storage: Shared<S>,
     read: Cell<usize>,
     write: Cell<usize>,
 }
 
 impl<S: Storage> RawRb for LocalRb<S> {
-    type Item = S::Item;
-
-    #[inline]
-    unsafe fn slices(
-        &self,
-        read: usize,
-        write: usize,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    ) {
-        let (first, second) = ranges(<Self as RawRb>::capacity(self), read, write);
-        (
-            self.storage.index_mut(first),
-            self.storage.index_mut(second),
-        )
-    }
-
-    #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.storage.len()
-    }
-
     #[inline]
     fn read_end(&self) -> usize {
         self.read.get()
@@ -76,16 +48,12 @@ impl<S: Storage> RawRb for LocalRb<S> {
     fn write_end(&self) -> usize {
         self.write.get()
     }
-}
 
-impl<S: Storage> RawConsumer for LocalRb<S> {
     #[inline]
     unsafe fn set_read_end(&self, value: usize) {
         self.read.set(value);
     }
-}
 
-impl<S: Storage> RawProducer for LocalRb<S> {
     #[inline]
     unsafe fn set_write_end(&self, value: usize) {
         self.write.set(value);
@@ -119,7 +87,7 @@ impl<S: Storage> StoredRb for LocalRb<S> {
 
     unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
         Self {
-            storage: SharedStorage::new(storage),
+            storage: Shared::new(storage),
             read: Cell::new(read),
             write: Cell::new(write),
         }
@@ -129,5 +97,10 @@ impl<S: Storage> StoredRb for LocalRb<S> {
         let (read, write) = (self.read_end(), self.write_end());
         let self_ = ManuallyDrop::new(self);
         (ptr::read(&self_.storage).into_inner(), read, write)
+    }
+
+    #[inline]
+    fn storage(&self) -> &Shared<Self::Storage> {
+        &self.storage
     }
 }

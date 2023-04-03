@@ -17,6 +17,51 @@ pub fn ranges(capacity: NonZeroUsize, begin: usize, end: usize) -> (Range<usize>
     }
 }
 
+pub trait RawStorage {
+    type Item: Sized;
+
+    /// Capacity of the ring buffer.
+    ///
+    /// It is constant during the whole ring buffer lifetime.
+    fn capacity(&self) -> NonZeroUsize;
+
+    /// Modulus for pointers to item in ring buffer storage.
+    ///
+    /// Equals to `2 * capacity`.
+    #[inline]
+    fn modulus(&self) -> NonZeroUsize {
+        unsafe { NonZeroUsize::new_unchecked(2 * self.capacity().get()) }
+    }
+
+    /// Get mutable slice of ring buffer data in specified `range`.
+    ///
+    /// # Safety
+    ///
+    /// `range` must be a subset of `0..capacity`.
+    ///
+    /// Slices with overlapping lifetimes must not overlap.
+    #[allow(clippy::mut_from_ref)]
+    unsafe fn slice(&self, range: Range<usize>) -> &mut [MaybeUninit<Self::Item>];
+
+    /// Returns part of underlying raw ring buffer memory as slices.
+    ///
+    /// # Safety
+    ///
+    /// Only non-overlapping slices allowed to exist at the same time.
+    #[inline]
+    unsafe fn slices(
+        &self,
+        begin: usize,
+        end: usize,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    ) {
+        let (first, second) = ranges(Self::capacity(self), begin, end);
+        (self.slice(first), self.slice(second))
+    }
+}
+
 /// Basic ring buffer functionality.
 ///
 /// Provides an access to raw underlying memory and `read`/`write` counters.
@@ -33,48 +78,12 @@ pub fn ranges(capacity: NonZeroUsize, begin: usize, end: usize) -> (Range<usize>
 /// It allows us to distinguish situations when the buffer is empty (`read == write`) and when the buffer is full (`write - read` modulo `2 * capacity` equals to `capacity`)
 /// without using the space for an extra element in container.
 /// And obviously we cannot store more than `capacity` items in the buffer, so `write - read` modulo `2 * capacity` is not allowed to be greater than `capacity`.
-pub trait RawRb {
-    type Item: Sized;
-
+pub trait RawRb: RawStorage {
     /// Read end position.
     fn read_end(&self) -> usize;
 
     /// Write ends position.
     fn write_end(&self) -> usize;
-
-    /// Returns part of underlying raw ring buffer memory as slices.
-    ///
-    /// For more information see [`SharedStorage::as_mut_slices`](`crate::ring_buffer::storage::SharedStorage::as_mut_slices`).
-    ///
-    /// # Safety
-    ///
-    /// Only non-overlapping slices allowed to exist at the same time.
-    ///
-    /// Modifications of this data must properly update `begin` and `end` positions.
-    ///
-    /// *Accessing raw data is extremely unsafe.*
-    /// It is recommended to use [`Consumer::as_slices`](`crate::Consumer::as_slices`) and [`Producer::free_space_as_slices`](`crate::Producer::free_space_as_slices`) instead.
-    unsafe fn slices(
-        &self,
-        begin: usize,
-        end: usize,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    );
-
-    /// Capacity of the ring buffer.
-    ///
-    /// It is constant during the whole ring buffer lifetime.
-    fn capacity(&self) -> NonZeroUsize;
-
-    /// Modulus for `read` and `write` position values.
-    ///
-    /// Equals to `2 * len`.
-    #[inline]
-    fn modulus(&self) -> NonZeroUsize {
-        unsafe { NonZeroUsize::new_unchecked(2 * self.capacity().get()) }
-    }
 
     /// The number of items stored in the buffer at the moment.
     fn occupied_len(&self) -> usize {
@@ -97,14 +106,7 @@ pub trait RawRb {
     fn is_full(&self) -> bool {
         self.vacant_len() == 0
     }
-}
 
-/// Ring buffer read end.
-///
-/// Provides access to occupied memory and mechanism of item extraction.
-///
-/// *It is recommended not to use this trait directly. Use [`Producer`](`crate::Producer`) and [`Consumer`](`crate::Consumer`) instead.*
-pub trait RawConsumer: RawRb {
     /// Sets the new **read** position.
     ///
     /// # Safety
@@ -175,14 +177,7 @@ pub trait RawConsumer: RawRb {
         self.move_read_end(count);
         count
     }
-}
 
-/// Ring buffer write end.
-///
-/// Provides access to vacant memory and mechanism of item insertion.
-///
-/// *It is recommended not to use this trait directly. Use [`Producer`](`crate::Producer`) and [`Consumer`](`crate::Consumer`) instead.*
-pub trait RawProducer: RawRb {
     /// Sets the new **write** position.
     ///
     /// # Safety

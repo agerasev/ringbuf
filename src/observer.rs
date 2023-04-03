@@ -1,4 +1,4 @@
-use crate::raw::RawRb;
+use crate::raw::{RawRb, RawStorage};
 
 pub trait Observer: Sized {
     type Item: Sized;
