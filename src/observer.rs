@@ -1,6 +1,6 @@
 use crate::raw::RawRb;
 
-pub trait Observer {
+pub trait Observer: Sized {
     type Item: Sized;
 
     type Raw: RawRb<Item = Self::Item>;

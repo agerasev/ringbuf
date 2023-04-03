@@ -1,3 +1,5 @@
+use crate::storage::StoredRb;
+
 use super::{
     raw::{ranges, RawConsumer, RawProducer, RawRb},
     storage::{SharedStorage, Storage},
@@ -112,14 +114,10 @@ impl<S: Storage> Drop for LocalRb<S> {
     }
 }
 
-impl<S: Storage> LocalRb<S> {
-    /// Constructs ring buffer from container and counters.
-    ///
-    /// # Safety
-    ///
-    /// The items in container inside `read..write` range must be initialized, items outside this range must be uninitialized.
-    /// `read` and `write` positions must be valid (see [`RbBase`](`crate::ring_buffer::RbBase`)).
-    pub unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
+impl<S: Storage> StoredRb for LocalRb<S> {
+    type Storage = S;
+
+    unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
         Self {
             storage: SharedStorage::new(storage),
             read: Cell::new(read),
@@ -127,12 +125,7 @@ impl<S: Storage> LocalRb<S> {
         }
     }
 
-    /// Destructures ring buffer into underlying container and `read` and `write` counters.
-    ///
-    /// # Safety
-    ///
-    /// Initialized contents of the container must be properly dropped.
-    pub unsafe fn into_raw_parts(self) -> (S, usize, usize) {
+    unsafe fn into_raw_parts(self) -> (S, usize, usize) {
         let (read, write) = (self.read_end(), self.write_end());
         let self_ = ManuallyDrop::new(self);
         (ptr::read(&self_.storage).into_inner(), read, write)

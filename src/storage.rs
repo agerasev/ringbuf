@@ -4,37 +4,42 @@ use core::{
     cell::UnsafeCell, marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, ops::Range, slice,
 };
 
-/// Abstract container for the ring buffer.
+/// Abstract storage for the ring buffer.
 ///
 /// Storage items must be stored as a contiguous array.
 ///
 /// # Safety
 ///
 /// *[`Self::len`]/[`Self::is_empty`] must always return the same value.*
-///
-/// *Storage must not cause data race on concurrent [`Self::as_mut_slice`]/[`Self::as_mut_ptr`] calls.*
 pub unsafe trait Storage {
     type Item: Sized;
 
-    /// Internal representation of the container.
+    /// Internal representation of the storage.
     ///
     /// *Must not be aliased with its content.*
     type Internal;
 
-    /// Transform container to internal representation.
+    /// Transform storage to internal representation.
     fn into_internal(self) -> Self::Internal;
-    /// Restore container from internal representation.
+    /// Restore storage from internal representation.
     ///
     /// # Safety
     ///
     /// `this` must be a valid internal representation.
     unsafe fn from_internal(this: Self::Internal) -> Self;
 
-    /// Return pointer to the beginning of the container items.
+    /// Return pointer to the beginning of the storage items.
     fn as_mut_ptr(this: &Self::Internal) -> *mut MaybeUninit<Self::Item>;
 
-    /// Length of the container.
+    /// Length of the storage.
     fn len(this: &Self::Internal) -> usize;
+
+    fn into_rb<R: StoredRb<Storage = Self>>(self) -> R
+    where
+        Self: Sized,
+    {
+        unsafe { R::from_raw_parts(self, 0, 0) }
+    }
 }
 
 unsafe impl<'a, T> Storage for &'a mut [MaybeUninit<T>] {
@@ -105,9 +110,17 @@ unsafe impl<T> Storage for Vec<MaybeUninit<T>> {
     fn len(this: &Self::Internal) -> usize {
         this.len()
     }
+
+    fn into_rb<R: StoredRb<Storage = Self>>(mut self) -> R
+    where
+        Self: Sized,
+    {
+        self.resize_with(self.capacity(), MaybeUninit::uninit);
+        unsafe { R::from_raw_parts(self, 0, 0) }
+    }
 }
 
-/// Wrapper for container that provides multiple write access to it.
+/// Wrapper for storage that provides multiple write access to it.
 pub(crate) struct SharedStorage<S: Storage> {
     internal: S::Internal,
     _p: PhantomData<S::Item>,
@@ -118,9 +131,9 @@ unsafe impl<S: Storage> Sync for SharedStorage<S> where S::Item: Send {}
 impl<S: Storage> SharedStorage<S> {
     /// Create new storage.
     ///
-    /// *Panics if container is empty.*
-    pub fn new(container: S) -> Self {
-        let internal = container.into_internal();
+    /// *Panics if storage is empty.*
+    pub fn new(storage: S) -> Self {
+        let internal = storage.into_internal();
         assert!(S::len(&internal) > 0);
         Self {
             internal,
@@ -128,7 +141,7 @@ impl<S: Storage> SharedStorage<S> {
         }
     }
 
-    /// Get the length of the container.
+    /// Get the length of the storage.
     #[inline]
     pub fn len(&self) -> NonZeroUsize {
         unsafe { NonZeroUsize::new_unchecked(S::len(&self.internal)) }
@@ -145,8 +158,27 @@ impl<S: Storage> SharedStorage<S> {
         slice::from_raw_parts_mut(ptr.add(range.start), range.len())
     }
 
-    /// Returns underlying container.
+    /// Returns underlying storage.
     pub fn into_inner(self) -> S {
         unsafe { S::from_internal(self.internal) }
     }
+}
+
+pub trait StoredRb {
+    type Storage: Storage;
+
+    /// Constructs ring buffer from storage and counters.
+    ///
+    /// # Safety
+    ///
+    /// The items in storage inside `read..write` range must be initialized, items outside this range must be uninitialized.
+    /// `read` and `write` positions must be valid (see [`RbBase`](`crate::ring_buffer::RbBase`)).
+    unsafe fn from_raw_parts(storage: Self::Storage, read: usize, write: usize) -> Self;
+
+    /// Destructures ring buffer into underlying storage and `read` and `write` counters.
+    ///
+    /// # Safety
+    ///
+    /// Initialized contents of the storage must be properly dropped.
+    unsafe fn into_raw_parts(self) -> (Self::Storage, usize, usize);
 }

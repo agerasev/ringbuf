@@ -7,6 +7,7 @@ extern crate alloc;
 extern crate std;
 
 pub mod consumer;
+mod init;
 pub mod local;
 pub mod observer;
 pub mod producer;
