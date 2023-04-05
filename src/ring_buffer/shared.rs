@@ -59,26 +59,26 @@ impl<T, C: Container<T>> RbBase<T> for SharedRb<T, C> {
 
     #[inline]
     fn head(&self) -> usize {
-        self.head.load(Ordering::Acquire)
+        self.head.load(Ordering::Relaxed)
     }
 
     #[inline]
     fn tail(&self) -> usize {
-        self.tail.load(Ordering::Acquire)
+        self.tail.load(Ordering::Relaxed)
     }
 }
 
 impl<T, C: Container<T>> RbRead<T> for SharedRb<T, C> {
     #[inline]
     unsafe fn set_head(&self, value: usize) {
-        self.head.store(value, Ordering::Release)
+        self.head.store(value, Ordering::Relaxed)
     }
 }
 
 impl<T, C: Container<T>> RbWrite<T> for SharedRb<T, C> {
     #[inline]
     unsafe fn set_tail(&self, value: usize) {
-        self.tail.store(value, Ordering::Release)
+        self.tail.store(value, Ordering::Relaxed)
     }
 }
 

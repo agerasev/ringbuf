@@ -3,26 +3,28 @@ use std::{io::Read, thread, time::Duration};
 use ringbuf::HeapRb;
 
 fn main() {
-    let buf = HeapRb::<u8>::new(10);
+for i in 0..64 {
+    let buf = HeapRb::<u8>::new(64);
     let (mut prod, mut cons) = buf.split();
 
-    let smsg = "The quick brown fox jumps over the lazy dog";
+    let smsg = "The quick brown fox jumps over the lazy dog".repeat(1024 * 1024);
 
+    let msg = smsg.clone();
     let pjh = thread::spawn(move || {
-        println!("-> sending message: '{}'", smsg);
+        println!("-> sending message: '{}...'", &msg[..16]);
 
-        let zero = [0];
-        let mut bytes = smsg.as_bytes().chain(&zero[..]);
+        let mut bytes = msg.as_bytes().chain(&[0][..]);
         loop {
             if prod.is_full() {
-                println!("-> buffer is full, waiting");
-                thread::sleep(Duration::from_millis(1));
+                // Spin lock
+                //println!("-> buffer is full, waiting");
+                //thread::sleep(Duration::from_millis(1));
             } else {
                 let n = prod.read_from(&mut bytes, None).unwrap();
                 if n == 0 {
                     break;
                 }
-                println!("-> {} bytes sent", n);
+                //println!("-> {} bytes sent", n);
             }
         }
 
@@ -38,18 +40,19 @@ fn main() {
                 if bytes.ends_with(&[0]) {
                     break;
                 } else {
-                    println!("<- buffer is empty, waiting");
-                    thread::sleep(Duration::from_millis(1));
+                    // Spin lock
+                    //println!("<- buffer is empty, waiting");
+                    //thread::sleep(Duration::from_millis(1));
                 }
             } else {
                 let n = cons.write_into(&mut bytes, None).unwrap();
-                println!("<- {} bytes received", n);
+                //println!("<- {} bytes received", n);
             }
         }
 
         assert_eq!(bytes.pop().unwrap(), 0);
         let msg = String::from_utf8(bytes).unwrap();
-        println!("<- message received: '{}'", msg);
+        println!("<- message received: '{} ...'", &msg[..16]);
 
         msg
     });
@@ -57,5 +60,7 @@ fn main() {
     pjh.join().unwrap();
     let rmsg = cjh.join().unwrap();
 
-    assert_eq!(smsg, rmsg);
+    assert!(smsg == rmsg);
+    println!("{} done", i);
+}
 }
