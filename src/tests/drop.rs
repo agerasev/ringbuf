@@ -1,4 +1,4 @@
-use crate::{Consumer, HeapRb};
+use crate::{prelude::*, storage::Static, LocalRb};
 use alloc::collections::BTreeSet;
 use core::cell::RefCell;
 
@@ -29,30 +29,30 @@ impl<'a> Drop for Dropper<'a> {
 fn single() {
     let set = RefCell::new(BTreeSet::new());
 
-    let cap = 3;
-    let buf = HeapRb::new(cap);
+    let mut rb = LocalRb::<Static<Dropper, 3>>::default();
 
     assert_eq!(set.borrow().len(), 0);
 
     {
-        let (mut prod, mut cons) = buf.split();
+        let (mut prod, mut cons) = (&mut rb).split();
 
-        prod.push(Dropper::new(&set, 1)).unwrap();
+        prod.try_push(Dropper::new(&set, 1)).unwrap();
         assert_eq!(set.borrow().len(), 1);
-        prod.push(Dropper::new(&set, 2)).unwrap();
+        prod.try_push(Dropper::new(&set, 2)).unwrap();
         assert_eq!(set.borrow().len(), 2);
-        prod.push(Dropper::new(&set, 3)).unwrap();
+        prod.try_push(Dropper::new(&set, 3)).unwrap();
         assert_eq!(set.borrow().len(), 3);
 
-        cons.pop().unwrap();
+        cons.try_pop().unwrap();
         assert_eq!(set.borrow().len(), 2);
-        cons.pop().unwrap();
+        cons.try_pop().unwrap();
         assert_eq!(set.borrow().len(), 1);
 
-        prod.push(Dropper::new(&set, 4)).unwrap();
+        prod.try_push(Dropper::new(&set, 4)).unwrap();
         assert_eq!(set.borrow().len(), 2);
     }
 
+    drop(rb);
     assert_eq!(set.borrow().len(), 0);
 }
 
@@ -61,24 +61,23 @@ fn single() {
 fn transaction() {
     let set = RefCell::new(BTreeSet::new());
 
-    let cap = 5;
-    let buf = HeapRb::new(cap);
+    let mut rb = LocalRb::<Static<Dropper, 5>>::default();
 
     assert_eq!(set.borrow().len(), 0);
     {
-        let (mut prod, mut cons) = buf.split();
+        let (mut prod, mut cons) = (&mut rb).split();
         let mut id = 0;
         let mut cnt = 0;
-        let assert_cnt = |cnt, n, cons: &Consumer<_, _>, set: &RefCell<BTreeSet<_>>| {
+        fn assert_cnt(cnt: usize, n: usize, cons: &impl Consumer, set: &RefCell<BTreeSet<i32>>) {
             assert_eq!(cnt, n);
-            assert_eq!(cnt, cons.len());
+            assert_eq!(cnt, cons.occupied_len());
             assert_eq!(cnt, set.borrow().len());
-        };
+        }
 
         for _ in 0..4 {
             id += 1;
             cnt += 1;
-            prod.push(Dropper::new(&set, id)).unwrap();
+            prod.try_push(Dropper::new(&set, id)).unwrap();
         }
         assert_cnt(cnt, 4, &cons, &set);
 
@@ -90,7 +89,7 @@ fn transaction() {
         while !prod.is_full() {
             id += 1;
             cnt += 1;
-            prod.push(Dropper::new(&set, id)).unwrap();
+            prod.try_push(Dropper::new(&set, id)).unwrap();
         }
         assert_cnt(cnt, 5, &cons, &set);
 
@@ -102,10 +101,11 @@ fn transaction() {
         while !prod.is_full() {
             id += 1;
             cnt += 1;
-            prod.push(Dropper::new(&set, id)).unwrap();
+            prod.try_push(Dropper::new(&set, id)).unwrap();
         }
         assert_cnt(cnt, 5, &cons, &set);
     }
 
+    drop(rb);
     assert_eq!(set.borrow().len(), 0);
 }

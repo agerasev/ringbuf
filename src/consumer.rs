@@ -118,9 +118,9 @@ pub trait Consumer: Observer {
         left.iter_mut().chain(right.iter_mut())
     }
 
-    /// Removes at most `n` and at least `min(n, Self::len())` items from the buffer and safely drops them.
+    /// Removes at most `count` and at least `min(count, Self::len())` items from the buffer and safely drops them.
     ///
-    /// If there is no concurring producer activity then exactly `min(n, Self::len())` items are removed.
+    /// If there is no concurring producer activity then exactly `min(count, Self::len())` items are removed.
     ///
     /// Returns the number of deleted items.
     ///
@@ -137,7 +137,7 @@ assert_eq!(rb.push_iter(&mut (0..8)), 8);
 
 assert_eq!(rb.skip(4), 4);
 assert_eq!(rb.skip(8), 4);
-assert_eq!(rb.skip(8), 0);
+assert_eq!(rb.skip(4), 0);
 # }
 ```
 "##
