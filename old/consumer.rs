@@ -57,36 +57,6 @@ where
     }
 }
 
-impl<T: Copy, R: RbRef> Consumer<T, R>
-where
-    R::Rb: RbRead<T>,
-{
-    /// Removes first items from the ring buffer and writes them into a slice.
-    /// Elements must be [`Copy`].
-    ///
-    /// Returns count of items been removed from the ring buffer.
-    pub fn pop_slice(&mut self, elems: &mut [T]) -> usize {
-        let (left, right) = unsafe { self.as_uninit_slices() };
-        let count = if elems.len() < left.len() {
-            unsafe { write_uninit_slice(elems, &left[..elems.len()]) };
-            elems.len()
-        } else {
-            let (left_elems, elems) = elems.split_at_mut(left.len());
-            unsafe { write_uninit_slice(left_elems, left) };
-            left.len()
-                + if elems.len() < right.len() {
-                    unsafe { write_uninit_slice(elems, &right[..elems.len()]) };
-                    elems.len()
-                } else {
-                    unsafe { write_uninit_slice(&mut elems[..right.len()], right) };
-                    right.len()
-                }
-        };
-        unsafe { self.advance(count) };
-        count
-    }
-}
-
 /// Postponed consumer.
 pub type PostponedConsumer<T, R> = Consumer<T, RbWrap<RbReadCache<T, R>>>;
 

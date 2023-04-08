@@ -1,6 +1,6 @@
 use crate::{
     raw::{RawBuffer, RawRb},
-    utils::{slice_assume_init_mut, slice_assume_init_ref},
+    utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
     Observer,
 };
 use core::{cmp, iter::Chain, iter::ExactSizeIterator, mem::MaybeUninit, ops::Deref, slice};
@@ -91,6 +91,33 @@ pub trait Consumer: Observer {
         } else {
             None
         }
+    }
+
+    /// Removes items from the ring buffer and writes them into a slice.
+    ///
+    /// Returns count of items been removed.
+    fn pop_slice(&mut self, elems: &mut [Self::Item]) -> usize
+    where
+        Self::Item: Copy,
+    {
+        let (left, right) = self.occupied_slices();
+        let count = if elems.len() < left.len() {
+            unsafe { write_uninit_slice(elems, left.get_unchecked(..elems.len())) };
+            elems.len()
+        } else {
+            let (left_elems, elems) = elems.split_at_mut(left.len());
+            unsafe { write_uninit_slice(left_elems, left) };
+            left.len()
+                + if elems.len() < right.len() {
+                    unsafe { write_uninit_slice(elems, right.get_unchecked(..elems.len())) };
+                    elems.len()
+                } else {
+                    unsafe { write_uninit_slice(elems.get_unchecked_mut(..right.len()), right) };
+                    right.len()
+                }
+        };
+        unsafe { self.advance_read(count) };
+        count
     }
 
     /// Returns an iterator that removes items one by one from the ring buffer.

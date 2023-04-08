@@ -1,9 +1,9 @@
-use crate::{transfer, HeapRb, Rb};
+use crate::{prelude::*, storage::Static, transfer, LocalRb};
 
 #[test]
 fn push_pop_slice() {
-    let buf = HeapRb::<i32>::new(4);
-    let (mut prod, mut cons) = buf.split();
+    let mut buf = LocalRb::<Static<i32, 4>>::default();
+    let (mut prod, mut cons) = (&mut buf).split();
 
     let mut tmp = [0; 5];
 
@@ -27,10 +27,10 @@ fn push_pop_slice() {
 
 #[test]
 fn move_slice() {
-    let buf0 = HeapRb::<i32>::new(4);
-    let buf1 = HeapRb::<i32>::new(4);
-    let (mut prod0, mut cons0) = buf0.split();
-    let (mut prod1, mut cons1) = buf1.split();
+    let mut rb0 = LocalRb::<Static<i32, 4>>::default();
+    let mut rb1 = LocalRb::<Static<i32, 4>>::default();
+    let (mut prod0, mut cons0) = (&mut rb0).split();
+    let (mut prod1, mut cons1) = (&mut rb1).split();
 
     let mut tmp = [0; 5];
 
@@ -61,10 +61,10 @@ fn move_slice() {
 
 #[test]
 fn move_slice_count() {
-    let buf0 = HeapRb::<i32>::new(4);
-    let buf1 = HeapRb::<i32>::new(4);
-    let (mut prod0, mut cons0) = buf0.split();
-    let (mut prod1, mut cons1) = buf1.split();
+    let mut rb0 = LocalRb::<Static<i32, 4>>::default();
+    let mut rb1 = LocalRb::<Static<i32, 4>>::default();
+    let (mut prod0, mut cons0) = (&mut rb0).split();
+    let (mut prod1, mut cons1) = (&mut rb1).split();
 
     let mut tmp = [0; 5];
 
@@ -93,20 +93,4 @@ fn move_slice_count() {
 
     assert_eq!(cons1.pop_slice(&mut tmp), 4);
     assert_eq!(tmp[0..4], [6, 7, 8, 9]);
-}
-
-#[test]
-#[should_panic]
-fn push_slice_panic() {
-    let mut rb = HeapRb::<i32>::new(2);
-    rb.push_slice(&[1, 2, 3]);
-}
-
-#[test]
-#[should_panic]
-fn pop_slice_panic() {
-    let mut rb = HeapRb::<i32>::new(2);
-    rb.push(1).unwrap();
-    let mut tmp = [0; 2];
-    rb.pop_slice(&mut tmp);
 }

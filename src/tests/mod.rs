@@ -5,3 +5,4 @@ mod drop;
 mod overwrite;
 #[cfg(feature = "alloc")]
 mod skip;
+mod slice;

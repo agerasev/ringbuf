@@ -89,7 +89,6 @@ pub trait Producer: Observer {
     }
 
     /// Appends items from slice to the ring buffer.
-    /// Elements must be [`Copy`].
     ///
     /// Returns count of items been appended to the ring buffer.
     fn push_slice(&mut self, elems: &[Self::Item]) -> usize

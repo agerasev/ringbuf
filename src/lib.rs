@@ -15,6 +15,7 @@ pub mod ring_buffer;
 pub mod shared;
 pub mod storage;
 pub mod stored;
+mod transfer;
 mod utils;
 
 #[cfg(test)]
@@ -26,6 +27,7 @@ pub use observer::Observer;
 pub use producer::Producer;
 pub use ring_buffer::{RingBuffer, Split};
 pub use shared::SharedRb;
+pub use transfer::transfer;
 
 pub mod prelude {
     #[cfg(feature = "alloc")]
