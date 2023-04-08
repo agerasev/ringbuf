@@ -31,6 +31,12 @@ pub use transfer::transfer;
 
 pub mod prelude {
     #[cfg(feature = "alloc")]
-    pub use super::stored::HeapRb;
-    pub use super::{stored::StaticRb, Consumer, Observer, Producer, RingBuffer, Split};
+    pub use crate::stored::HeapRb;
+    pub use crate::{
+        consumer::{ByteConsumer, Consumer},
+        observer::Observer,
+        producer::{ByteProducer, Producer},
+        ring_buffer::{RingBuffer, Split},
+        stored::StaticRb,
+    };
 }

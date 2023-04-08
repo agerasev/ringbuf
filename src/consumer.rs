@@ -4,6 +4,8 @@ use crate::{
     Observer,
 };
 use core::{cmp, iter::Chain, iter::ExactSizeIterator, mem::MaybeUninit, ops::Deref, slice};
+#[cfg(feature = "std")]
+use std::io::{self, Read, Write};
 
 /// Consumer part of ring buffer.
 ///
@@ -248,6 +250,30 @@ pub type Iter<'a, R: RawRb> = Chain<slice::Iter<'a, R::Item>, slice::Iter<'a, R:
 #[allow(type_alias_bounds)]
 pub type IterMut<'a, R: RawRb> = Chain<slice::IterMut<'a, R::Item>, slice::IterMut<'a, R::Item>>;
 
+pub trait ByteConsumer: Consumer<Item = u8> {
+    #[cfg(feature = "std")]
+    /// Removes at most first `count` bytes from the ring buffer and writes them into a [`Write`] instance.
+    /// If `count` is `None` then as much as possible bytes will be written.
+    ///
+    /// Returns `Ok(n)` if `write` succeeded. `n` is number of bytes been written.
+    /// `n == 0` means that either `write` returned zero or ring buffer is empty.
+    ///
+    /// If `write` is failed then original error is returned. In this case it is guaranteed that no items was written to the writer.
+    /// To achieve this we write only one contiguous slice at once. So this call may write less than `len` items even if the writer is ready to get more.
+    fn write_into<W: Write>(&mut self, writer: &mut W, count: Option<usize>) -> io::Result<usize> {
+        let (left, _) = self.occupied_slices();
+        let count = cmp::min(count.unwrap_or(left.len()), left.len());
+        let left_init = unsafe { slice_assume_init_ref(&left[..count]) };
+
+        let write_count = writer.write(left_init)?;
+        assert!(write_count <= count);
+        unsafe { self.advance_read(write_count) };
+        Ok(write_count)
+    }
+}
+
+impl<R: Consumer<Item = u8>> ByteConsumer for R {}
+
 pub struct Wrap<R> {
     raw: R,
 }
@@ -276,3 +302,18 @@ where
 }
 
 impl<R: Deref> Consumer for Wrap<R> where R::Target: RawRb + Sized {}
+
+#[cfg(feature = "std")]
+impl<R: Deref> Read for Wrap<R>
+where
+    R::Target: RawRb<Item = u8> + Sized,
+{
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        let n = self.pop_slice(buffer);
+        if n == 0 && !buffer.is_empty() {
+            Err(io::ErrorKind::WouldBlock.into())
+        } else {
+            Ok(n)
+        }
+    }
+}

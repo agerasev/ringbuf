@@ -1,8 +1,11 @@
 use crate::{
+    consumer::Consumer,
+    observer::Observer,
+    producer::Producer,
     raw::RawRb,
+    ring_buffer::RingBuffer,
     storage::{Shared, Storage},
     stored::StoredRb,
-    Consumer, Observer, Producer, RingBuffer,
 };
 use core::{cell::Cell, mem::ManuallyDrop, ptr};
 

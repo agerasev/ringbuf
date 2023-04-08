@@ -1,9 +1,16 @@
+#[cfg(feature = "std")]
+use crate::utils::slice_assume_init_mut;
 use crate::{
     raw::{RawBuffer, RawRb},
     utils::write_slice,
     Observer,
 };
 use core::{mem::MaybeUninit, ops::Deref};
+#[cfg(feature = "std")]
+use std::{
+    cmp,
+    io::{self, Read, Write},
+};
 
 /// Producer part of ring buffer.
 ///
@@ -116,6 +123,31 @@ pub trait Producer: Observer {
     }
 }
 
+pub trait ByteProducer: Producer<Item = u8> {
+    #[cfg(feature = "std")]
+    /// Reads at most `count` bytes from `Read` instance and appends them to the ring buffer.
+    /// If `count` is `None` then as much as possible bytes will be read.
+    ///
+    /// Returns `Ok(n)` if `read` succeeded. `n` is number of bytes been read.
+    /// `n == 0` means that either `read` returned zero or ring buffer is full.
+    ///
+    /// If `read` is failed then original error is returned. In this case it is guaranteed that no items was read from the reader.
+    /// To achieve this we read only one contiguous slice at once. So this call may read less than `remaining` items in the buffer even if the reader is ready to provide more.
+    fn read_from<R: Read>(&mut self, reader: &mut R, count: Option<usize>) -> io::Result<usize> {
+        let (left, _) = self.vacant_slices_mut();
+        let count = cmp::min(count.unwrap_or(left.len()), left.len());
+        let left_init = unsafe { slice_assume_init_mut(&mut left[..count]) };
+
+        let read_count = reader.read(left_init)?;
+        assert!(read_count <= count);
+        unsafe { self.advance_write(read_count) };
+        Ok(read_count)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<R: Producer<Item = u8>> ByteProducer for R {}
+
 pub struct Wrap<R> {
     raw: R,
 }
@@ -144,3 +176,35 @@ where
 }
 
 impl<R: Deref> Producer for Wrap<R> where R::Target: RawRb + Sized {}
+
+#[cfg(feature = "std")]
+impl<R: Deref> Write for Wrap<R>
+where
+    R::Target: RawRb<Item = u8> + Sized,
+{
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        let n = self.push_slice(buffer);
+        if n == 0 && !buffer.is_empty() {
+            Err(io::ErrorKind::WouldBlock.into())
+        } else {
+            Ok(n)
+        }
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<R: Deref> core::fmt::Write for Wrap<R>
+where
+    R::Target: RawRb<Item = u8> + Sized,
+{
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        let n = self.push_slice(s.as_bytes());
+        if n != s.len() {
+            Err(core::fmt::Error::default())
+        } else {
+            Ok(())
+        }
+    }
+}

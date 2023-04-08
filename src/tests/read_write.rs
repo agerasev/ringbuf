@@ -1,12 +1,12 @@
-use crate::HeapRb;
+use crate::{prelude::*, storage::Static, LocalRb};
 use std::io;
 
 #[test]
 fn from() {
-    let buf0 = HeapRb::<u8>::new(4);
-    let buf1 = HeapRb::<u8>::new(4);
-    let (mut prod0, mut cons0) = buf0.split();
-    let (mut prod1, mut cons1) = buf1.split();
+    let mut rb0 = LocalRb::<Static<u8, 4>>::default();
+    let mut rb1 = LocalRb::<Static<u8, 4>>::default();
+    let (mut prod0, mut cons0) = (&mut rb0).split();
+    let (mut prod1, mut cons1) = (&mut rb1).split();
 
     let mut tmp = [0; 5];
 
@@ -43,10 +43,10 @@ fn from() {
 
 #[test]
 fn into() {
-    let buf0 = HeapRb::<u8>::new(4);
-    let buf1 = HeapRb::<u8>::new(4);
-    let (mut prod0, mut cons0) = buf0.split();
-    let (mut prod1, mut cons1) = buf1.split();
+    let mut rb0 = LocalRb::<Static<u8, 4>>::default();
+    let mut rb1 = LocalRb::<Static<u8, 4>>::default();
+    let (mut prod0, mut cons0) = (&mut rb0).split();
+    let (mut prod1, mut cons1) = (&mut rb1).split();
 
     let mut tmp = [0; 5];
 
@@ -83,10 +83,10 @@ fn into() {
 
 #[test]
 fn count() {
-    let buf0 = HeapRb::<u8>::new(4);
-    let buf1 = HeapRb::<u8>::new(4);
-    let (mut prod0, mut cons0) = buf0.split();
-    let (mut prod1, mut cons1) = buf1.split();
+    let mut rb0 = LocalRb::<Static<u8, 4>>::default();
+    let mut rb1 = LocalRb::<Static<u8, 4>>::default();
+    let (mut prod0, mut cons0) = (&mut rb0).split();
+    let (mut prod1, mut cons1) = (&mut rb1).split();
 
     let mut tmp = [0; 5];
 
