@@ -9,11 +9,14 @@ use crate::{
 use alloc::{collections::TryReserveError, vec::Vec};
 use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Range};
 
-pub trait StoredRb: Sized {
+/// Ring buffer with an underlying storage.
+pub trait StoredRb {
     type Storage: Storage;
 
     fn storage(&self) -> &Shared<Self::Storage>;
+}
 
+pub trait OwningRb: StoredRb + Sized {
     /// Constructs ring buffer from storage and counters.
     ///
     /// # Safety
@@ -45,13 +48,13 @@ impl<R: StoredRb> RawBuffer for R {
 }
 
 /// Stack-allocated ring buffer.
-pub trait StaticRb: StoredRb {
+pub trait StaticRb: OwningRb {
     fn default() -> Self;
 }
 
 #[cfg(feature = "alloc")]
 /// Heap-allocated ring buffer.
-pub trait HeapRb: StoredRb {
+pub trait HeapRb: OwningRb {
     /// Creates a new instance of a ring buffer.
     ///
     /// *Panics if allocation failed or `capacity` is zero.*
@@ -63,14 +66,14 @@ pub trait HeapRb: StoredRb {
     fn try_new(capacity: usize) -> Result<Self, TryReserveError>;
 }
 
-impl<T, R: StoredRb<Storage = Static<T, N>>, const N: usize> StaticRb for R {
+impl<T, R: OwningRb<Storage = Static<T, N>>, const N: usize> StaticRb for R {
     fn default() -> Self {
         uninit_array().into_rb()
     }
 }
 
 #[cfg(feature = "alloc")]
-impl<T, R: StoredRb<Storage = Heap<T>>> HeapRb for R {
+impl<T, R: OwningRb<Storage = Heap<T>>> HeapRb for R {
     fn new(capacity: usize) -> Self {
         Self::try_new(capacity).unwrap()
     }

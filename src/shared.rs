@@ -5,7 +5,7 @@ use crate::{
     raw::RawRb,
     ring_buffer::RingBuffer,
     storage::{Shared, Storage},
-    stored::StoredRb,
+    stored::{OwningRb, StoredRb},
 };
 use core::{
     mem::ManuallyDrop,
@@ -49,6 +49,12 @@ pub struct SharedRb<S: Storage> {
 impl<S: Storage> StoredRb for SharedRb<S> {
     type Storage = S;
 
+    fn storage(&self) -> &Shared<S> {
+        &self.storage
+    }
+}
+
+impl<S: Storage> OwningRb for SharedRb<S> {
     unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
         Self {
             storage: Shared::new(storage),
@@ -56,15 +62,10 @@ impl<S: Storage> StoredRb for SharedRb<S> {
             write: CachePadded::new(AtomicUsize::new(write)),
         }
     }
-
     unsafe fn into_raw_parts(self) -> (S, usize, usize) {
         let (read, write) = (self.read_end(), self.write_end());
         let self_ = ManuallyDrop::new(self);
         (ptr::read(&self_.storage).into_inner(), read, write)
-    }
-
-    fn storage(&self) -> &Shared<S> {
-        &self.storage
     }
 }
 

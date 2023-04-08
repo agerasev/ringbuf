@@ -14,7 +14,8 @@ use alloc::{rc::Rc, sync::Arc};
 ///
 /// There are `push*_overwrite` methods that cannot be used from [`Producer`].
 ///
-/// The ring buffer can be guarded with mutex or other synchronization primitive and be used from different threads without splitting (but now only in blocking mode, obviously).
+/// The ring buffer can be guarded with mutex or other synchronization primitive and be used from different threads without splitting
+/// (but only in blocking mode, obviously).
 pub trait RingBuffer: Consumer + Producer {
     /// Pushes an item to the ring buffer overwriting the latest item if the buffer is full.
     ///

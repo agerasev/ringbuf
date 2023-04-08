@@ -6,6 +6,7 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+pub mod cache;
 pub mod consumer;
 pub mod local;
 pub mod observer;
