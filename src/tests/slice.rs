@@ -1,4 +1,4 @@
-use crate::{prelude::*, storage::Static, transfer, LocalRb};
+use crate::{storage::Static, traits::*, transfer, LocalRb};
 
 #[test]
 fn push_pop_slice() {

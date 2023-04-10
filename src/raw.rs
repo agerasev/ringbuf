@@ -1,4 +1,4 @@
-use crate::{Consumer, Observer, Producer, RingBuffer};
+use crate::traits::{Consumer, Observer, Producer, RingBuffer};
 use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Range};
 
 /// Returns a pair of ranges between `begin` and `end` positions in a ring buffer with specific `capacity`.

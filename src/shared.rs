@@ -29,7 +29,7 @@ use crossbeam_utils::CachePadded;
     doc = r##"
 ```
 use std::thread;
-use ringbuf::{SharedRb, storage::Heap, prelude::*};
+use ringbuf::{SharedRb, storage::Heap, traits::*};
 
 let rb = SharedRb::<Heap<i32>>::new(256);
 let (mut prod, mut cons) = rb.split();

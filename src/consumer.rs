@@ -1,7 +1,7 @@
 use crate::{
+    observer::Observer,
     raw::{RawBase, RawCons},
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
-    Observer,
 };
 use core::{iter::Chain, mem::MaybeUninit, num::NonZeroUsize, ops::Deref, ptr, slice};
 #[cfg(feature = "std")]
@@ -139,24 +139,19 @@ pub trait Consumer: Observer {
     ///
     /// Returns the number of deleted items.
     ///
-    #[cfg_attr(
-        feature = "alloc",
-        doc = r##"
-```
-# extern crate ringbuf;
-# use ringbuf::{LocalRb, storage::Static, prelude::*};
-# fn main() {
-let mut rb = LocalRb::<Static<i32, 8>>::default();
-
-assert_eq!(rb.push_iter(&mut (0..8)), 8);
-
-assert_eq!(rb.skip(4), 4);
-assert_eq!(rb.skip(8), 4);
-assert_eq!(rb.skip(4), 0);
-# }
-```
-"##
-    )]
+    /// ```
+    /// # extern crate ringbuf;
+    /// # use ringbuf::{LocalRb, storage::Static, traits::*};
+    /// # fn main() {
+    /// let mut rb = LocalRb::<Static<i32, 8>>::default();
+    ///
+    /// assert_eq!(rb.push_iter(0..8), 8);
+    ///
+    /// assert_eq!(rb.skip(4), 4);
+    /// assert_eq!(rb.skip(8), 4);
+    /// assert_eq!(rb.skip(4), 0);
+    /// # }
+    /// ```
     fn skip(&mut self, count: usize) -> usize {
         unsafe {
             let (left, right) = self.occupied_slices_mut();

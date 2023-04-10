@@ -1,4 +1,4 @@
-use crate::{prelude::*, storage::Static, LocalRb};
+use crate::{storage::Static, traits::*, LocalRb};
 use core::mem::MaybeUninit;
 
 #[test]

@@ -1,4 +1,4 @@
-use crate::{prelude::*, storage::Static, LocalRb};
+use crate::{storage::Static, traits::*, LocalRb};
 
 fn head_tail(observer: &impl crate::raw::RawBase) -> (usize, usize) {
     (observer.read_end(), observer.write_end())

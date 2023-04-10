@@ -1,9 +1,9 @@
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
 use crate::{
+    observer::Observer,
     raw::{RawBase, RawProd},
     utils::write_slice,
-    Observer,
 };
 use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Deref};
 #[cfg(feature = "std")]

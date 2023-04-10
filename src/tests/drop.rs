@@ -1,4 +1,4 @@
-use crate::{prelude::*, storage::Static, LocalRb};
+use crate::{storage::Static, traits::*, LocalRb};
 use alloc::collections::BTreeSet;
 use core::cell::RefCell;
 

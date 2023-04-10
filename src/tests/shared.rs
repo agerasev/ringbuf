@@ -1,4 +1,4 @@
-use crate::{prelude::*, storage::Heap, SharedRb};
+use crate::{storage::Heap, traits::*, SharedRb};
 use std::{thread, thread::sleep, time::Duration, vec::Vec};
 
 #[cfg(feature = "std")]
