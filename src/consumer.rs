@@ -178,6 +178,29 @@ pub trait Consumer: Observer {
             count
         }
     }
+
+    #[cfg(feature = "std")]
+    /// Removes at most first `count` bytes from the ring buffer and writes them into a [`Write`] instance.
+    /// If `count` is `None` then as much as possible bytes will be written.
+    ///
+    /// Returns `Ok(n)` if `write` succeeded. `n` is number of bytes been written.
+    /// `n == 0` means that either `write` returned zero or ring buffer is empty.
+    ///
+    /// If `write` is failed then original error is returned. In this case it is guaranteed that no items was written to the writer.
+    /// To achieve this we write only one contiguous slice at once. So this call may write less than `len` items even if the writer is ready to get more.
+    fn write_into<S: Write>(&mut self, writer: &mut S, count: Option<usize>) -> io::Result<usize>
+    where
+        Self: Consumer<Item = u8>,
+    {
+        let (left, _) = self.occupied_slices();
+        let count = usize::min(count.unwrap_or(left.len()), left.len());
+        let left_init = unsafe { slice_assume_init_ref(&left[..count]) };
+
+        let write_count = writer.write(left_init)?;
+        assert!(write_count <= count);
+        unsafe { self.advance_read(write_count) };
+        Ok(write_count)
+    }
 }
 
 pub struct IntoIter<C: Consumer>(C);
@@ -290,36 +313,6 @@ where
 
     fn into_iter(self) -> Self::IntoIter {
         IntoIter(self)
-    }
-}
-
-#[cfg(feature = "std")]
-impl<R: Deref> Cons<R>
-where
-    R::Target: RawCons<Item = u8>,
-{
-    #[cfg(feature = "std")]
-    /// Removes at most first `count` bytes from the ring buffer and writes them into a [`Write`] instance.
-    /// If `count` is `None` then as much as possible bytes will be written.
-    ///
-    /// Returns `Ok(n)` if `write` succeeded. `n` is number of bytes been written.
-    /// `n == 0` means that either `write` returned zero or ring buffer is empty.
-    ///
-    /// If `write` is failed then original error is returned. In this case it is guaranteed that no items was written to the writer.
-    /// To achieve this we write only one contiguous slice at once. So this call may write less than `len` items even if the writer is ready to get more.
-    pub fn write_into<S: Write>(
-        &mut self,
-        writer: &mut S,
-        count: Option<usize>,
-    ) -> io::Result<usize> {
-        let (left, _) = self.occupied_slices();
-        let count = usize::min(count.unwrap_or(left.len()), left.len());
-        let left_init = unsafe { slice_assume_init_ref(&left[..count]) };
-
-        let write_count = writer.write(left_init)?;
-        assert!(write_count <= count);
-        unsafe { self.advance_read(write_count) };
-        Ok(write_count)
     }
 }
 
