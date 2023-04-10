@@ -42,43 +42,4 @@ where
     pub fn into_rb_ref(self) -> R {
         self.target
     }
-
-    /// Returns postponed consumer that borrows [`Self`].
-    pub fn postponed(&mut self) -> Consumer<T, RbWrap<RbReadCache<T, &R::Rb>>> {
-        unsafe { Consumer::new(RbWrap(RbReadCache::new(&self.target))) }
-    }
-
-    /// Transforms [`Self`] into postponed consumer.
-    pub fn into_postponed(self) -> Consumer<T, RbWrap<RbReadCache<T, R>>> {
-        unsafe { Consumer::new(RbWrap(RbReadCache::new(self.target))) }
-    }
-}
-
-/// Postponed consumer.
-pub type PostponedConsumer<T, R> = Consumer<T, RbWrap<RbReadCache<T, R>>>;
-
-impl<T, R: RbRef> PostponedConsumer<T, R>
-where
-    R::Rb: RbRead<T>,
-{
-    /// Create new postponed consumer.
-    ///
-    /// # Safety
-    ///
-    /// There must be only one consumer containing the same ring buffer reference.
-    pub unsafe fn new_postponed(target: R) -> Self {
-        Consumer::new(RbWrap(RbReadCache::new(target)))
-    }
-
-    /// Synchronize changes with the ring buffer.
-    ///
-    /// Postponed consumer requires manual synchronization to make freed space visible for the producer.
-    pub fn sync(&mut self) {
-        self.target.0.sync();
-    }
-
-    /// Synchronize and transform back to immediate consumer.
-    pub fn into_immediate(self) -> Consumer<T, R> {
-        unsafe { Consumer::new(self.target.0.release()) }
-    }
 }

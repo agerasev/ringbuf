@@ -1,6 +1,7 @@
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
 use crate::{
+    cached::CachedProd,
     observer::Observer,
     raw::{RawBase, RawProd},
     utils::write_slice,
@@ -219,5 +220,17 @@ where
         } else {
             Ok(())
         }
+    }
+}
+
+impl<R: Deref> Prod<R>
+where
+    R::Target: RawProd,
+{
+    pub fn cached(&mut self) -> CachedProd<&R::Target> {
+        unsafe { CachedProd::new(&self.raw) }
+    }
+    pub fn into_cached(self) -> CachedProd<R> {
+        unsafe { CachedProd::new(self.raw) }
     }
 }

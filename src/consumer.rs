@@ -1,4 +1,5 @@
 use crate::{
+    cached::CachedCons,
     observer::Observer,
     raw::{RawBase, RawCons},
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
@@ -328,5 +329,17 @@ where
         } else {
             Ok(n)
         }
+    }
+}
+
+impl<R: Deref> Cons<R>
+where
+    R::Target: RawCons,
+{
+    pub fn cached(&mut self) -> CachedCons<&R::Target> {
+        unsafe { CachedCons::new(&self.raw) }
+    }
+    pub fn into_cached(self) -> CachedCons<R> {
+        unsafe { CachedCons::new(self.raw) }
     }
 }
