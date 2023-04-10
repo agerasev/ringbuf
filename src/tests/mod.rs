@@ -3,6 +3,7 @@ mod basic;
 #[cfg(feature = "alloc")]
 mod drop;
 mod fmt_write;
+mod iter;
 mod overwrite;
 #[cfg(feature = "std")]
 mod read_write;
