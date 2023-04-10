@@ -61,7 +61,7 @@ pub trait Producer: Observer {
 
     /// Appends an item to the ring buffer.
     ///
-    /// On failure returns an `Err` containing the item that hasn't been appended.
+    /// If buffer is full returns an `Err` containing the item that hasn't been appended.
     fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
         if !self.is_full() {
             unsafe {
