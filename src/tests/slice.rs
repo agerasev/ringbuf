@@ -1,9 +1,9 @@
-use crate::{prelude::*, storage::Static, transfer, LocalRb};
+use crate::{storage::Static, traits::*, transfer, LocalRb};
 
 #[test]
 fn push_pop_slice() {
-    let mut buf = LocalRb::<Static<i32, 4>>::default();
-    let (mut prod, mut cons) = (&mut buf).split();
+    let mut rb = LocalRb::<Static<i32, 4>>::default();
+    let (mut prod, mut cons) = rb.split_ref();
 
     let mut tmp = [0; 5];
 
@@ -29,8 +29,8 @@ fn push_pop_slice() {
 fn move_slice() {
     let mut rb0 = LocalRb::<Static<i32, 4>>::default();
     let mut rb1 = LocalRb::<Static<i32, 4>>::default();
-    let (mut prod0, mut cons0) = (&mut rb0).split();
-    let (mut prod1, mut cons1) = (&mut rb1).split();
+    let (mut prod0, mut cons0) = rb0.split_ref();
+    let (mut prod1, mut cons1) = rb1.split_ref();
 
     let mut tmp = [0; 5];
 
@@ -63,8 +63,8 @@ fn move_slice() {
 fn move_slice_count() {
     let mut rb0 = LocalRb::<Static<i32, 4>>::default();
     let mut rb1 = LocalRb::<Static<i32, 4>>::default();
-    let (mut prod0, mut cons0) = (&mut rb0).split();
-    let (mut prod1, mut cons1) = (&mut rb1).split();
+    let (mut prod0, mut cons0) = rb0.split_ref();
+    let (mut prod1, mut cons1) = rb1.split_ref();
 
     let mut tmp = [0; 5];
 

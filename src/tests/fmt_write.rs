@@ -1,26 +1,26 @@
-use crate::{prelude::*, storage::Static, LocalRb};
+use crate::{storage::Static, traits::*, LocalRb};
 use core::fmt::Write;
 
 #[test]
 fn write() {
     let mut rb = LocalRb::<Static<u8, 40>>::default();
 
-    let (mut prod, mut cons) = (&mut rb).split();
+    let (mut prod, cons) = rb.split_ref();
 
     assert_eq!(write!(prod, "Hello world!\n"), Ok(()));
     assert_eq!(write!(prod, "The answer is {}\n", 42), Ok(()));
 
     assert_eq!(cons.occupied_len(), 30);
     assert!(cons
-        .pop_iter()
-        .eq(b"Hello world!\nThe answer is 42\n".iter().cloned()));
+        .into_iter()
+        .eq(b"Hello world!\nThe answer is 42\n".iter().copied()));
 }
 
 #[test]
 fn write_overflow() {
     let mut rb = LocalRb::<Static<u8, 10>>::default();
 
-    let (mut prod, mut cons) = (&mut rb).split();
+    let (mut prod, mut cons) = rb.split_ref();
 
     assert_eq!(
         write!(
@@ -31,7 +31,7 @@ fn write_overflow() {
     );
 
     assert_eq!(cons.occupied_len(), 10);
-    assert!(cons.pop_iter().eq(b"This is a ".iter().cloned()));
+    assert!(cons.pop_iter().eq(b"This is a ".iter().copied()));
 
     assert_eq!(
         write!(
@@ -43,5 +43,5 @@ fn write_overflow() {
     );
 
     assert_eq!(cons.occupied_len(), 10);
-    assert!(cons.pop_iter().eq(b"This strin".iter().cloned()));
+    assert!(cons.pop_iter().eq(b"This strin".iter().copied()));
 }

@@ -1,4 +1,4 @@
-use crate::{prelude::*, storage::Static, LocalRb};
+use crate::{storage::Static, traits::*, LocalRb};
 
 #[test]
 fn push() {
@@ -17,12 +17,12 @@ fn push() {
 fn push_iter() {
     let mut rb = LocalRb::<Static<i32, 2>>::default();
     rb.push_iter_overwrite([0, 1, 2, 3, 4, 5].into_iter());
-    assert!(rb.pop_iter().eq([4, 5]));
+    assert!(rb.iter().copied().eq([4, 5]));
 }
 
 #[test]
 fn push_slice() {
     let mut rb = LocalRb::<Static<i32, 2>>::default();
     rb.push_slice_overwrite(&[0, 1, 2, 3, 4, 5]);
-    assert!(rb.pop_iter().eq([4, 5]));
+    assert!(rb.iter().copied().eq([4, 5]));
 }

@@ -1,10 +1,10 @@
-use crate::{prelude::*, storage::Static, LocalRb};
+use crate::{storage::Static, traits::*, LocalRb};
 use core::mem::MaybeUninit;
 
 #[test]
 fn try_push() {
     let mut rb = LocalRb::<Static<i32, 3>>::default();
-    let (mut prod, mut cons) = (&mut rb).split();
+    let (mut prod, mut cons) = rb.split_ref();
 
     let vs_20 = (123, 456);
     {
@@ -47,7 +47,7 @@ fn try_push() {
 fn pop_full() {
     const CAP: usize = 2;
     let mut rb = LocalRb::<Static<i32, CAP>>::default();
-    let (mut prod, mut cons) = (&mut rb).split();
+    let (mut prod, mut cons) = rb.split_ref();
 
     for i in 0..CAP {
         prod.try_push(i as i32).unwrap();
@@ -71,7 +71,7 @@ fn pop_full() {
 #[test]
 fn pop_empty() {
     let mut rb = LocalRb::<Static<i32, 2>>::default();
-    let (_, mut cons) = (&mut rb).split();
+    let (_, mut cons) = rb.split_ref();
 
     {
         let (left, right) = cons.occupied_slices();
@@ -84,7 +84,7 @@ fn pop_empty() {
 #[test]
 fn try_pop() {
     let mut rb = LocalRb::<Static<i32, 3>>::default();
-    let (mut prod, mut cons) = (&mut rb).split();
+    let (mut prod, mut cons) = rb.split_ref();
 
     let vs_20 = (123, 456, 789);
     assert_eq!(prod.try_push(vs_20.0), Ok(()));
@@ -133,7 +133,7 @@ fn try_pop() {
 #[test]
 fn push_return() {
     let mut rb = LocalRb::<Static<i32, 2>>::default();
-    let (mut prod, mut cons) = (&mut rb).split();
+    let (mut prod, mut cons) = rb.split_ref();
 
     {
         let (left, right) = prod.vacant_slices_mut();
@@ -166,7 +166,7 @@ fn push_return() {
 #[test]
 fn pop_return() {
     let mut rb = LocalRb::<Static<i32, 2>>::default();
-    let (mut prod, mut cons) = (&mut rb).split();
+    let (mut prod, mut cons) = rb.split_ref();
 
     assert_eq!(prod.try_push(12), Ok(()));
     assert_eq!(prod.try_push(34), Ok(()));
@@ -201,7 +201,7 @@ fn pop_return() {
 #[test]
 fn push_pop() {
     let mut rb = LocalRb::<Static<i32, 3>>::default();
-    let (mut prod, mut cons) = (&mut rb).split();
+    let (mut prod, mut cons) = rb.split_ref();
 
     let vs_20 = (123, 456);
     {

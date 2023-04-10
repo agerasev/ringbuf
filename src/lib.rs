@@ -7,36 +7,27 @@ extern crate alloc;
 extern crate std;
 
 pub mod consumer;
-pub mod local;
-pub mod observer;
+mod local;
+mod observer;
 pub mod producer;
 pub mod raw;
-pub mod ring_buffer;
-pub mod shared;
+mod ring_buffer;
+mod shared;
 pub mod storage;
-pub mod stored;
 mod transfer;
 mod utils;
 
 #[cfg(test)]
 mod tests;
 
-pub use consumer::Consumer;
+pub use consumer::Cons;
 pub use local::LocalRb;
-pub use observer::Observer;
-pub use producer::Producer;
-pub use ring_buffer::{RingBuffer, Split};
+pub use producer::Prod;
 pub use shared::SharedRb;
 pub use transfer::transfer;
 
-pub mod prelude {
-    #[cfg(feature = "alloc")]
-    pub use crate::stored::HeapRb;
+pub mod traits {
     pub use crate::{
-        consumer::{ByteConsumer, Consumer},
-        observer::Observer,
-        producer::{ByteProducer, Producer},
-        ring_buffer::{RingBuffer, Split},
-        stored::StaticRb,
+        consumer::Consumer, observer::Observer, producer::Producer, ring_buffer::RingBuffer,
     };
 }

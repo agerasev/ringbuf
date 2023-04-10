@@ -1,4 +1,3 @@
-use crate::stored::StoredRb;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 use core::{
@@ -34,13 +33,6 @@ pub unsafe trait Storage {
 
     /// Length of the storage.
     fn len(this: &Self::Internal) -> usize;
-
-    fn into_rb<R: StoredRb<Storage = Self>>(self) -> R
-    where
-        Self: Sized,
-    {
-        unsafe { R::from_raw_parts(self, 0, 0) }
-    }
 }
 
 unsafe impl<'a, T> Storage for &'a mut [MaybeUninit<T>] {
@@ -110,14 +102,6 @@ unsafe impl<T> Storage for Vec<MaybeUninit<T>> {
     #[inline]
     fn len(this: &Self::Internal) -> usize {
         this.len()
-    }
-
-    fn into_rb<R: StoredRb<Storage = Self>>(mut self) -> R
-    where
-        Self: Sized,
-    {
-        self.resize_with(self.capacity(), MaybeUninit::uninit);
-        unsafe { R::from_raw_parts(self, 0, 0) }
     }
 }
 

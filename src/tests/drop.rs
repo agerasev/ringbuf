@@ -1,4 +1,4 @@
-use crate::{prelude::*, storage::Static, LocalRb};
+use crate::{storage::Static, traits::*, LocalRb};
 use alloc::collections::BTreeSet;
 use core::cell::RefCell;
 
@@ -34,7 +34,7 @@ fn single() {
     assert_eq!(set.borrow().len(), 0);
 
     {
-        let (mut prod, mut cons) = (&mut rb).split();
+        let (mut prod, mut cons) = rb.split_ref();
 
         prod.try_push(Dropper::new(&set, 1)).unwrap();
         assert_eq!(set.borrow().len(), 1);
@@ -65,7 +65,7 @@ fn transaction() {
 
     assert_eq!(set.borrow().len(), 0);
     {
-        let (mut prod, mut cons) = (&mut rb).split();
+        let (mut prod, mut cons) = rb.split_ref();
         let mut id = 0;
         let mut cnt = 0;
         fn assert_cnt(cnt: usize, n: usize, cons: &impl Consumer, set: &RefCell<BTreeSet<i32>>) {
@@ -81,9 +81,7 @@ fn transaction() {
         }
         assert_cnt(cnt, 4, &cons, &set);
 
-        for _ in cons.pop_iter().take(2) {
-            cnt -= 1;
-        }
+        cnt -= cons.skip(2);
         assert_cnt(cnt, 2, &cons, &set);
 
         while !prod.is_full() {
@@ -93,9 +91,7 @@ fn transaction() {
         }
         assert_cnt(cnt, 5, &cons, &set);
 
-        for _ in cons.pop_iter() {
-            cnt -= 1;
-        }
+        cnt -= cons.clear();
         assert_cnt(cnt, 0, &cons, &set);
 
         while !prod.is_full() {

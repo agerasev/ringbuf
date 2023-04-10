@@ -1,11 +1,11 @@
-use crate::{prelude::*, storage::Static, LocalRb};
+use crate::{storage::Static, traits::*, LocalRb};
 use alloc::rc::Rc;
 
 #[test]
 fn skip() {
     // Initialize ringbuffer, prod and cons
     let mut rb = LocalRb::<Static<i8, 10>>::default();
-    let (mut prod, mut cons) = (&mut rb).split();
+    let (mut prod, mut cons) = rb.split_ref();
     let mut i = 0;
 
     // Fill the buffer
@@ -53,7 +53,7 @@ fn skip_drop() {
 
     const CAP: usize = 10;
     let mut rb = LocalRb::<Static<Rc<()>, CAP>>::default();
-    let (mut prod, mut cons) = (&mut rb).split();
+    let (mut prod, mut cons) = rb.split_ref();
 
     for _ in 0..CAP {
         prod.try_push(rc.clone()).unwrap();

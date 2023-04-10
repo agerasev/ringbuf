@@ -1,11 +1,11 @@
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
 use crate::{
-    raw::{RawBuffer, RawRb},
+    observer::Observer,
+    raw::{RawBase, RawProd},
     utils::write_slice,
-    Observer,
 };
-use core::{mem::MaybeUninit, ops::Deref};
+use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Deref};
 #[cfg(feature = "std")]
 use std::{
     cmp,
@@ -26,11 +26,7 @@ pub trait Producer: Observer {
     /// Provides a direct access to the ring buffer vacant memory.
     ///
     /// Returns a pair of slices of uninitialized memory, the second one may be empty.
-    #[inline]
-    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let (first, second) = unsafe { self.as_raw().vacant_slices() };
-        (first as &_, second as &_)
-    }
+    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]);
 
     /// Mutable version of [`Self::vacant_slices`].
     ///
@@ -39,25 +35,19 @@ pub trait Producer: Observer {
     ///
     /// *This method must be followed by [`Self::advance_write`] call with the number of items being put previously as argument.*
     /// *No other mutating calls allowed before that.*
-    #[inline]
     fn vacant_slices_mut(
         &mut self,
     ) -> (
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
-    ) {
-        unsafe { self.as_raw().vacant_slices() }
-    }
+    );
 
     /// Moves `write` pointer by `count` places forward.
     ///
     /// # Safety
     ///
     /// First `count` items in free space must be initialized.
-    #[inline]
-    unsafe fn advance_write(&mut self, count: usize) {
-        self.as_raw().move_write_end(count)
-    }
+    unsafe fn advance_write(&mut self, count: usize);
 
     /// Appends an item to the ring buffer.
     ///
@@ -123,8 +113,65 @@ pub trait Producer: Observer {
     }
 }
 
-pub trait ByteProducer: Producer<Item = u8> {
-    #[cfg(feature = "std")]
+/// Producer wrapper of ring buffer.
+pub struct Prod<R: Deref>
+where
+    R::Target: RawBase,
+{
+    raw: R,
+}
+
+impl<R: Deref> Prod<R>
+where
+    R::Target: RawBase,
+{
+    /// # Safety
+    ///
+    /// There must be no more than one consumer wrapper.
+    pub unsafe fn new(raw: R) -> Self {
+        Self { raw }
+    }
+}
+
+impl<R: Deref> RawBase for Prod<R>
+where
+    R::Target: RawBase,
+{
+    type Item = <R::Target as RawBase>::Item;
+
+    #[inline]
+    fn capacity(&self) -> NonZeroUsize {
+        self.raw.capacity()
+    }
+    #[inline]
+    unsafe fn slice(&self, range: core::ops::Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
+        self.raw.slice(range)
+    }
+    #[inline]
+    fn read_end(&self) -> usize {
+        self.raw.read_end()
+    }
+    #[inline]
+    fn write_end(&self) -> usize {
+        self.raw.write_end()
+    }
+}
+
+impl<R: Deref> RawProd for Prod<R>
+where
+    R::Target: RawProd,
+{
+    #[inline]
+    unsafe fn set_write_end(&self, value: usize) {
+        self.raw.set_write_end(value)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<R: Deref> Prod<R>
+where
+    R::Target: RawProd<Item = u8>,
+{
     /// Reads at most `count` bytes from `Read` instance and appends them to the ring buffer.
     /// If `count` is `None` then as much as possible bytes will be read.
     ///
@@ -133,7 +180,11 @@ pub trait ByteProducer: Producer<Item = u8> {
     ///
     /// If `read` is failed then original error is returned. In this case it is guaranteed that no items was read from the reader.
     /// To achieve this we read only one contiguous slice at once. So this call may read less than `remaining` items in the buffer even if the reader is ready to provide more.
-    fn read_from<R: Read>(&mut self, reader: &mut R, count: Option<usize>) -> io::Result<usize> {
+    pub fn read_from<S: Read>(
+        &mut self,
+        reader: &mut S,
+        count: Option<usize>,
+    ) -> io::Result<usize> {
         let (left, _) = self.vacant_slices_mut();
         let count = cmp::min(count.unwrap_or(left.len()), left.len());
         let left_init = unsafe { slice_assume_init_mut(&mut left[..count]) };
@@ -146,41 +197,9 @@ pub trait ByteProducer: Producer<Item = u8> {
 }
 
 #[cfg(feature = "std")]
-impl<R: Producer<Item = u8>> ByteProducer for R {}
-
-pub struct Wrap<R> {
-    raw: R,
-}
-
-impl<R> Wrap<R>
+impl<R: Deref> Write for Prod<R>
 where
-    R: Sized,
-{
-    /// # Safety
-    ///
-    /// There must be no more than one consumer wrapper.
-    pub unsafe fn new(raw: R) -> Self {
-        Self { raw }
-    }
-}
-
-impl<R: Deref> Observer for Wrap<R>
-where
-    R::Target: RawRb + Sized,
-{
-    type Item = <R::Target as RawBuffer>::Item;
-    type Raw = R::Target;
-    fn as_raw(&self) -> &Self::Raw {
-        &self.raw
-    }
-}
-
-impl<R: Deref> Producer for Wrap<R> where R::Target: RawRb + Sized {}
-
-#[cfg(feature = "std")]
-impl<R: Deref> Write for Wrap<R>
-where
-    R::Target: RawRb<Item = u8> + Sized,
+    R::Target: RawProd<Item = u8>,
 {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
         let n = self.push_slice(buffer);
@@ -195,9 +214,9 @@ where
     }
 }
 
-impl<R: Deref> core::fmt::Write for Wrap<R>
+impl<R: Deref> core::fmt::Write for Prod<R>
 where
-    R::Target: RawRb<Item = u8> + Sized,
+    R::Target: RawProd<Item = u8>,
 {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         let n = self.push_slice(s.as_bytes());

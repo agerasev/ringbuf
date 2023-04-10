@@ -1,12 +1,12 @@
-use crate::{prelude::*, storage::Static, LocalRb};
+use crate::{storage::Static, traits::*, LocalRb};
 use std::io;
 
 #[test]
 fn from() {
     let mut rb0 = LocalRb::<Static<u8, 4>>::default();
     let mut rb1 = LocalRb::<Static<u8, 4>>::default();
-    let (mut prod0, mut cons0) = (&mut rb0).split();
-    let (mut prod1, mut cons1) = (&mut rb1).split();
+    let (mut prod0, mut cons0) = rb0.split_ref();
+    let (mut prod1, mut cons1) = rb1.split_ref();
 
     let mut tmp = [0; 5];
 
@@ -45,8 +45,8 @@ fn from() {
 fn into() {
     let mut rb0 = LocalRb::<Static<u8, 4>>::default();
     let mut rb1 = LocalRb::<Static<u8, 4>>::default();
-    let (mut prod0, mut cons0) = (&mut rb0).split();
-    let (mut prod1, mut cons1) = (&mut rb1).split();
+    let (mut prod0, mut cons0) = rb0.split_ref();
+    let (mut prod1, mut cons1) = rb1.split_ref();
 
     let mut tmp = [0; 5];
 
@@ -85,8 +85,8 @@ fn into() {
 fn count() {
     let mut rb0 = LocalRb::<Static<u8, 4>>::default();
     let mut rb1 = LocalRb::<Static<u8, 4>>::default();
-    let (mut prod0, mut cons0) = (&mut rb0).split();
-    let (mut prod1, mut cons1) = (&mut rb1).split();
+    let (mut prod0, mut cons0) = rb0.split_ref();
+    let (mut prod1, mut cons1) = rb1.split_ref();
 
     let mut tmp = [0; 5];
 

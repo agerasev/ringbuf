@@ -1,9 +1,9 @@
 use crate::{
-    raw::{RawBuffer, RawRb},
+    observer::Observer,
+    raw::{RawBase, RawCons},
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
-    Observer,
 };
-use core::{cmp, iter::Chain, iter::ExactSizeIterator, mem::MaybeUninit, ops::Deref, slice};
+use core::{iter::Chain, mem::MaybeUninit, num::NonZeroUsize, ops::Deref, ptr, slice};
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
 
@@ -31,11 +31,7 @@ pub trait Consumer: Observer {
     ///
     /// *This method must be followed by [`Self::advance_read`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
-    #[inline]
-    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let (left, right) = unsafe { self.as_raw().occupied_slices() };
-        (left as &[_], right as &[_])
-    }
+    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]);
 
     /// Provides a direct mutable access to the ring buffer occupied memory.
     ///
@@ -44,25 +40,19 @@ pub trait Consumer: Observer {
     /// # Safety
     ///
     /// When some item is replaced with uninitialized value then it must immediately consumed by [`Self::advance_read`].
-    #[inline]
     unsafe fn occupied_slices_mut(
         &mut self,
     ) -> (
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
-    ) {
-        self.as_raw().occupied_slices()
-    }
+    );
 
     /// Moves `read` pointer by `count` places forward.
     ///
     /// # Safety
     ///
     /// First `count` items in occupied memory must be moved out or dropped.
-    #[inline]
-    unsafe fn advance_read(&mut self, count: usize) {
-        self.as_raw().move_read_end(count);
-    }
+    unsafe fn advance_read(&mut self, count: usize);
 
     /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
     #[inline]
@@ -123,18 +113,14 @@ pub trait Consumer: Observer {
     }
 
     /// Returns an iterator that removes items one by one from the ring buffer.
-    ///
-    /// Iterator provides only items that are available for consumer at the moment of `pop_iter` call, it will not contain new items added after it was created.
-    ///
-    /// *Information about removed items is commited to the buffer only when iterator is destroyed.*
-    fn pop_iter(&mut self) -> PopIter<'_, Self::Raw> {
-        unsafe { PopIter::new(self.as_raw()) }
+    fn pop_iter(&mut self) -> PopIter<'_, Self> {
+        PopIter(self)
     }
 
     /// Returns a front-to-back iterator containing references to items in the ring buffer.
     ///
     /// This iterator does not remove items out of the ring buffer.
-    fn iter(&self) -> Iter<'_, Self::Raw> {
+    fn iter(&self) -> Iter<'_, Self> {
         let (left, right) = self.as_slices();
         left.iter().chain(right.iter())
     }
@@ -142,7 +128,7 @@ pub trait Consumer: Observer {
     /// Returns a front-to-back iterator that returns mutable references to items in the ring buffer.
     ///
     /// This iterator does not remove items out of the ring buffer.
-    fn iter_mut(&mut self) -> IterMut<'_, Self::Raw> {
+    fn iter_mut(&mut self) -> IterMut<'_, Self> {
         let (left, right) = self.as_mut_slices();
         left.iter_mut().chain(right.iter_mut())
     }
@@ -153,88 +139,78 @@ pub trait Consumer: Observer {
     ///
     /// Returns the number of deleted items.
     ///
-    #[cfg_attr(
-        feature = "alloc",
-        doc = r##"
-```
-# extern crate ringbuf;
-# use ringbuf::{LocalRb, storage::Static, prelude::*};
-# fn main() {
-let mut rb = LocalRb::<Static<i32, 8>>::default();
-
-assert_eq!(rb.push_iter(&mut (0..8)), 8);
-
-assert_eq!(rb.skip(4), 4);
-assert_eq!(rb.skip(8), 4);
-assert_eq!(rb.skip(4), 0);
-# }
-```
-"##
-    )]
+    /// ```
+    /// # extern crate ringbuf;
+    /// # use ringbuf::{LocalRb, storage::Static, traits::*};
+    /// # fn main() {
+    /// let mut rb = LocalRb::<Static<i32, 8>>::default();
+    ///
+    /// assert_eq!(rb.push_iter(0..8), 8);
+    ///
+    /// assert_eq!(rb.skip(4), 4);
+    /// assert_eq!(rb.skip(8), 4);
+    /// assert_eq!(rb.skip(4), 0);
+    /// # }
+    /// ```
     fn skip(&mut self, count: usize) -> usize {
-        let count = cmp::min(count, self.occupied_len());
-        assert_eq!(unsafe { self.as_raw().skip(Some(count)) }, count);
-        count
+        unsafe {
+            let (left, right) = self.occupied_slices_mut();
+            for elem in left.iter_mut().chain(right.iter_mut()).take(count) {
+                ptr::drop_in_place(elem.as_mut_ptr());
+            }
+            let actual_count = usize::min(count, left.len() + right.len());
+            self.advance_read(actual_count);
+            actual_count
+        }
     }
 
     /// Removes all items from the buffer and safely drops them.
     ///
     /// Returns the number of deleted items.
     fn clear(&mut self) -> usize {
-        unsafe { self.as_raw().skip(None) }
+        unsafe {
+            let (left, right) = self.occupied_slices_mut();
+            for elem in left.iter_mut().chain(right.iter_mut()) {
+                ptr::drop_in_place(elem.as_mut_ptr());
+            }
+            let count = left.len() + right.len();
+            self.advance_read(count);
+            count
+        }
+    }
+}
+
+pub struct IntoIter<C: Consumer>(C);
+impl<C: Consumer> IntoIter<C> {
+    pub fn into_inner(self) -> C {
+        self.0
+    }
+}
+impl<C: Consumer> Iterator for IntoIter<C> {
+    type Item = C::Item;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.try_pop()
+    }
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.0.occupied_len(), None)
     }
 }
 
 /// An iterator that removes items from the ring buffer.
-pub struct PopIter<'a, R: RawRb> {
-    target: &'a R,
-    slices: (&'a [MaybeUninit<R::Item>], &'a [MaybeUninit<R::Item>]),
-    initial_len: usize,
-}
+pub struct PopIter<'a, C: Consumer + ?Sized>(&'a mut C);
+impl<'a, C: Consumer + ?Sized> Iterator for PopIter<'a, C> {
+    type Item = C::Item;
 
-impl<'a, R: RawRb> PopIter<'a, R> {
-    unsafe fn new(target: &'a R) -> Self {
-        let slices = unsafe { target.occupied_slices() };
-        Self {
-            target,
-            initial_len: slices.0.len() + slices.1.len(),
-            slices: (slices.0, slices.1),
-        }
-    }
-}
-
-impl<'a, R: RawRb> Iterator for PopIter<'a, R> {
-    type Item = R::Item;
     #[inline]
-    fn next(&mut self) -> Option<R::Item> {
-        match self.slices.0.len() {
-            0 => None,
-            n => {
-                let item = unsafe { self.slices.0.get_unchecked(0).assume_init_read() };
-                if n == 1 {
-                    (self.slices.0, self.slices.1) = (self.slices.1, &[]);
-                } else {
-                    self.slices.0 = unsafe { self.slices.0.get_unchecked(1..n) };
-                }
-                Some(item)
-            }
-        }
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.try_pop()
     }
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.len(), Some(self.len()))
-    }
-}
-
-impl<'a, R: RawRb> ExactSizeIterator for PopIter<'a, R> {
-    fn len(&self) -> usize {
-        self.slices.0.len() + self.slices.1.len()
-    }
-}
-
-impl<'a, R: RawRb> Drop for PopIter<'a, R> {
-    fn drop(&mut self) {
-        unsafe { self.target.move_read_end(self.initial_len - self.len()) };
+        (self.0.occupied_len(), None)
     }
 }
 
@@ -242,45 +218,26 @@ impl<'a, R: RawRb> Drop for PopIter<'a, R> {
 ///
 /// *Please do not rely on actual type, it may change in future.*
 #[allow(type_alias_bounds)]
-pub type Iter<'a, R: RawRb> = Chain<slice::Iter<'a, R::Item>, slice::Iter<'a, R::Item>>;
+pub type Iter<'a, C: Consumer + ?Sized> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a, C::Item>>;
 
 /// Mutable iterator over ring buffer contents.
 ///
 /// *Please do not rely on actual type, it may change in future.*
 #[allow(type_alias_bounds)]
-pub type IterMut<'a, R: RawRb> = Chain<slice::IterMut<'a, R::Item>, slice::IterMut<'a, R::Item>>;
+pub type IterMut<'a, C: Consumer + ?Sized> =
+    Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
 
-pub trait ByteConsumer: Consumer<Item = u8> {
-    #[cfg(feature = "std")]
-    /// Removes at most first `count` bytes from the ring buffer and writes them into a [`Write`] instance.
-    /// If `count` is `None` then as much as possible bytes will be written.
-    ///
-    /// Returns `Ok(n)` if `write` succeeded. `n` is number of bytes been written.
-    /// `n == 0` means that either `write` returned zero or ring buffer is empty.
-    ///
-    /// If `write` is failed then original error is returned. In this case it is guaranteed that no items was written to the writer.
-    /// To achieve this we write only one contiguous slice at once. So this call may write less than `len` items even if the writer is ready to get more.
-    fn write_into<W: Write>(&mut self, writer: &mut W, count: Option<usize>) -> io::Result<usize> {
-        let (left, _) = self.occupied_slices();
-        let count = cmp::min(count.unwrap_or(left.len()), left.len());
-        let left_init = unsafe { slice_assume_init_ref(&left[..count]) };
-
-        let write_count = writer.write(left_init)?;
-        assert!(write_count <= count);
-        unsafe { self.advance_read(write_count) };
-        Ok(write_count)
-    }
-}
-
-impl<R: Consumer<Item = u8>> ByteConsumer for R {}
-
-pub struct Wrap<R> {
+/// Producer wrapper of ring buffer.
+pub struct Cons<R: Deref>
+where
+    R::Target: RawBase,
+{
     raw: R,
 }
 
-impl<R> Wrap<R>
+impl<R: Deref> Cons<R>
 where
-    R: Sized,
+    R::Target: RawBase,
 {
     /// # Safety
     ///
@@ -290,23 +247,86 @@ where
     }
 }
 
-impl<R: Deref> Observer for Wrap<R>
+impl<R: Deref> RawBase for Cons<R>
 where
-    R::Target: RawRb + Sized,
+    R::Target: RawBase,
 {
-    type Item = <R::Target as RawBuffer>::Item;
-    type Raw = R::Target;
-    fn as_raw(&self) -> &Self::Raw {
-        &self.raw
+    type Item = <R::Target as RawBase>::Item;
+
+    #[inline]
+    fn capacity(&self) -> NonZeroUsize {
+        self.raw.capacity()
+    }
+    #[inline]
+    unsafe fn slice(&self, range: core::ops::Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
+        self.raw.slice(range)
+    }
+    #[inline]
+    fn read_end(&self) -> usize {
+        self.raw.read_end()
+    }
+    #[inline]
+    fn write_end(&self) -> usize {
+        self.raw.write_end()
     }
 }
 
-impl<R: Deref> Consumer for Wrap<R> where R::Target: RawRb + Sized {}
+impl<R: Deref> RawCons for Cons<R>
+where
+    R::Target: RawCons,
+{
+    #[inline]
+    unsafe fn set_read_end(&self, value: usize) {
+        self.raw.set_read_end(value)
+    }
+}
+
+impl<R: Deref> IntoIterator for Cons<R>
+where
+    R::Target: RawCons,
+{
+    type Item = <R::Target as RawBase>::Item;
+    type IntoIter = IntoIter<Self>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter(self)
+    }
+}
 
 #[cfg(feature = "std")]
-impl<R: Deref> Read for Wrap<R>
+impl<R: Deref> Cons<R>
 where
-    R::Target: RawRb<Item = u8> + Sized,
+    R::Target: RawCons<Item = u8>,
+{
+    #[cfg(feature = "std")]
+    /// Removes at most first `count` bytes from the ring buffer and writes them into a [`Write`] instance.
+    /// If `count` is `None` then as much as possible bytes will be written.
+    ///
+    /// Returns `Ok(n)` if `write` succeeded. `n` is number of bytes been written.
+    /// `n == 0` means that either `write` returned zero or ring buffer is empty.
+    ///
+    /// If `write` is failed then original error is returned. In this case it is guaranteed that no items was written to the writer.
+    /// To achieve this we write only one contiguous slice at once. So this call may write less than `len` items even if the writer is ready to get more.
+    pub fn write_into<S: Write>(
+        &mut self,
+        writer: &mut S,
+        count: Option<usize>,
+    ) -> io::Result<usize> {
+        let (left, _) = self.occupied_slices();
+        let count = usize::min(count.unwrap_or(left.len()), left.len());
+        let left_init = unsafe { slice_assume_init_ref(&left[..count]) };
+
+        let write_count = writer.write(left_init)?;
+        assert!(write_count <= count);
+        unsafe { self.advance_read(write_count) };
+        Ok(write_count)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<R: Deref> Read for Cons<R>
+where
+    R::Target: RawCons<Item = u8>,
 {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         let n = self.pop_slice(buffer);
