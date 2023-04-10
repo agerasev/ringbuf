@@ -133,7 +133,7 @@ where
 
     /// Appends an item to the ring buffer.
     ///
-    /// On failure returns an `Err` containing the item that hasn't been appended.
+    /// If buffer is full returns an `Err` containing the item that hasn't been appended.
     pub fn push(&mut self, elem: T) -> Result<(), T> {
         if !self.is_full() {
             unsafe {
