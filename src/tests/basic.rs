@@ -1,8 +1,7 @@
 use crate::{prelude::*, storage::Static, LocalRb};
 
-fn head_tail(observer: &impl Observer) -> (usize, usize) {
-    use crate::raw::RawRb;
-    (observer.as_raw().read_end(), observer.as_raw().write_end())
+fn head_tail(observer: &impl crate::raw::RawBase) -> (usize, usize) {
+    (observer.read_end(), observer.write_end())
 }
 
 #[test]
@@ -15,7 +14,7 @@ fn capacity() {
 fn split_capacity() {
     const CAP: usize = 13;
     let mut rb = LocalRb::<Static<i32, CAP>>::default();
-    let (prod, cons) = (&mut rb).split();
+    let (prod, cons) = rb.split_ref();
 
     assert_eq!(prod.capacity(), CAP);
     assert_eq!(cons.capacity(), CAP);
@@ -24,7 +23,7 @@ fn split_capacity() {
 #[test]
 fn try_push() {
     let mut rb = LocalRb::<Static<i32, 2>>::default();
-    let (mut prod, _) = (&mut rb).split();
+    let (mut prod, _) = rb.split_ref();
 
     assert_eq!(head_tail(&prod), (0, 0));
 
@@ -41,7 +40,7 @@ fn try_push() {
 #[test]
 fn pop_empty() {
     let mut rb = LocalRb::<Static<i32, 2>>::default();
-    let (_, mut cons) = (&mut rb).split();
+    let (_, mut cons) = rb.split_ref();
 
     assert_eq!(head_tail(&cons), (0, 0));
 
@@ -53,7 +52,7 @@ fn pop_empty() {
 fn push_pop_one() {
     const CAP: usize = 2;
     let mut rb = LocalRb::<Static<i32, CAP>>::default();
-    let (mut prod, mut cons) = (&mut rb).split();
+    let (mut prod, mut cons) = rb.split_ref();
 
     const MOD: usize = 2 * CAP;
     let values = [12, 34, 56, 78, 90];
@@ -75,7 +74,7 @@ fn push_pop_one() {
 fn push_pop_all() {
     const CAP: usize = 2;
     let mut rb = LocalRb::<Static<i32, CAP>>::default();
-    let (mut prod, mut cons) = (&mut rb).split();
+    let (mut prod, mut cons) = rb.split_ref();
 
     const MOD: usize = 2 * CAP;
     let values = [(12, 34, 13), (56, 78, 57), (90, 10, 91)];
@@ -105,7 +104,7 @@ fn push_pop_all() {
 #[test]
 fn empty_full() {
     let mut rb = LocalRb::<Static<i32, 1>>::default();
-    let (mut prod, cons) = (&mut rb).split();
+    let (mut prod, cons) = rb.split_ref();
 
     assert!(prod.is_empty());
     assert!(cons.is_empty());
@@ -123,7 +122,7 @@ fn empty_full() {
 #[test]
 fn len_remaining() {
     let mut rb = LocalRb::<Static<i32, 2>>::default();
-    let (mut prod, mut cons) = (&mut rb).split();
+    let (mut prod, mut cons) = rb.split_ref();
 
     assert_eq!(prod.occupied_len(), 0);
     assert_eq!(cons.occupied_len(), 0);

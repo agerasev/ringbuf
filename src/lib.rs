@@ -14,7 +14,6 @@ pub mod raw;
 pub mod ring_buffer;
 pub mod shared;
 pub mod storage;
-pub mod stored;
 mod transfer;
 mod utils;
 
@@ -25,18 +24,10 @@ pub use consumer::Consumer;
 pub use local::LocalRb;
 pub use observer::Observer;
 pub use producer::Producer;
-pub use ring_buffer::{RingBuffer, Split};
+pub use ring_buffer::RingBuffer;
 pub use shared::SharedRb;
 pub use transfer::transfer;
 
 pub mod prelude {
-    #[cfg(feature = "alloc")]
-    pub use crate::stored::HeapRb;
-    pub use crate::{
-        consumer::{ByteConsumer, Consumer},
-        observer::Observer,
-        producer::{ByteProducer, Producer},
-        ring_buffer::{RingBuffer, Split},
-        stored::StaticRb,
-    };
+    pub use crate::{Consumer, Observer, Producer, RingBuffer};
 }

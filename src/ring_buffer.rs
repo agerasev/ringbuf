@@ -1,10 +1,4 @@
-use crate::{
-    consumer::{self, Consumer},
-    producer::{self, Producer},
-    raw::RawRb,
-};
-#[cfg(feature = "alloc")]
-use alloc::{rc::Rc, sync::Arc};
+use crate::{consumer::Consumer, producer::Producer};
 
 /// An abstract ring buffer.
 ///
@@ -53,31 +47,5 @@ pub trait RingBuffer: Consumer + Producer {
         } else {
             elems
         });
-    }
-}
-
-pub trait Split<R> {
-    fn split(self) -> (producer::Wrap<R>, consumer::Wrap<R>);
-}
-
-impl<'a, R: RingBuffer + RawRb> Split<&'a R> for &'a mut R {
-    fn split(self) -> (producer::Wrap<&'a R>, consumer::Wrap<&'a R>) {
-        unsafe { (producer::Wrap::new(self), consumer::Wrap::new(self)) }
-    }
-}
-
-#[cfg(feature = "alloc")]
-impl<R: RingBuffer + RawRb> Split<Arc<R>> for R {
-    fn split(self) -> (producer::Wrap<Arc<R>>, consumer::Wrap<Arc<R>>) {
-        let arc = Arc::new(self);
-        unsafe { (producer::Wrap::new(arc.clone()), consumer::Wrap::new(arc)) }
-    }
-}
-
-#[cfg(feature = "alloc")]
-impl<R: RingBuffer + RawRb> Split<Rc<R>> for R {
-    fn split(self) -> (producer::Wrap<Rc<R>>, consumer::Wrap<Rc<R>>) {
-        let arc = Rc::new(self);
-        unsafe { (producer::Wrap::new(arc.clone()), consumer::Wrap::new(arc)) }
     }
 }

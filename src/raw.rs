@@ -1,4 +1,5 @@
-use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Range, ptr};
+use crate::{Consumer, Observer, Producer, RingBuffer};
+use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Range};
 
 /// Returns a pair of ranges between `begin` and `end` positions in a ring buffer with specific `capacity`.
 ///
@@ -17,7 +18,23 @@ pub fn ranges(capacity: NonZeroUsize, begin: usize, end: usize) -> (Range<usize>
     }
 }
 
-pub trait RawBuffer {
+/// Basic ring buffer functionality.
+///
+/// Provides an access to raw underlying memory and `read`/`write` counters.
+///
+/// *It is recommended not to use this trait directly. Use [`Producer`](`crate::Producer`) and [`Consumer`](`crate::Consumer`) instead.*
+///
+/// # Details
+///
+/// The ring buffer consists of an array (of `capacity` size) and two counters: `read` and `write`.
+/// When an item is extracted from the ring buffer it is taken from the `read` position and after that `read` is incremented.
+/// New item is appended to the `write` position and `write` is incremented after that.
+///
+/// The `read` and `write` counters are modulo `2 * capacity` (not just `capacity`).
+/// It allows us to distinguish situations when the buffer is empty (`read == write`) and when the buffer is full (`write - read` modulo `2 * capacity` equals to `capacity`)
+/// without using the space for an extra element in container.
+/// And obviously we cannot store more than `capacity` items in the buffer, so `write - read` modulo `2 * capacity` is not allowed to be greater than `capacity`.
+pub trait RawBase {
     type Item: Sized;
 
     /// Capacity of the ring buffer.
@@ -60,53 +77,15 @@ pub trait RawBuffer {
         let (first, second) = ranges(Self::capacity(self), begin, end);
         (self.slice(first), self.slice(second))
     }
-}
 
-/// Basic ring buffer functionality.
-///
-/// Provides an access to raw underlying memory and `read`/`write` counters.
-///
-/// *It is recommended not to use this trait directly. Use [`Producer`](`crate::Producer`) and [`Consumer`](`crate::Consumer`) instead.*
-///
-/// # Details
-///
-/// The ring buffer consists of an array (of `capacity` size) and two counters: `read` and `write`.
-/// When an item is extracted from the ring buffer it is taken from the `read` position and after that `read` is incremented.
-/// New item is appended to the `write` position and `write` is incremented after that.
-///
-/// The `read` and `write` counters are modulo `2 * capacity` (not just `capacity`).
-/// It allows us to distinguish situations when the buffer is empty (`read == write`) and when the buffer is full (`write - read` modulo `2 * capacity` equals to `capacity`)
-/// without using the space for an extra element in container.
-/// And obviously we cannot store more than `capacity` items in the buffer, so `write - read` modulo `2 * capacity` is not allowed to be greater than `capacity`.
-pub trait RawRb: RawBuffer {
     /// Read end position.
     fn read_end(&self) -> usize;
 
     /// Write ends position.
     fn write_end(&self) -> usize;
+}
 
-    /// The number of items stored in the buffer at the moment.
-    fn occupied_len(&self) -> usize {
-        let modulus = self.modulus();
-        (modulus.get() + self.write_end() - self.read_end()) % modulus
-    }
-
-    /// The number of vacant places in the buffer at the moment.
-    fn vacant_len(&self) -> usize {
-        let modulus = self.modulus();
-        (self.capacity().get() + self.read_end() - self.write_end()) % modulus
-    }
-
-    /// Checks if the occupied range is empty.
-    fn is_empty(&self) -> bool {
-        self.read_end() == self.write_end()
-    }
-
-    /// Checks if the vacant range is empty.
-    fn is_full(&self) -> bool {
-        self.vacant_len() == 0
-    }
-
+pub trait RawCons: RawBase {
     /// Sets the new **read** position.
     ///
     /// # Safety
@@ -115,69 +94,9 @@ pub trait RawRb: RawBuffer {
     ///
     /// It is recommended to use `Self::move_read_end` instead.
     unsafe fn set_read_end(&self, value: usize);
+}
 
-    /// Move **read** position by `count` items forward.
-    ///
-    /// # Safety
-    ///
-    /// First `count` items in occupied area must be **initialized** before this call.
-    ///
-    /// *In debug mode panics if `count` is greater than number of items in the ring buffer.*
-    unsafe fn move_read_end(&self, count: usize) {
-        debug_assert!(count <= self.occupied_len());
-        self.set_read_end((self.read_end() + count) % self.modulus());
-    }
-
-    /// Provides a direct mutable access to the ring buffer occupied memory.
-    ///
-    /// Returns a pair of slices of stored items, the second one may be empty.
-    /// Elements with lower indices in slice are older. First slice contains older items that second one.
-    ///
-    /// # Safety
-    ///
-    /// All items are initialized. Elements must be removed starting from the beginning of first slice.
-    /// When all items are removed from the first slice then items must be removed from the beginning of the second slice.
-    ///
-    /// *This method must be followed by [`Self::move_read_end`] call with the number of items being removed previously as argument.*
-    /// *No other mutating calls allowed before that.*
-    #[inline]
-    unsafe fn occupied_slices(
-        &self,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    ) {
-        self.slices(self.read_end(), self.write_end())
-    }
-
-    /// Removes items from the read of ring buffer and drops them.
-    ///
-    /// + If `count_or_all` is `Some(count)` then exactly `count` items will be removed.
-    ///   *In debug mode panics if `count` is greater than number of items stored in the buffer.*
-    /// + If `count_or_all` is `None` then all items in ring buffer will be removed.
-    ///   *If there is concurring producer activity then the buffer may be not empty after this call.*
-    ///
-    /// Returns the number of removed items.
-    ///
-    /// # Safety
-    ///
-    /// Must not be called concurrently.
-    unsafe fn skip(&self, count_or_all: Option<usize>) -> usize {
-        let (left, right) = self.occupied_slices();
-        let count = match count_or_all {
-            Some(count) => {
-                debug_assert!(count <= left.len() + right.len());
-                count
-            }
-            None => left.len() + right.len(),
-        };
-        for elem in left.iter_mut().chain(right.iter_mut()).take(count) {
-            ptr::drop_in_place(elem.as_mut_ptr());
-        }
-        self.move_read_end(count);
-        count
-    }
-
+pub trait RawProd: RawBase {
     /// Sets the new **write** position.
     ///
     /// # Safety
@@ -186,36 +105,72 @@ pub trait RawRb: RawBuffer {
     ///
     /// It is recommended to use `Self::move_write_end` instead.
     unsafe fn set_write_end(&self, value: usize);
+}
 
-    /// Move **write** position by `count` items forward.
-    ///
-    /// # Safety
-    ///
-    /// First `count` items in vacant area must be **de-initialized** (dropped) before this call.
-    ///
-    /// *In debug mode panics if `count` is greater than number of vacant places in the ring buffer.*
-    unsafe fn move_write_end(&self, count: usize) {
-        debug_assert!(count <= self.vacant_len());
-        self.set_write_end((self.write_end() + count) % self.modulus());
+pub trait RawRb: RawProd + RawCons {}
+
+impl<R: RawBase> Observer for R {
+    type Item = R::Item;
+
+    #[inline]
+    fn capacity(&self) -> usize {
+        R::capacity(self).get()
     }
 
-    /// Provides a direct access to the ring buffer vacant memory.
-    /// Returns a pair of slices of uninitialized memory, the second one may be empty.
-    ///
-    /// # Safety
-    ///
-    /// Vacant memory is uninitialized. Initialized items must be put starting from the beginning of first slice.
-    /// When first slice is fully filled then items must be put to the beginning of the second slice.
-    ///
-    /// *This method must be followed by [`Self::move_write_end`] call with the number of items being put previously as argument.*
-    /// *No other mutating calls allowed before that.*
-    #[inline]
-    unsafe fn vacant_slices(
-        &self,
+    fn occupied_len(&self) -> usize {
+        let modulus = self.modulus();
+        (modulus.get() + self.write_end() - self.read_end()) % modulus
+    }
+
+    fn vacant_len(&self) -> usize {
+        let modulus = self.modulus();
+        (self.capacity().get() + self.read_end() - self.write_end()) % modulus
+    }
+
+    fn is_empty(&self) -> bool {
+        self.read_end() == self.write_end()
+    }
+}
+
+impl<R: RawProd> Producer for R {
+    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        let (first, second) =
+            unsafe { self.slices(self.write_end(), self.read_end() + self.capacity().get()) };
+        (first as &_, second as &_)
+    }
+
+    fn vacant_slices_mut(
+        &mut self,
     ) -> (
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
     ) {
-        self.slices(self.write_end(), self.read_end() + self.capacity().get())
+        unsafe { self.slices(self.write_end(), self.read_end() + self.capacity().get()) }
+    }
+
+    unsafe fn advance_write(&mut self, count: usize) {
+        self.set_write_end((self.write_end() + count) % self.modulus());
     }
 }
+
+impl<R: RawCons> Consumer for R {
+    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        let (first, second) = unsafe { self.slices(self.read_end(), self.write_end()) };
+        (first as &_, second as &_)
+    }
+
+    unsafe fn occupied_slices_mut(
+        &mut self,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    ) {
+        self.slices(self.read_end(), self.write_end())
+    }
+
+    unsafe fn advance_read(&mut self, count: usize) {
+        self.set_read_end((self.read_end() + count) % self.modulus());
+    }
+}
+
+impl<R: RawRb> RingBuffer for R {}
