@@ -1,7 +1,7 @@
 use crate::{
     consumer::{Cons, Consumer},
     producer::Prod,
-    raw::{AsRaw, Raw, RawCons, RawProd, RbMarker},
+    raw::{ranges, AsRaw, Raw, RawCons, RawProd, RawRb, RbMarker},
     storage::{impl_rb_ctors, Shared, Storage},
 };
 #[cfg(feature = "alloc")]
@@ -10,7 +10,6 @@ use core::{
     cell::Cell,
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
-    ops::Range,
     ptr,
 };
 
@@ -66,9 +65,16 @@ impl<S: Storage> Raw for LocalRb<S> {
         self.storage.len()
     }
 
-    #[inline]
-    unsafe fn slice(&self, range: Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
-        self.storage.slice(range)
+    unsafe fn slices(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    ) {
+        let (first, second) = ranges(self.capacity(), start, end);
+        (self.storage.slice(first), self.storage.slice(second))
     }
 
     #[inline]
@@ -100,6 +106,7 @@ impl<S: Storage> AsRaw for LocalRb<S> {
         self
     }
 }
+impl<S: Storage> RawRb for LocalRb<S> {}
 impl<S: Storage> RbMarker for LocalRb<S> {}
 
 impl<S: Storage> Drop for LocalRb<S> {

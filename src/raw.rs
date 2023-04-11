@@ -54,33 +54,19 @@ pub trait Raw {
         unsafe { NonZeroUsize::new_unchecked(2 * self.capacity().get()) }
     }
 
-    /// Get mutable slice of ring buffer data in specified `range`.
-    ///
-    /// # Safety
-    ///
-    /// `range` must be a subset of `0..capacity`.
-    ///
-    /// Slices with overlapping lifetimes must not overlap.
-    #[allow(clippy::mut_from_ref)]
-    unsafe fn slice(&self, range: Range<usize>) -> &mut [MaybeUninit<Self::Item>];
-
     /// Returns part of underlying raw ring buffer memory as slices.
     ///
     /// # Safety
     ///
     /// Only non-overlapping slices allowed to exist at the same time.
-    #[inline]
     unsafe fn slices(
         &self,
-        begin: usize,
+        start: usize,
         end: usize,
     ) -> (
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
-    ) {
-        let (first, second) = ranges(Self::capacity(self), begin, end);
-        (self.slice(first), self.slice(second))
-    }
+    );
 
     /// Read end position.
     fn read_end(&self) -> usize;
@@ -111,6 +97,8 @@ pub trait RawProd: Raw {
     unsafe fn set_write_end(&self, value: usize);
 }
 
+pub trait RawRb: RawProd + RawCons {}
+
 pub trait AsRaw {
     type Raw: Raw;
     fn as_raw(&self) -> &Self::Raw;
@@ -140,11 +128,11 @@ where
 }
 pub trait RbMarker: ProdMarker + ConsMarker
 where
-    Self::Raw: RawProd + RawCons,
+    Self::Raw: RawRb,
 {
 }
-impl<R: RbMarker> ProdMarker for R where R::Raw: RawProd + RawCons {}
-impl<R: RbMarker> ConsMarker for R where R::Raw: RawProd + RawCons {}
+impl<R: RbMarker> ProdMarker for R where R::Raw: RawRb {}
+impl<R: RbMarker> ConsMarker for R where R::Raw: RawRb {}
 
 impl<R: AsRaw> Observer for R {
     type Item = <R::Raw as Raw>::Item;
@@ -225,4 +213,4 @@ where
     }
 }
 
-impl<R: RbMarker> RingBuffer for R where R::Raw: RawProd + RawCons {}
+impl<R: RbMarker> RingBuffer for R where R::Raw: RawRb {}

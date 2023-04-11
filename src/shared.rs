@@ -1,7 +1,7 @@
 use crate::{
     consumer::{Cons, Consumer},
     producer::Prod,
-    raw::{AsRaw, Raw, RawCons, RawProd, RbMarker},
+    raw::{ranges, AsRaw, Raw, RawCons, RawProd, RawRb, RbMarker},
     storage::{impl_rb_ctors, Shared, Storage},
 };
 #[cfg(feature = "alloc")]
@@ -9,7 +9,6 @@ use alloc::sync::Arc;
 use core::{
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
-    ops::Range,
     ptr,
     sync::atomic::{AtomicUsize, Ordering},
 };
@@ -90,9 +89,16 @@ impl<S: Storage> Raw for SharedRb<S> {
         self.storage.len()
     }
 
-    #[inline]
-    unsafe fn slice(&self, range: Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
-        self.storage.slice(range)
+    unsafe fn slices(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    ) {
+        let (first, second) = ranges(self.capacity(), start, end);
+        (self.storage.slice(first), self.storage.slice(second))
     }
 
     #[inline]
@@ -124,6 +130,7 @@ impl<S: Storage> AsRaw for SharedRb<S> {
         self
     }
 }
+impl<S: Storage> RawRb for SharedRb<S> {}
 impl<S: Storage> RbMarker for SharedRb<S> {}
 
 impl<S: Storage> Drop for SharedRb<S> {

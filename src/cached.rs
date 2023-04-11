@@ -7,7 +7,6 @@ use core::{
     cell::Cell,
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
-    ops::Range,
     ptr,
 };
 
@@ -48,8 +47,15 @@ where
     type Item = <R::Raw as Raw>::Item;
 
     #[inline]
-    unsafe fn slice(&self, range: Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
-        self.base.as_raw().slice(range)
+    unsafe fn slices(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    ) {
+        self.base.as_raw().slices(start, end)
     }
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
@@ -72,8 +78,15 @@ where
     type Item = <R::Raw as Raw>::Item;
 
     #[inline]
-    unsafe fn slice(&self, range: Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
-        self.base.as_raw().slice(range)
+    unsafe fn slices(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    ) {
+        self.base.as_raw().slices(start, end)
     }
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
