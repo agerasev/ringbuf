@@ -115,7 +115,7 @@ pub trait Consumer: Observer {
 
     /// Returns an iterator that removes items one by one from the ring buffer.
     fn pop_iter(&mut self) -> PopIter<'_, Self> {
-        PopIter(self)
+        PopIter::new(self)
     }
 
     /// Returns a front-to-back iterator containing references to items in the ring buffer.
@@ -224,17 +224,51 @@ impl<C: Consumer> Iterator for IntoIter<C> {
 }
 
 /// An iterator that removes items from the ring buffer.
-pub struct PopIter<'a, C: Consumer + ?Sized>(&'a mut C);
+pub struct PopIter<'a, C: Consumer + ?Sized> {
+    target: &'a mut C,
+    slices: (&'a [MaybeUninit<C::Item>], &'a [MaybeUninit<C::Item>]),
+    len: usize,
+}
+impl<'a, C: Consumer + ?Sized> PopIter<'a, C> {
+    pub fn new(target: &'a mut C) -> Self {
+        let slices = target.occupied_slices();
+        Self {
+            len: slices.0.len() + slices.1.len(),
+            slices: unsafe { (&*(slices.0 as *const _), &*(slices.1 as *const _)) },
+            target,
+        }
+    }
+}
 impl<'a, C: Consumer + ?Sized> Iterator for PopIter<'a, C> {
     type Item = C::Item;
-
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.0.try_pop()
+        match self.slices.0.len() {
+            0 => None,
+            n => {
+                let item = unsafe { self.slices.0.get_unchecked(0).assume_init_read() };
+                if n == 1 {
+                    (self.slices.0, self.slices.1) = (self.slices.1, &[]);
+                } else {
+                    self.slices.0 = unsafe { self.slices.0.get_unchecked(1..n) };
+                }
+                Some(item)
+            }
+        }
     }
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.0.occupied_len(), None)
+        (self.len(), Some(self.len()))
+    }
+}
+impl<'a, C: Consumer + ?Sized> ExactSizeIterator for PopIter<'a, C> {
+    fn len(&self) -> usize {
+        self.slices.0.len() + self.slices.1.len()
+    }
+}
+impl<'a, C: Consumer + ?Sized> Drop for PopIter<'a, C> {
+    fn drop(&mut self) {
+        unsafe { self.target.advance_read(self.len - self.len()) };
     }
 }
 

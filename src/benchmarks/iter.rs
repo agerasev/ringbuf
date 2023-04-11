@@ -12,7 +12,7 @@ fn push_iter_x1000(b: &mut Bencher) {
     cons.skip(RB_SIZE / 2);
 
     b.iter(|| {
-        prod.push_iter(&mut (0..1000).into_iter());
+        prod.push_iter(0..1000);
         black_box(cons.as_slices());
         unsafe { cons.advance_read(1000) };
     });
