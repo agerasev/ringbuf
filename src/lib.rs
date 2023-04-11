@@ -1,5 +1,6 @@
 #![no_std]
 #![allow(clippy::type_complexity)]
+#![cfg_attr(feature = "bench", feature(test))]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -35,3 +36,8 @@ pub mod traits {
         consumer::Consumer, observer::Observer, producer::Producer, ring_buffer::RingBuffer,
     };
 }
+
+#[cfg(feature = "bench")]
+extern crate test;
+#[cfg(feature = "bench")]
+mod benchmarks;

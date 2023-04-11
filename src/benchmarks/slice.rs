@@ -1,5 +1,4 @@
-use crate::HeapRb;
-
+use crate::{traits::*, HeapRb};
 use test::{black_box, Bencher};
 
 const RB_SIZE: usize = 1024;
