@@ -1,4 +1,4 @@
-use crate::{traits::*, Rb};
+use crate::{traits::*, BlockingRb};
 use ringbuf::{traits::*, HeapRb};
 use std::{iter::once, thread};
 
@@ -16,7 +16,7 @@ This book fully embraces the potential of Rust to empower its users. It's a frie
 #[test]
 #[cfg_attr(miri, ignore)]
 fn wait() {
-    let buf = Rb::from(HeapRb::<u8>::new(7));
+    let buf = BlockingRb::from(HeapRb::<u8>::new(7));
     let (mut prod, mut cons) = buf.split();
 
     let smsg = THE_BOOK_FOREWORD;
@@ -58,7 +58,7 @@ fn wait() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn slice_all() {
-    let buf = Rb::from(HeapRb::<u8>::new(7));
+    let buf = BlockingRb::from(HeapRb::<u8>::new(7));
     let (mut prod, mut cons) = buf.split();
 
     let smsg = THE_BOOK_FOREWORD;
@@ -85,7 +85,7 @@ fn slice_all() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn iter_all() {
-    let buf = Rb::from(HeapRb::<u8>::new(7));
+    let buf = BlockingRb::from(HeapRb::<u8>::new(7));
     let (mut prod, mut cons) = buf.split();
 
     let smsg = THE_BOOK_FOREWORD;

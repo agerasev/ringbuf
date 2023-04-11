@@ -1,7 +1,7 @@
 use crate::{
     consumer::{Cons, Consumer},
     producer::Prod,
-    raw::{ranges, AsRaw, Raw, RawCons, RawProd, RawRb, RbMarker},
+    raw::{ranges, AsRaw, RawRb, RbMarker},
     storage::{impl_rb_ctors, Shared, Storage},
 };
 #[cfg(feature = "alloc")]
@@ -66,7 +66,7 @@ impl<S: Storage> SharedRb<S> {
     ///
     /// Initialized contents of the storage must be properly dropped.
     pub unsafe fn into_raw_parts(self) -> (S, usize, usize) {
-        let (read, write) = (self.read_end(), self.write_end());
+        let (read, write) = (self.read_index(), self.write_index());
         let self_ = ManuallyDrop::new(self);
         (ptr::read(&self_.storage).into_inner(), read, write)
     }
@@ -81,7 +81,7 @@ impl<S: Storage> SharedRb<S> {
     }
 }
 
-impl<S: Storage> Raw for SharedRb<S> {
+impl<S: Storage> RawRb for SharedRb<S> {
     type Item = S::Item;
 
     #[inline]
@@ -102,23 +102,21 @@ impl<S: Storage> Raw for SharedRb<S> {
     }
 
     #[inline]
-    fn read_end(&self) -> usize {
+    fn read_index(&self) -> usize {
         self.read.load(Ordering::Acquire)
     }
     #[inline]
-    fn write_end(&self) -> usize {
+    fn write_index(&self) -> usize {
         self.write.load(Ordering::Acquire)
     }
-}
-impl<S: Storage> RawProd for SharedRb<S> {
+
     #[inline]
-    unsafe fn set_write_end(&self, value: usize) {
+    unsafe fn set_write_index(&self, value: usize) {
         self.write.store(value, Ordering::Release)
     }
-}
-impl<S: Storage> RawCons for SharedRb<S> {
+
     #[inline]
-    unsafe fn set_read_end(&self, value: usize) {
+    unsafe fn set_read_index(&self, value: usize) {
         self.read.store(value, Ordering::Release)
     }
 }
@@ -130,8 +128,7 @@ impl<S: Storage> AsRaw for SharedRb<S> {
         self
     }
 }
-impl<S: Storage> RawRb for SharedRb<S> {}
-impl<S: Storage> RbMarker for SharedRb<S> {}
+unsafe impl<S: Storage> RbMarker for SharedRb<S> {}
 
 impl<S: Storage> Drop for SharedRb<S> {
     fn drop(&mut self) {

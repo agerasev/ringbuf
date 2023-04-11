@@ -1,28 +1,21 @@
 use crate::{
-    raw::{RawCons, RawProd, RawRb},
+    raw::RawBlockingRb,
     utils::{Semaphore, TimeoutIterator},
 };
 use ringbuf::{
-    raw::{AsRaw, ConsMarker, ProdMarker, Raw, RbMarker},
-    traits::Observer,
+    raw::{AsRaw, ConsMarker, ProdMarker, RawRb, RbMarker},
+    traits::{Consumer, Observer, Producer, RingBuffer},
     Cons, HeapRb, Prod,
 };
 use std::{mem::MaybeUninit, num::NonZeroUsize, sync::Arc, time::Duration};
 
-mod base {
-    pub use ringbuf::{
-        raw::{AsRaw, RawCons, RawProd, RawRb},
-        traits::{Consumer, Producer, RingBuffer},
-    };
-}
-
-pub struct Rb<B: base::RawRb> {
+pub struct BlockingRb<B: RawRb> {
     inner: B,
     read_sem: Semaphore,
     write_sem: Semaphore,
 }
 
-impl<B: base::RawRb> From<B> for Rb<B> {
+impl<B: RawRb> From<B> for BlockingRb<B> {
     fn from(inner: B) -> Self {
         Self {
             inner,
@@ -31,13 +24,13 @@ impl<B: base::RawRb> From<B> for Rb<B> {
         }
     }
 }
-impl<B: base::RawRb> Rb<B> {
+impl<B: RawRb> BlockingRb<B> {
     pub fn into_inner(self) -> B {
         self.inner
     }
 }
 
-impl<B: base::RawRb + Default> Default for Rb<B> {
+impl<B: RawRb + Default> Default for BlockingRb<B> {
     fn default() -> Self {
         Self {
             inner: B::default(),
@@ -47,7 +40,7 @@ impl<B: base::RawRb + Default> Default for Rb<B> {
     }
 }
 
-impl<B: base::RawRb> Raw for Rb<B> {
+impl<B: RawRb> RawRb for BlockingRb<B> {
     type Item = B::Item;
 
     #[inline]
@@ -66,49 +59,41 @@ impl<B: base::RawRb> Raw for Rb<B> {
         self.inner.capacity()
     }
     #[inline]
-    fn read_end(&self) -> usize {
-        self.inner.read_end()
+    fn read_index(&self) -> usize {
+        self.inner.read_index()
     }
     #[inline]
-    fn write_end(&self) -> usize {
-        self.inner.write_end()
+    fn write_index(&self) -> usize {
+        self.inner.write_index()
     }
-}
-impl<B: base::RawRb> base::RawCons for Rb<B> {
     #[inline]
-    unsafe fn set_read_end(&self, value: usize) {
-        self.write_sem.notify(|| self.inner.set_read_end(value));
+    unsafe fn set_read_index(&self, value: usize) {
+        self.write_sem.notify(|| self.inner.set_read_index(value));
     }
-}
-impl<B: base::RawRb> base::RawProd for Rb<B> {
     #[inline]
-    unsafe fn set_write_end(&self, value: usize) {
-        self.read_sem.notify(|| self.inner.set_write_end(value));
+    unsafe fn set_write_index(&self, value: usize) {
+        self.read_sem.notify(|| self.inner.set_write_index(value));
     }
 }
-impl<B: base::RawRb> base::RawRb for Rb<B> {}
 
-impl<B: base::RawRb> RawProd for Rb<B> {
+impl<B: RawRb> RawBlockingRb for BlockingRb<B> {
     fn wait_write<F: Fn() -> bool>(&self, pred: F, timeout: Option<Duration>) -> bool {
         self.write_sem.wait(pred, timeout)
     }
-}
-impl<B: base::RawRb> RawCons for Rb<B> {
     fn wait_read<F: Fn() -> bool>(&self, pred: F, timeout: Option<Duration>) -> bool {
         self.read_sem.wait(pred, timeout)
     }
 }
-impl<B: base::RawRb> RawRb for Rb<B> {}
 
-impl<B: base::RawRb> AsRaw for Rb<B> {
+impl<B: RawRb> AsRaw for BlockingRb<B> {
     type Raw = Self;
     fn as_raw(&self) -> &Self::Raw {
         self
     }
 }
-impl<B: base::RawRb> RbMarker for Rb<B> {}
+unsafe impl<B: RawRb> RbMarker for BlockingRb<B> {}
 
-impl<T> Rb<HeapRb<T>> {
+impl<T> BlockingRb<HeapRb<T>> {
     pub fn new(capacity: usize) -> Self {
         Self::from(HeapRb::new(capacity))
     }
@@ -118,7 +103,7 @@ impl<T> Rb<HeapRb<T>> {
     }
 }
 
-pub trait Producer: base::Producer {
+pub trait BlockingProducer: Producer {
     fn wait_write(&self, count: usize, timeout: Option<Duration>) -> bool;
 
     fn push(&mut self, item: Self::Item, timeout: Option<Duration>) -> Result<(), Self::Item> {
@@ -167,7 +152,7 @@ pub trait Producer: base::Producer {
     }
 }
 
-pub trait Consumer: base::Consumer {
+pub trait BlockingConsumer: Consumer {
     fn wait_read(&self, count: usize, timeout: Option<Duration>) -> bool;
 
     fn pop_wait(&mut self, timeout: Option<Duration>) -> Option<Self::Item> {
@@ -204,11 +189,11 @@ pub trait Consumer: base::Consumer {
     }
 }
 
-pub struct PopAllIter<'a, C: Consumer + ?Sized> {
+pub struct PopAllIter<'a, C: Consumer> {
     target: &'a mut C,
     timeout: TimeoutIterator,
 }
-impl<'a, C: Consumer + ?Sized> Iterator for PopAllIter<'a, C> {
+impl<'a, C: BlockingConsumer> Iterator for PopAllIter<'a, C> {
     type Item = C::Item;
     fn next(&mut self) -> Option<Self::Item> {
         let timeout = self.timeout.next()?;
@@ -220,11 +205,11 @@ impl<'a, C: Consumer + ?Sized> Iterator for PopAllIter<'a, C> {
     }
 }
 
-pub trait RingBuffer: base::RingBuffer {}
+pub trait BlockingRingBuffer: RingBuffer {}
 
-impl<R: AsRaw + ProdMarker> Producer for R
+impl<R: AsRaw + ProdMarker> BlockingProducer for R
 where
-    R::Raw: RawProd,
+    R::Raw: RawBlockingRb,
 {
     fn wait_write(&self, count: usize, timeout: Option<Duration>) -> bool {
         assert!(count <= self.capacity());
@@ -233,9 +218,9 @@ where
     }
 }
 
-impl<R: AsRaw + ConsMarker> Consumer for R
+impl<R: AsRaw + ConsMarker> BlockingConsumer for R
 where
-    R::Raw: RawCons,
+    R::Raw: RawBlockingRb,
 {
     fn wait_read(&self, count: usize, timeout: Option<Duration>) -> bool {
         assert!(count <= self.capacity());
@@ -243,3 +228,4 @@ where
             .wait_read(|| self.occupied_len() >= count, timeout)
     }
 }
+impl<R: AsRaw + RbMarker> BlockingRingBuffer for R where R::Raw: RawBlockingRb {}

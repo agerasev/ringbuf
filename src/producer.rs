@@ -3,7 +3,7 @@ use crate::utils::slice_assume_init_mut;
 use crate::{
     cached::CachedProd,
     observer::Observer,
-    raw::{AsRaw, ProdMarker, RawProd},
+    raw::{AsRaw, ProdMarker},
     utils::write_slice,
 };
 use core::mem::MaybeUninit;
@@ -138,17 +138,11 @@ pub trait Producer: Observer {
 }
 
 /// Producer wrapper of ring buffer.
-pub struct Prod<R: AsRaw>
-where
-    R::Raw: RawProd,
-{
+pub struct Prod<R: AsRaw> {
     base: R,
 }
 
-impl<R: AsRaw> Prod<R>
-where
-    R::Raw: RawProd,
-{
+impl<R: AsRaw> Prod<R> {
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
@@ -163,10 +157,7 @@ where
     }
 }
 
-impl<R: AsRaw> AsRaw for Prod<R>
-where
-    R::Raw: RawProd,
-{
+impl<R: AsRaw> AsRaw for Prod<R> {
     type Raw = R::Raw;
 
     #[inline]
@@ -174,14 +165,14 @@ where
         self.base.as_raw()
     }
 }
-impl<R: AsRaw> ProdMarker for Prod<R> where R::Raw: RawProd {}
+unsafe impl<R: AsRaw> ProdMarker for Prod<R> {}
 
 macro_rules! impl_prod_traits {
     ($Prod:ident) => {
         #[cfg(feature = "std")]
         impl<R: crate::raw::AsRaw> std::io::Write for $Prod<R>
         where
-            R::Raw: crate::raw::RawProd<Item = u8>,
+            R::Raw: crate::raw::RawRb<Item = u8>,
         {
             fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
                 use crate::producer::Producer;
@@ -199,7 +190,7 @@ macro_rules! impl_prod_traits {
 
         impl<R: crate::raw::AsRaw> core::fmt::Write for $Prod<R>
         where
-            R::Raw: crate::raw::RawProd<Item = u8>,
+            R::Raw: crate::raw::RawRb<Item = u8>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 use crate::producer::Producer;
@@ -217,10 +208,7 @@ pub(crate) use impl_prod_traits;
 
 impl_prod_traits!(Prod);
 
-impl<R: AsRaw> Prod<R>
-where
-    R::Raw: RawProd,
-{
+impl<R: AsRaw> Prod<R> {
     pub fn cached(&mut self) -> CachedProd<&R> {
         unsafe { CachedProd::new(&self.base) }
     }

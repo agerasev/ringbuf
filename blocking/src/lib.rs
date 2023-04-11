@@ -5,11 +5,9 @@ mod utils;
 #[cfg(test)]
 mod tests;
 
-pub use rb::{PopAllIter, Rb};
+pub use rb::{BlockingRb, PopAllIter};
 
 pub mod traits {
-    pub use crate::rb::{
-        Consumer as BlockingConsumer, Producer as BlockingProducer,
-        RingBuffer as BlockingRingBuffer,
-    };
+    pub use crate::rb::{BlockingConsumer, BlockingProducer, BlockingRingBuffer};
+    pub use ringbuf::traits::*;
 }

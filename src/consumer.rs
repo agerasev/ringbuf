@@ -1,7 +1,7 @@
 use crate::{
     cached::CachedCons,
     observer::Observer,
-    raw::{AsRaw, ConsMarker, RawCons},
+    raw::{AsRaw, ConsMarker},
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
 use core::{iter::Chain, mem::MaybeUninit, ptr, slice};
@@ -224,12 +224,12 @@ impl<C: Consumer> Iterator for IntoIter<C> {
 }
 
 /// An iterator that removes items from the ring buffer.
-pub struct PopIter<'a, C: Consumer + ?Sized> {
+pub struct PopIter<'a, C: Consumer> {
     target: &'a mut C,
     slices: (&'a [MaybeUninit<C::Item>], &'a [MaybeUninit<C::Item>]),
     len: usize,
 }
-impl<'a, C: Consumer + ?Sized> PopIter<'a, C> {
+impl<'a, C: Consumer> PopIter<'a, C> {
     pub fn new(target: &'a mut C) -> Self {
         let slices = target.occupied_slices();
         Self {
@@ -239,7 +239,7 @@ impl<'a, C: Consumer + ?Sized> PopIter<'a, C> {
         }
     }
 }
-impl<'a, C: Consumer + ?Sized> Iterator for PopIter<'a, C> {
+impl<'a, C: Consumer> Iterator for PopIter<'a, C> {
     type Item = C::Item;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -261,12 +261,12 @@ impl<'a, C: Consumer + ?Sized> Iterator for PopIter<'a, C> {
         (self.len(), Some(self.len()))
     }
 }
-impl<'a, C: Consumer + ?Sized> ExactSizeIterator for PopIter<'a, C> {
+impl<'a, C: Consumer> ExactSizeIterator for PopIter<'a, C> {
     fn len(&self) -> usize {
         self.slices.0.len() + self.slices.1.len()
     }
 }
-impl<'a, C: Consumer + ?Sized> Drop for PopIter<'a, C> {
+impl<'a, C: Consumer> Drop for PopIter<'a, C> {
     fn drop(&mut self) {
         unsafe { self.target.advance_read(self.len - self.len()) };
     }
@@ -276,27 +276,20 @@ impl<'a, C: Consumer + ?Sized> Drop for PopIter<'a, C> {
 ///
 /// *Please do not rely on actual type, it may change in future.*
 #[allow(type_alias_bounds)]
-pub type Iter<'a, C: Consumer + ?Sized> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a, C::Item>>;
+pub type Iter<'a, C: Consumer> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a, C::Item>>;
 
 /// Mutable iterator over ring buffer contents.
 ///
 /// *Please do not rely on actual type, it may change in future.*
 #[allow(type_alias_bounds)]
-pub type IterMut<'a, C: Consumer + ?Sized> =
-    Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
+pub type IterMut<'a, C: Consumer> = Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
 
 /// Producer wrapper of ring buffer.
-pub struct Cons<R: AsRaw>
-where
-    R::Raw: RawCons,
-{
+pub struct Cons<R: AsRaw> {
     base: R,
 }
 
-impl<R: AsRaw> Cons<R>
-where
-    R::Raw: RawCons,
-{
+impl<R: AsRaw> Cons<R> {
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
@@ -311,25 +304,19 @@ where
     }
 }
 
-impl<R: AsRaw> AsRaw for Cons<R>
-where
-    R::Raw: RawCons,
-{
+impl<R: AsRaw> AsRaw for Cons<R> {
     type Raw = R::Raw;
     #[inline]
     fn as_raw(&self) -> &Self::Raw {
         self.base.as_raw()
     }
 }
-impl<R: AsRaw> ConsMarker for Cons<R> where R::Raw: RawCons {}
+unsafe impl<R: AsRaw> ConsMarker for Cons<R> {}
 
 macro_rules! impl_cons_traits {
     ($Cons:ident) => {
-        impl<R: crate::raw::AsRaw> IntoIterator for $Cons<R>
-        where
-            R::Raw: crate::raw::RawCons,
-        {
-            type Item = <R::Raw as crate::raw::Raw>::Item;
+        impl<R: crate::raw::AsRaw> IntoIterator for $Cons<R> {
+            type Item = <R::Raw as crate::raw::RawRb>::Item;
             type IntoIter = crate::consumer::IntoIter<Self>;
 
             fn into_iter(self) -> Self::IntoIter {
@@ -340,7 +327,7 @@ macro_rules! impl_cons_traits {
         #[cfg(feature = "std")]
         impl<R: crate::raw::AsRaw> std::io::Read for $Cons<R>
         where
-            R::Raw: crate::raw::RawCons<Item = u8>,
+            R::Raw: crate::raw::RawRb<Item = u8>,
         {
             fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
                 use crate::consumer::Consumer;
@@ -358,10 +345,7 @@ pub(crate) use impl_cons_traits;
 
 impl_cons_traits!(Cons);
 
-impl<R: AsRaw> Cons<R>
-where
-    R::Raw: RawCons,
-{
+impl<R: AsRaw> Cons<R> {
     pub fn cached(&mut self) -> CachedCons<&R> {
         unsafe { CachedCons::new(&self.base) }
     }

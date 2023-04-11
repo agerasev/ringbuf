@@ -1,7 +1,7 @@
 use crate::{
     consumer::{Cons, Consumer},
     producer::Prod,
-    raw::{ranges, AsRaw, Raw, RawCons, RawProd, RawRb, RbMarker},
+    raw::{ranges, AsRaw, RawRb, RbMarker},
     storage::{impl_rb_ctors, Shared, Storage},
 };
 #[cfg(feature = "alloc")]
@@ -42,7 +42,7 @@ impl<S: Storage> LocalRb<S> {
     ///
     /// Initialized contents of the storage must be properly dropped.
     pub unsafe fn into_raw_parts(self) -> (S, usize, usize) {
-        let (read, write) = (self.read_end(), self.write_end());
+        let (read, write) = (self.read_index(), self.write_index());
         let self_ = ManuallyDrop::new(self);
         (ptr::read(&self_.storage).into_inner(), read, write)
     }
@@ -57,7 +57,7 @@ impl<S: Storage> LocalRb<S> {
     }
 }
 
-impl<S: Storage> Raw for LocalRb<S> {
+impl<S: Storage> RawRb for LocalRb<S> {
     type Item = S::Item;
 
     #[inline]
@@ -78,23 +78,21 @@ impl<S: Storage> Raw for LocalRb<S> {
     }
 
     #[inline]
-    fn read_end(&self) -> usize {
+    fn read_index(&self) -> usize {
         self.read.get()
     }
     #[inline]
-    fn write_end(&self) -> usize {
+    fn write_index(&self) -> usize {
         self.write.get()
     }
-}
-impl<S: Storage> RawCons for LocalRb<S> {
+
     #[inline]
-    unsafe fn set_read_end(&self, value: usize) {
+    unsafe fn set_read_index(&self, value: usize) {
         self.read.set(value);
     }
-}
-impl<S: Storage> RawProd for LocalRb<S> {
+
     #[inline]
-    unsafe fn set_write_end(&self, value: usize) {
+    unsafe fn set_write_index(&self, value: usize) {
         self.write.set(value);
     }
 }
@@ -106,8 +104,7 @@ impl<S: Storage> AsRaw for LocalRb<S> {
         self
     }
 }
-impl<S: Storage> RawRb for LocalRb<S> {}
-impl<S: Storage> RbMarker for LocalRb<S> {}
+unsafe impl<S: Storage> RbMarker for LocalRb<S> {}
 
 impl<S: Storage> Drop for LocalRb<S> {
     fn drop(&mut self) {

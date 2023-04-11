@@ -1,4 +1,4 @@
-pub trait Observer {
+pub trait Observer: Sized {
     type Item: Sized;
 
     /// Returns capacity of the ring buffer.
