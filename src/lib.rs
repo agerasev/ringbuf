@@ -23,7 +23,7 @@ mod utils;
 mod tests;
 
 pub use alias::*;
-//pub use cached::{CachedCons, CachedProd};
+pub use cached::{CachedCons, CachedProd};
 pub use consumer::Cons;
 pub use local::LocalRb;
 pub use producer::Prod;

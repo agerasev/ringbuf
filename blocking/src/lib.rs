@@ -1,13 +1,10 @@
-pub mod raw;
+pub mod consumer;
+pub mod producer;
 mod rb;
+pub mod traits;
 mod utils;
 
 #[cfg(test)]
 mod tests;
 
-pub use rb::{BlockingRb, PopAllIter};
-
-pub mod traits {
-    pub use crate::rb::{BlockingConsumer, BlockingProducer, BlockingRingBuffer};
-    pub use ringbuf::traits::*;
-}
+pub use rb::BlockingRb;
