@@ -1,7 +1,6 @@
-use crate::{
-    storage::{Heap, Static},
-    Cons, Prod, SharedRb,
-};
+#[cfg(feature = "alloc")]
+use crate::storage::Heap;
+use crate::{storage::Static, Cons, Prod, SharedRb};
 
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
