@@ -1,10 +1,11 @@
 use crate::{
     cached::CachedCons,
-    observer::Observer,
-    raw::{AsRaw, ConsMarker},
+    observer::{modulus, Observer},
+    ring_buffer::unsafe_occupied_slices,
+    traits::RingBuffer,
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
-use core::{iter::Chain, mem::MaybeUninit, ptr, slice};
+use core::{iter::Chain, mem::MaybeUninit, num::NonZeroUsize, ops::Deref, ptr, slice};
 #[cfg(feature = "std")]
 use std::io::{self, Write};
 
@@ -19,6 +20,26 @@ use std::io::{self, Write};
 /// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
 ///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub trait Consumer: Observer {
+    /// Sets the new **read** position.
+    ///
+    /// # Safety
+    ///
+    /// This call must cohere with ring buffer data modification.
+    ///
+    /// It is recommended to use [`Self::advance_write_index`] instead.
+    unsafe fn set_read_index(&self, value: usize);
+
+    /// Moves `read` pointer by `count` places forward.
+    ///
+    /// # Safety
+    ///
+    /// First `count` items in occupied memory must be moved out or dropped.
+    ///
+    /// Must not be called concurrently.
+    unsafe fn advance_read_index(&self, count: usize) {
+        self.set_read_index((self.read_index() + count) % modulus(self));
+    }
+
     /// Provides a direct access to the ring buffer occupied memory.
     /// The difference from [`Self::as_slices`] is that this method provides slices of [`MaybeUninit`], so items may be moved out of slices.  
     ///
@@ -30,7 +51,7 @@ pub trait Consumer: Observer {
     /// All items are initialized. Elements must be removed starting from the beginning of first slice.
     /// When all items are removed from the first slice then items must be removed from the beginning of the second slice.
     ///
-    /// *This method must be followed by [`Self::advance_read`] call with the number of items being removed previously as argument.*
+    /// *This method must be followed by [`Self::advance_read_index`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
     fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]);
 
@@ -40,20 +61,13 @@ pub trait Consumer: Observer {
     ///
     /// # Safety
     ///
-    /// When some item is replaced with uninitialized value then it must immediately consumed by [`Self::advance_read`].
+    /// When some item is replaced with uninitialized value then it must immediately consumed by [`Self::advance_read_index`].
     unsafe fn occupied_slices_mut(
         &mut self,
     ) -> (
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
     );
-
-    /// Moves `read` pointer by `count` places forward.
-    ///
-    /// # Safety
-    ///
-    /// First `count` items in occupied memory must be moved out or dropped.
-    unsafe fn advance_read(&mut self, count: usize);
 
     /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
     #[inline]
@@ -79,7 +93,7 @@ pub trait Consumer: Observer {
     fn try_pop(&mut self) -> Option<Self::Item> {
         if !self.is_empty() {
             let elem = unsafe { self.occupied_slices().0.get_unchecked(0).assume_init_read() };
-            unsafe { self.advance_read(1) };
+            unsafe { self.advance_read_index(1) };
             Some(elem)
         } else {
             None
@@ -109,7 +123,7 @@ pub trait Consumer: Observer {
                     right.len()
                 }
         };
-        unsafe { self.advance_read(count) };
+        unsafe { self.advance_read_index(count) };
         count
     }
 
@@ -160,7 +174,7 @@ pub trait Consumer: Observer {
                 ptr::drop_in_place(elem.as_mut_ptr());
             }
             let actual_count = usize::min(count, left.len() + right.len());
-            self.advance_read(actual_count);
+            self.advance_read_index(actual_count);
             actual_count
         }
     }
@@ -175,7 +189,7 @@ pub trait Consumer: Observer {
                 ptr::drop_in_place(elem.as_mut_ptr());
             }
             let count = left.len() + right.len();
-            self.advance_read(count);
+            self.advance_read_index(count);
             count
         }
     }
@@ -199,7 +213,7 @@ pub trait Consumer: Observer {
 
         let write_count = writer.write(left_init)?;
         assert!(write_count <= count);
-        unsafe { self.advance_read(write_count) };
+        unsafe { self.advance_read_index(write_count) };
         Ok(write_count)
     }
 }
@@ -268,7 +282,7 @@ impl<'a, C: Consumer> ExactSizeIterator for PopIter<'a, C> {
 }
 impl<'a, C: Consumer> Drop for PopIter<'a, C> {
     fn drop(&mut self) {
-        unsafe { self.target.advance_read(self.len - self.len()) };
+        unsafe { self.target.advance_read_index(self.len - self.len()) };
     }
 }
 
@@ -285,11 +299,17 @@ pub type Iter<'a, C: Consumer> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a,
 pub type IterMut<'a, C: Consumer> = Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
 
 /// Producer wrapper of ring buffer.
-pub struct Cons<R: AsRaw> {
+pub struct Cons<R: Deref>
+where
+    R::Target: RingBuffer,
+{
     base: R,
 }
 
-impl<R: AsRaw> Cons<R> {
+impl<R: Deref> Cons<R>
+where
+    R::Target: RingBuffer,
+{
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
@@ -304,19 +324,56 @@ impl<R: AsRaw> Cons<R> {
     }
 }
 
-impl<R: AsRaw> AsRaw for Cons<R> {
-    type Raw = R::Raw;
+impl<R: Deref> Observer for Cons<R>
+where
+    R::Target: RingBuffer,
+{
+    type Item = <R::Target as Observer>::Item;
+
     #[inline]
-    fn as_raw(&self) -> &Self::Raw {
-        self.base.as_raw()
+    fn capacity(&self) -> NonZeroUsize {
+        self.base.capacity()
+    }
+    #[inline]
+    fn read_index(&self) -> usize {
+        self.base.read_index()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.base.write_index()
     }
 }
-unsafe impl<R: AsRaw> ConsMarker for Cons<R> {}
+impl<R: Deref> Consumer for Cons<R>
+where
+    R::Target: RingBuffer,
+{
+    #[inline]
+    unsafe fn set_read_index(&self, value: usize) {
+        self.base.set_read_index(value);
+    }
+    #[inline]
+    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        let (first, second) = unsafe { unsafe_occupied_slices(&*self.base, &*self.base) };
+        (first as &_, second as &_)
+    }
+    #[inline]
+    unsafe fn occupied_slices_mut(
+        &mut self,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    ) {
+        unsafe_occupied_slices(&*self.base, &*self.base)
+    }
+}
 
 macro_rules! impl_cons_traits {
     ($Cons:ident) => {
-        impl<R: crate::raw::AsRaw> IntoIterator for $Cons<R> {
-            type Item = <R::Raw as crate::raw::RawRb>::Item;
+        impl<R: core::ops::Deref> IntoIterator for $Cons<R>
+        where
+            R::Target: RingBuffer,
+        {
+            type Item = <R::Target as crate::traits::Observer>::Item;
             type IntoIter = crate::consumer::IntoIter<Self>;
 
             fn into_iter(self) -> Self::IntoIter {
@@ -325,9 +382,9 @@ macro_rules! impl_cons_traits {
         }
 
         #[cfg(feature = "std")]
-        impl<R: crate::raw::AsRaw> std::io::Read for $Cons<R>
+        impl<R: core::ops::Deref> std::io::Read for $Cons<R>
         where
-            R::Raw: crate::raw::RawRb<Item = u8>,
+            R::Target: crate::traits::RingBuffer<Item = u8>,
         {
             fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
                 use crate::consumer::Consumer;
@@ -345,8 +402,11 @@ pub(crate) use impl_cons_traits;
 
 impl_cons_traits!(Cons);
 
-impl<R: AsRaw> Cons<R> {
-    pub fn cached(&mut self) -> CachedCons<&R> {
+impl<R: Deref> Cons<R>
+where
+    R::Target: RingBuffer,
+{
+    pub fn cached(&mut self) -> CachedCons<&R::Target> {
         unsafe { CachedCons::new(&self.base) }
     }
     pub fn into_cached(self) -> CachedCons<R> {

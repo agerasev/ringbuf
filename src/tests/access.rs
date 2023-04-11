@@ -13,7 +13,7 @@ fn try_push() {
         assert_eq!(right.len(), 0);
         left[0] = MaybeUninit::new(vs_20.0);
         left[1] = MaybeUninit::new(vs_20.1);
-        unsafe { prod.advance_write(2) };
+        unsafe { prod.advance_write_index(2) };
     }
     {
         let (left, right) = prod.vacant_slices_mut();
@@ -31,7 +31,7 @@ fn try_push() {
         assert_eq!(right.len(), 2);
         left[0] = MaybeUninit::new(vs_11.0);
         right[0] = MaybeUninit::new(vs_11.1);
-        unsafe { prod.advance_write(2) };
+        unsafe { prod.advance_write_index(2) };
     }
     {
         let (left, right) = prod.vacant_slices_mut();
@@ -61,7 +61,7 @@ fn pop_full() {
         for (i, x) in left.iter().enumerate() {
             assert_eq!(unsafe { x.assume_init() }, i as i32);
         }
-        unsafe { cons.advance_read(CAP) };
+        unsafe { cons.advance_read_index(CAP) };
     }
 
     assert_eq!(cons.occupied_len(), 0);
@@ -71,13 +71,13 @@ fn pop_full() {
 #[test]
 fn pop_empty() {
     let mut rb = LocalRb::<Static<i32, 2>>::default();
-    let (_, mut cons) = rb.split_ref();
+    let (_, cons) = rb.split_ref();
 
     {
         let (left, right) = cons.occupied_slices();
         assert_eq!(left.len(), 0);
         assert_eq!(right.len(), 0);
-        unsafe { cons.advance_read(0) };
+        unsafe { cons.advance_read_index(0) };
     }
 }
 
@@ -99,7 +99,7 @@ fn try_pop() {
         assert_eq!(unsafe { left[0].assume_init() }, vs_20.0);
         assert_eq!(unsafe { left[1].assume_init() }, vs_20.1);
         assert_eq!(unsafe { left[2].assume_init() }, vs_20.2);
-        unsafe { cons.advance_read(2) };
+        unsafe { cons.advance_read_index(2) };
     }
     {
         let (left, right) = cons.occupied_slices();
@@ -119,7 +119,7 @@ fn try_pop() {
         assert_eq!(unsafe { left[0].assume_init() }, vs_20.2);
         assert_eq!(unsafe { right[0].assume_init() }, vs_11.0);
         assert_eq!(unsafe { right[1].assume_init() }, vs_11.1);
-        unsafe { cons.advance_read(2) };
+        unsafe { cons.advance_read_index(2) };
     }
     {
         let (left, right) = cons.occupied_slices();
@@ -139,7 +139,7 @@ fn push_return() {
         let (left, right) = prod.vacant_slices_mut();
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
-        unsafe { prod.advance_write(0) };
+        unsafe { prod.advance_write_index(0) };
     }
 
     {
@@ -147,7 +147,7 @@ fn push_return() {
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
         left[0] = MaybeUninit::new(12);
-        unsafe { prod.advance_write(1) };
+        unsafe { prod.advance_write_index(1) };
     }
 
     {
@@ -155,7 +155,7 @@ fn push_return() {
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 0);
         left[0] = MaybeUninit::new(34);
-        unsafe { prod.advance_write(1) };
+        unsafe { prod.advance_write_index(1) };
     }
 
     assert_eq!(cons.try_pop().unwrap(), 12);
@@ -166,7 +166,7 @@ fn push_return() {
 #[test]
 fn pop_return() {
     let mut rb = LocalRb::<Static<i32, 2>>::default();
-    let (mut prod, mut cons) = rb.split_ref();
+    let (mut prod, cons) = rb.split_ref();
 
     assert_eq!(prod.try_push(12), Ok(()));
     assert_eq!(prod.try_push(34), Ok(()));
@@ -176,7 +176,7 @@ fn pop_return() {
         let (left, right) = cons.occupied_slices();
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
-        unsafe { cons.advance_read(0) };
+        unsafe { cons.advance_read_index(0) };
     }
 
     {
@@ -184,7 +184,7 @@ fn pop_return() {
         assert_eq!(left.len(), 2);
         assert_eq!(right.len(), 0);
         assert_eq!(unsafe { left[0].assume_init() }, 12);
-        unsafe { cons.advance_read(1) };
+        unsafe { cons.advance_read_index(1) };
     }
 
     {
@@ -192,7 +192,7 @@ fn pop_return() {
         assert_eq!(left.len(), 1);
         assert_eq!(right.len(), 0);
         assert_eq!(unsafe { left[0].assume_init() }, 34);
-        unsafe { cons.advance_read(1) };
+        unsafe { cons.advance_read_index(1) };
     }
 
     assert_eq!(prod.occupied_len(), 0);
@@ -201,7 +201,7 @@ fn pop_return() {
 #[test]
 fn push_pop() {
     let mut rb = LocalRb::<Static<i32, 3>>::default();
-    let (mut prod, mut cons) = rb.split_ref();
+    let (mut prod, cons) = rb.split_ref();
 
     let vs_20 = (123, 456);
     {
@@ -210,7 +210,7 @@ fn push_pop() {
         assert_eq!(right.len(), 0);
         left[0] = MaybeUninit::new(vs_20.0);
         left[1] = MaybeUninit::new(vs_20.1);
-        unsafe { prod.advance_write(2) };
+        unsafe { prod.advance_write_index(2) };
     }
     assert_eq!(prod.occupied_len(), 2);
     {
@@ -219,7 +219,7 @@ fn push_pop() {
         assert_eq!(right.len(), 0);
         assert_eq!(unsafe { left[0].assume_init() }, vs_20.0);
         assert_eq!(unsafe { left[1].assume_init() }, vs_20.1);
-        unsafe { cons.advance_read(2) };
+        unsafe { cons.advance_read_index(2) };
     }
     assert_eq!(prod.occupied_len(), 0);
 
@@ -230,7 +230,7 @@ fn push_pop() {
         assert_eq!(right.len(), 2);
         left[0] = MaybeUninit::new(vs_11.0);
         right[0] = MaybeUninit::new(vs_11.1);
-        unsafe { prod.advance_write(2) };
+        unsafe { prod.advance_write_index(2) };
     }
     assert_eq!(prod.occupied_len(), 2);
     {
@@ -239,7 +239,7 @@ fn push_pop() {
         assert_eq!(right.len(), 1);
         assert_eq!(unsafe { left[0].assume_init() }, vs_11.0);
         assert_eq!(unsafe { right[0].assume_init() }, vs_11.1);
-        unsafe { cons.advance_read(2) };
+        unsafe { cons.advance_read_index(2) };
     }
     assert_eq!(prod.occupied_len(), 0);
 }

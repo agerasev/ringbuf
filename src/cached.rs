@@ -1,12 +1,14 @@
 use crate::{
     consumer::{impl_cons_traits, Cons},
-    producer::{impl_prod_traits, Prod},
-    raw::{AsRaw, ConsMarker, ProdMarker, RawRb},
+    producer::{impl_prod_traits, Prod, Producer},
+    ring_buffer::{unsafe_occupied_slices, unsafe_vacant_slices},
+    traits::{Consumer, Observer, RingBuffer},
 };
 use core::{
     cell::Cell,
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
+    ops::Deref,
     ptr,
 };
 
@@ -16,7 +18,10 @@ use core::{
 /// Items inserted by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
 ///
 /// Used to implement [`PostponedConsumer`](`crate::consumer::PostponedConsumer`).
-pub struct CachedCons<R: AsRaw> {
+pub struct CachedCons<R: Deref>
+where
+    R::Target: RingBuffer,
+{
     base: R,
     read: Cell<usize>,
     write: usize,
@@ -28,29 +33,24 @@ pub struct CachedCons<R: AsRaw> {
 /// A free space of items removed by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
 ///
 /// Used to implement [`PostponedConsumer`](`crate::consumer::PostponedConsumer`).
-pub struct CachedProd<R: AsRaw> {
+pub struct CachedProd<R: Deref>
+where
+    R::Target: RingBuffer,
+{
     base: R,
     read: usize,
     write: Cell<usize>,
 }
 
-impl<R: AsRaw> RawRb for CachedCons<R> {
-    type Item = <R::Raw as RawRb>::Item;
+impl<R: Deref> Observer for CachedCons<R>
+where
+    R::Target: RingBuffer,
+{
+    type Item = <R::Target as Observer>::Item;
 
     #[inline]
-    unsafe fn slices(
-        &self,
-        start: usize,
-        end: usize,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    ) {
-        self.base.as_raw().slices(start, end)
-    }
-    #[inline]
     fn capacity(&self) -> NonZeroUsize {
-        self.base.as_raw().capacity()
+        self.base.capacity()
     }
     #[inline]
     fn read_index(&self) -> usize {
@@ -60,33 +60,41 @@ impl<R: AsRaw> RawRb for CachedCons<R> {
     fn write_index(&self) -> usize {
         self.write
     }
+}
+
+impl<R: Deref> Consumer for CachedCons<R>
+where
+    R::Target: RingBuffer,
+{
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
         self.read.set(value);
     }
     #[inline]
-    unsafe fn set_write_index(&self, _: usize) {
-        unimplemented!();
+    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        let (first, second) = unsafe { unsafe_occupied_slices(self, &*self.base) };
+        (first as &_, second as &_)
     }
-}
-
-impl<R: AsRaw> RawRb for CachedProd<R> {
-    type Item = <R::Raw as RawRb>::Item;
-
     #[inline]
-    unsafe fn slices(
-        &self,
-        start: usize,
-        end: usize,
+    unsafe fn occupied_slices_mut(
+        &mut self,
     ) -> (
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
     ) {
-        self.base.as_raw().slices(start, end)
+        unsafe_occupied_slices(self, &*self.base)
     }
+}
+
+impl<R: Deref> Observer for CachedProd<R>
+where
+    R::Target: RingBuffer,
+{
+    type Item = <R::Target as Observer>::Item;
+
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
-        self.base.as_raw().capacity()
+        self.base.capacity()
     }
     #[inline]
     fn read_index(&self) -> usize {
@@ -96,48 +104,54 @@ impl<R: AsRaw> RawRb for CachedProd<R> {
     fn write_index(&self) -> usize {
         self.write.get()
     }
-    #[inline]
-    unsafe fn set_read_index(&self, _: usize) {
-        unimplemented!();
-    }
+}
+
+impl<R: Deref> Producer for CachedProd<R>
+where
+    R::Target: RingBuffer,
+{
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         self.write.set(value);
     }
+    #[inline]
+    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        let (first, second) = unsafe { unsafe_vacant_slices(self, &*self.base) };
+        (first as &_, second as &_)
+    }
+    #[inline]
+    fn vacant_slices_mut(
+        &mut self,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    ) {
+        unsafe { unsafe_vacant_slices(self, &*self.base) }
+    }
 }
 
-impl<R: AsRaw> Drop for CachedCons<R> {
+impl<R: Deref> Drop for CachedCons<R>
+where
+    R::Target: RingBuffer,
+{
     fn drop(&mut self) {
         self.commit();
     }
 }
 
-impl<R: AsRaw> Drop for CachedProd<R> {
+impl<R: Deref> Drop for CachedProd<R>
+where
+    R::Target: RingBuffer,
+{
     fn drop(&mut self) {
         self.commit();
     }
 }
 
-impl<R: AsRaw> AsRaw for CachedCons<R> {
-    type Raw = Self;
-    #[inline]
-    fn as_raw(&self) -> &Self::Raw {
-        self
-    }
-}
-
-impl<R: AsRaw> AsRaw for CachedProd<R> {
-    type Raw = Self;
-    #[inline]
-    fn as_raw(&self) -> &Self::Raw {
-        self
-    }
-}
-
-unsafe impl<R: AsRaw> ConsMarker for CachedCons<R> {}
-unsafe impl<R: AsRaw> ProdMarker for CachedProd<R> {}
-
-impl<R: AsRaw> CachedCons<R> {
+impl<R: Deref> CachedCons<R>
+where
+    R::Target: RingBuffer,
+{
     /// Create new ring buffer cache.
     ///
     /// # Safety
@@ -145,8 +159,8 @@ impl<R: AsRaw> CachedCons<R> {
     /// There must be only one instance containing the same ring buffer reference.
     pub unsafe fn new(base: R) -> Self {
         Self {
-            read: Cell::new(base.as_raw().read_index()),
-            write: base.as_raw().write_index(),
+            read: Cell::new(base.read_index()),
+            write: base.write_index(),
             base,
         }
     }
@@ -156,11 +170,11 @@ impl<R: AsRaw> CachedCons<R> {
 
     /// Commit changes to the ring buffer.
     pub fn commit(&self) {
-        unsafe { self.base.as_raw().set_read_index(self.read.get()) }
+        unsafe { self.base.set_read_index(self.read.get()) }
     }
     /// Fetch changes to the ring buffer.
     pub fn fetch(&mut self) {
-        self.write = self.base.as_raw().write_index();
+        self.write = self.base.write_index();
     }
     /// Commit changes and fetch updates from the ring buffer.
     pub fn sync(&mut self) {
@@ -176,7 +190,10 @@ impl<R: AsRaw> CachedCons<R> {
     }
 }
 
-impl<R: AsRaw> CachedProd<R> {
+impl<R: Deref> CachedProd<R>
+where
+    R::Target: RingBuffer,
+{
     /// Create new ring buffer cache.
     ///
     /// # Safety
@@ -184,8 +201,8 @@ impl<R: AsRaw> CachedProd<R> {
     /// There must be only one instance containing the same ring buffer reference.
     pub unsafe fn new(base: R) -> Self {
         Self {
-            read: base.as_raw().read_index(),
-            write: Cell::new(base.as_raw().write_index()),
+            read: base.read_index(),
+            write: Cell::new(base.write_index()),
             base,
         }
     }
@@ -195,11 +212,11 @@ impl<R: AsRaw> CachedProd<R> {
 
     /// Commit changes to the ring buffer.
     pub fn commit(&self) {
-        unsafe { self.base.as_raw().set_write_index(self.write.get()) }
+        unsafe { self.base.set_write_index(self.write.get()) }
     }
     /// Fetch changes to the ring buffer.
     pub fn fetch(&mut self) {
-        self.read = self.base.as_raw().read_index();
+        self.read = self.base.read_index();
     }
     /// Commit changes and fetch updates from the ring buffer.
     pub fn sync(&mut self) {
@@ -209,8 +226,8 @@ impl<R: AsRaw> CachedProd<R> {
 
     /// Discard new items pushed since last sync.
     pub fn discard(&mut self) {
-        let last_tail = self.base.as_raw().write_index();
-        let (first, second) = unsafe { self.base.as_raw().slices(last_tail, self.write.get()) };
+        let last_tail = self.base.write_index();
+        let (first, second) = unsafe { self.base.unsafe_slices(last_tail, self.write.get()) };
         for item_mut in first.iter_mut().chain(second.iter_mut()) {
             unsafe { item_mut.assume_init_drop() };
         }

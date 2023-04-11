@@ -20,8 +20,8 @@ fn advance(b: &mut Bencher) {
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
     b.iter(|| {
-        unsafe { prod.advance_write(1) };
-        unsafe { cons.advance_read(1) };
+        unsafe { prod.advance_write_index(1) };
+        unsafe { cons.advance_read_index(1) };
     });
 }
 
@@ -31,8 +31,8 @@ fn advance_postponed(b: &mut Bencher) {
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
     b.iter(|| {
-        unsafe { prod.cached().advance_write(1) };
-        unsafe { cons.cached().advance_read(1) };
+        unsafe { prod.cached().advance_write_index(1) };
+        unsafe { cons.cached().advance_read_index(1) };
     });
 }
 

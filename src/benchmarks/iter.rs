@@ -14,7 +14,7 @@ fn push_iter_x1000(b: &mut Bencher) {
     b.iter(|| {
         prod.push_iter(0..1000);
         black_box(cons.as_slices());
-        unsafe { cons.advance_read(1000) };
+        unsafe { cons.advance_read_index(1000) };
     });
 }
 
@@ -31,6 +31,6 @@ fn pop_iter_x1000(b: &mut Bencher) {
         for x in cons.cached().pop_iter() {
             black_box(x);
         }
-        unsafe { prod.advance_write(1000) };
+        unsafe { prod.advance_write_index(1000) };
     });
 }

@@ -2,11 +2,12 @@
 use crate::utils::slice_assume_init_mut;
 use crate::{
     cached::CachedProd,
-    observer::Observer,
-    raw::{AsRaw, ProdMarker},
+    observer::{modulus, Observer},
+    ring_buffer::unsafe_vacant_slices,
+    traits::RingBuffer,
     utils::write_slice,
 };
-use core::mem::MaybeUninit;
+use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Deref};
 #[cfg(feature = "std")]
 use std::{
     cmp,
@@ -24,6 +25,26 @@ use std::{
 /// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
 ///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub trait Producer: Observer {
+    /// Sets the new **write** position.
+    ///
+    /// # Safety
+    ///
+    /// This call must cohere with ring buffer data modification.
+    ///
+    /// It is recommended to use `Self::move_write_end` instead.
+    unsafe fn set_write_index(&self, value: usize);
+
+    /// Moves `write` pointer by `count` places forward.
+    ///
+    /// # Safety
+    ///
+    /// First `count` items in free space must be initialized.
+    ///
+    /// Must not be called concurrently.
+    unsafe fn advance_write_index(&self, count: usize) {
+        self.set_write_index((self.write_index() + count) % modulus(self));
+    }
+
     /// Provides a direct access to the ring buffer vacant memory.
     ///
     /// Returns a pair of slices of uninitialized memory, the second one may be empty.
@@ -34,7 +55,7 @@ pub trait Producer: Observer {
     /// Vacant memory is uninitialized. Initialized items must be put starting from the beginning of first slice.
     /// When first slice is fully filled then items must be put to the beginning of the second slice.
     ///
-    /// *This method must be followed by [`Self::advance_write`] call with the number of items being put previously as argument.*
+    /// *This method must be followed by [`Self::advance_write_index`] call with the number of items being put previously as argument.*
     /// *No other mutating calls allowed before that.*
     fn vacant_slices_mut(
         &mut self,
@@ -43,13 +64,6 @@ pub trait Producer: Observer {
         &mut [MaybeUninit<Self::Item>],
     );
 
-    /// Moves `write` pointer by `count` places forward.
-    ///
-    /// # Safety
-    ///
-    /// First `count` items in free space must be initialized.
-    unsafe fn advance_write(&mut self, count: usize);
-
     /// Appends an item to the ring buffer.
     ///
     /// If buffer is full returns an `Err` containing the item that hasn't been appended.
@@ -57,7 +71,7 @@ pub trait Producer: Observer {
         if !self.is_full() {
             unsafe {
                 self.vacant_slices_mut().0.get_unchecked_mut(0).write(elem);
-                self.advance_write(1)
+                self.advance_write_index(1)
             };
             Ok(())
         } else {
@@ -82,7 +96,7 @@ pub trait Producer: Observer {
             }
             count += 1;
         }
-        unsafe { self.advance_write(count) };
+        unsafe { self.advance_write_index(count) };
         count
     }
 
@@ -109,7 +123,7 @@ pub trait Producer: Observer {
                     right.len()
                 }
         };
-        unsafe { self.advance_write(count) };
+        unsafe { self.advance_write_index(count) };
         count
     }
 
@@ -132,17 +146,23 @@ pub trait Producer: Observer {
 
         let read_count = reader.read(left_init)?;
         assert!(read_count <= count);
-        unsafe { self.advance_write(read_count) };
+        unsafe { self.advance_write_index(read_count) };
         Ok(read_count)
     }
 }
 
 /// Producer wrapper of ring buffer.
-pub struct Prod<R: AsRaw> {
+pub struct Prod<R: Deref>
+where
+    R::Target: RingBuffer,
+{
     base: R,
 }
 
-impl<R: AsRaw> Prod<R> {
+impl<R: Deref> Prod<R>
+where
+    R::Target: RingBuffer,
+{
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
@@ -157,22 +177,56 @@ impl<R: AsRaw> Prod<R> {
     }
 }
 
-impl<R: AsRaw> AsRaw for Prod<R> {
-    type Raw = R::Raw;
+impl<R: Deref> Observer for Prod<R>
+where
+    R::Target: RingBuffer,
+{
+    type Item = <R::Target as Observer>::Item;
 
     #[inline]
-    fn as_raw(&self) -> &Self::Raw {
-        self.base.as_raw()
+    fn capacity(&self) -> NonZeroUsize {
+        self.base.capacity()
+    }
+    #[inline]
+    fn read_index(&self) -> usize {
+        self.base.read_index()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.base.write_index()
     }
 }
-unsafe impl<R: AsRaw> ProdMarker for Prod<R> {}
+
+impl<R: Deref> Producer for Prod<R>
+where
+    R::Target: RingBuffer,
+{
+    #[inline]
+    unsafe fn set_write_index(&self, value: usize) {
+        self.base.set_write_index(value);
+    }
+    #[inline]
+    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        let (first, second) = unsafe { unsafe_vacant_slices(&*self.base, &*self.base) };
+        (first as &_, second as &_)
+    }
+    #[inline]
+    fn vacant_slices_mut(
+        &mut self,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    ) {
+        unsafe { unsafe_vacant_slices(&*self.base, &*self.base) }
+    }
+}
 
 macro_rules! impl_prod_traits {
     ($Prod:ident) => {
         #[cfg(feature = "std")]
-        impl<R: crate::raw::AsRaw> std::io::Write for $Prod<R>
+        impl<R: core::ops::Deref> std::io::Write for $Prod<R>
         where
-            R::Raw: crate::raw::RawRb<Item = u8>,
+            R::Target: crate::traits::RingBuffer<Item = u8>,
         {
             fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
                 use crate::producer::Producer;
@@ -188,9 +242,9 @@ macro_rules! impl_prod_traits {
             }
         }
 
-        impl<R: crate::raw::AsRaw> core::fmt::Write for $Prod<R>
+        impl<R: core::ops::Deref> core::fmt::Write for $Prod<R>
         where
-            R::Raw: crate::raw::RawRb<Item = u8>,
+            R::Target: crate::traits::RingBuffer<Item = u8>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 use crate::producer::Producer;
@@ -208,8 +262,11 @@ pub(crate) use impl_prod_traits;
 
 impl_prod_traits!(Prod);
 
-impl<R: AsRaw> Prod<R> {
-    pub fn cached(&mut self) -> CachedProd<&R> {
+impl<R: Deref> Prod<R>
+where
+    R::Target: RingBuffer,
+{
+    pub fn cached(&mut self) -> CachedProd<&R::Target> {
         unsafe { CachedProd::new(&self.base) }
     }
     pub fn into_cached(self) -> CachedProd<R> {

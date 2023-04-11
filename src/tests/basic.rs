@@ -1,18 +1,14 @@
 use crate::{storage::Static, traits::*, LocalRb};
 
-fn head_tail(observer: &impl crate::raw::AsRaw) -> (usize, usize) {
-    use crate::raw::RawRb;
-    (
-        observer.as_raw().read_index(),
-        observer.as_raw().write_index(),
-    )
+fn indices(this: &impl Observer) -> (usize, usize) {
+    (this.read_index(), this.write_index())
 }
 
 #[test]
 fn capacity() {
     const CAP: usize = 13;
     let rb = LocalRb::<Static<i32, CAP>>::default();
-    assert_eq!(rb.capacity(), CAP);
+    assert_eq!(rb.capacity().get(), CAP);
 }
 #[test]
 fn split_capacity() {
@@ -20,8 +16,8 @@ fn split_capacity() {
     let mut rb = LocalRb::<Static<i32, CAP>>::default();
     let (prod, cons) = rb.split_ref();
 
-    assert_eq!(prod.capacity(), CAP);
-    assert_eq!(cons.capacity(), CAP);
+    assert_eq!(prod.capacity().get(), CAP);
+    assert_eq!(cons.capacity().get(), CAP);
 }
 
 #[test]
@@ -29,16 +25,16 @@ fn try_push() {
     let mut rb = LocalRb::<Static<i32, 2>>::default();
     let (mut prod, _) = rb.split_ref();
 
-    assert_eq!(head_tail(&prod), (0, 0));
+    assert_eq!(indices(&prod), (0, 0));
 
     assert_eq!(prod.try_push(123), Ok(()));
-    assert_eq!(head_tail(&prod), (0, 1));
+    assert_eq!(indices(&prod), (0, 1));
 
     assert_eq!(prod.try_push(234), Ok(()));
-    assert_eq!(head_tail(&prod), (0, 2));
+    assert_eq!(indices(&prod), (0, 2));
 
     assert_eq!(prod.try_push(345), Err(345));
-    assert_eq!(head_tail(&prod), (0, 2));
+    assert_eq!(indices(&prod), (0, 2));
 }
 
 #[test]
@@ -46,10 +42,10 @@ fn pop_empty() {
     let mut rb = LocalRb::<Static<i32, 2>>::default();
     let (_, mut cons) = rb.split_ref();
 
-    assert_eq!(head_tail(&cons), (0, 0));
+    assert_eq!(indices(&cons), (0, 0));
 
     assert_eq!(cons.try_pop(), None);
-    assert_eq!(head_tail(&cons), (0, 0));
+    assert_eq!(indices(&cons), (0, 0));
 }
 
 #[test]
@@ -60,17 +56,17 @@ fn push_pop_one() {
 
     const MOD: usize = 2 * CAP;
     let values = [12, 34, 56, 78, 90];
-    assert_eq!(head_tail(&cons), (0, 0));
+    assert_eq!(indices(&cons), (0, 0));
 
     for (i, v) in values.iter().enumerate() {
         assert_eq!(prod.try_push(*v), Ok(()));
-        assert_eq!(head_tail(&cons), (i % MOD, (i + 1) % MOD));
+        assert_eq!(indices(&cons), (i % MOD, (i + 1) % MOD));
 
         assert_eq!(cons.try_pop().unwrap(), *v);
-        assert_eq!(head_tail(&cons), ((i + 1) % MOD, (i + 1) % MOD));
+        assert_eq!(indices(&cons), ((i + 1) % MOD, (i + 1) % MOD));
 
         assert_eq!(cons.try_pop(), None);
-        assert_eq!(head_tail(&cons), ((i + 1) % MOD, (i + 1) % MOD));
+        assert_eq!(indices(&cons), ((i + 1) % MOD, (i + 1) % MOD));
     }
 }
 
@@ -82,26 +78,26 @@ fn push_pop_all() {
 
     const MOD: usize = 2 * CAP;
     let values = [(12, 34, 13), (56, 78, 57), (90, 10, 91)];
-    assert_eq!(head_tail(&cons), (0, 0));
+    assert_eq!(indices(&cons), (0, 0));
 
     for (i, v) in values.iter().enumerate() {
         assert_eq!(prod.try_push(v.0), Ok(()));
-        assert_eq!(head_tail(&cons), (CAP * i % MOD, (CAP * i + 1) % MOD));
+        assert_eq!(indices(&cons), (CAP * i % MOD, (CAP * i + 1) % MOD));
 
         assert_eq!(prod.try_push(v.1), Ok(()));
-        assert_eq!(head_tail(&cons), (CAP * i % MOD, (CAP * i + 2) % MOD));
+        assert_eq!(indices(&cons), (CAP * i % MOD, (CAP * i + 2) % MOD));
 
         assert_eq!(prod.try_push(v.2).unwrap_err(), v.2);
-        assert_eq!(head_tail(&cons), (CAP * i % MOD, (CAP * i + 2) % MOD));
+        assert_eq!(indices(&cons), (CAP * i % MOD, (CAP * i + 2) % MOD));
 
         assert_eq!(cons.try_pop().unwrap(), v.0);
-        assert_eq!(head_tail(&cons), ((CAP * i + 1) % MOD, (CAP * i + 2) % MOD));
+        assert_eq!(indices(&cons), ((CAP * i + 1) % MOD, (CAP * i + 2) % MOD));
 
         assert_eq!(cons.try_pop().unwrap(), v.1);
-        assert_eq!(head_tail(&cons), ((CAP * i + 2) % MOD, (CAP * i + 2) % MOD));
+        assert_eq!(indices(&cons), ((CAP * i + 2) % MOD, (CAP * i + 2) % MOD));
 
         assert_eq!(cons.try_pop(), None);
-        assert_eq!(head_tail(&cons), ((CAP * i + 2) % MOD, (CAP * i + 2) % MOD));
+        assert_eq!(indices(&cons), ((CAP * i + 2) % MOD, (CAP * i + 2) % MOD));
     }
 }
 

@@ -1,8 +1,9 @@
 use crate::{
     consumer::{Cons, Consumer},
-    producer::Prod,
-    raw::{ranges, AsRaw, RawRb, RbMarker},
+    producer::{Prod, Producer},
+    ring_buffer::{ranges, unsafe_occupied_slices, unsafe_vacant_slices},
     storage::{impl_rb_ctors, Shared, Storage},
+    traits::{Observer, RingBuffer},
 };
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
@@ -81,24 +82,12 @@ impl<S: Storage> SharedRb<S> {
     }
 }
 
-impl<S: Storage> RawRb for SharedRb<S> {
+impl<S: Storage> Observer for SharedRb<S> {
     type Item = S::Item;
 
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
         self.storage.len()
-    }
-
-    unsafe fn slices(
-        &self,
-        start: usize,
-        end: usize,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    ) {
-        let (first, second) = ranges(self.capacity(), start, end);
-        (self.storage.slice(first), self.storage.slice(second))
     }
 
     #[inline]
@@ -109,26 +98,63 @@ impl<S: Storage> RawRb for SharedRb<S> {
     fn write_index(&self) -> usize {
         self.write.load(Ordering::Acquire)
     }
+}
 
+impl<S: Storage> Producer for SharedRb<S> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         self.write.store(value, Ordering::Release)
     }
+    #[inline]
+    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        let (first, second) = unsafe { unsafe_vacant_slices(self, self) };
+        (first as &_, second as &_)
+    }
+    #[inline]
+    fn vacant_slices_mut(
+        &mut self,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    ) {
+        unsafe { unsafe_vacant_slices(self, self) }
+    }
+}
 
+impl<S: Storage> Consumer for SharedRb<S> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
         self.read.store(value, Ordering::Release)
     }
-}
-
-impl<S: Storage> AsRaw for SharedRb<S> {
-    type Raw = Self;
     #[inline]
-    fn as_raw(&self) -> &Self::Raw {
-        self
+    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        let (first, second) = unsafe { unsafe_occupied_slices(self, self) };
+        (first as &_, second as &_)
+    }
+    #[inline]
+    unsafe fn occupied_slices_mut(
+        &mut self,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    ) {
+        unsafe_occupied_slices(self, self)
     }
 }
-unsafe impl<S: Storage> RbMarker for SharedRb<S> {}
+
+impl<S: Storage> RingBuffer for SharedRb<S> {
+    unsafe fn unsafe_slices(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    ) {
+        let (first, second) = ranges(self.capacity(), start, end);
+        (self.storage.slice(first), self.storage.slice(second))
+    }
+}
 
 impl<S: Storage> Drop for SharedRb<S> {
     fn drop(&mut self) {

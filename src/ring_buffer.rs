@@ -1,15 +1,54 @@
-use crate::{consumer::Consumer, producer::Producer};
+use crate::{consumer::Consumer, producer::Producer, traits::Observer};
+use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Range};
+
+/// Returns a pair of ranges between `start` and `end` indices in a ring buffer with specific `capacity`.
+///
+/// `start` and `end` may be arbitrary large, but must satisfy the following condition: `0 <= (start - end) % (2 * capacity) <= capacity`.
+/// Actual indices are taken modulo `capacity`.
+///
+/// The first range starts from `start`. If the first slice is empty then second slice is empty too.
+pub(crate) fn ranges(
+    capacity: NonZeroUsize,
+    start: usize,
+    end: usize,
+) -> (Range<usize>, Range<usize>) {
+    let (head_quo, head_rem) = (start / capacity, start % capacity);
+    let (tail_quo, tail_rem) = (end / capacity, end % capacity);
+
+    if (head_quo + tail_quo) % 2 == 0 {
+        (head_rem..tail_rem, 0..0)
+    } else {
+        (head_rem..capacity.get(), 0..tail_rem)
+    }
+}
 
 /// An abstract ring buffer.
 ///
-/// See [`RawRb`](`crate::raw::RawRb`) for details of internal implementation of the ring buffer.
+/// # Details
 ///
-/// This trait contains methods that takes `&mut self` allowing you to use ring buffer without splitting it into [`Producer`] and [`Consumer`].
+/// The ring buffer consists of an array (of `capacity` size) and two indices: `read` and `write`.
+/// When an item is extracted from the ring buffer it is taken from the `read` index and after that `read` is incremented.
+/// New item is appended to the `write` index and `write` is incremented after that.
 ///
-/// There are `push*_overwrite` methods that cannot be used from [`Producer`].
-///
-/// The ring buffer can be guarded with mutex or other synchronization primitive and be used from different threads without splitting (but now only in blocking mode, obviously).
+/// The `read` and `write` indices are modulo `2 * capacity` (not just `capacity`).
+/// It allows us to distinguish situations when the buffer is empty (`read == write`) and when the buffer is full (`write - read` modulo `2 * capacity` equals to `capacity`)
+/// without using the space for an extra element in container.
+/// And obviously we cannot store more than `capacity` items in the buffer, so `write - read` modulo `2 * capacity` is not allowed to be greater than `capacity`.
 pub trait RingBuffer: Consumer + Producer {
+    /// Returns part of underlying raw ring buffer memory as slices.
+    ///
+    /// # Safety
+    ///
+    /// Only non-overlapping slices allowed to exist at the same time.
+    unsafe fn unsafe_slices(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    );
+
     /// Pushes an item to the ring buffer overwriting the latest item if the buffer is full.
     ///
     /// Returns overwritten item if overwriting took place.
@@ -48,4 +87,27 @@ pub trait RingBuffer: Consumer + Producer {
             elems
         });
     }
+}
+
+pub(crate) unsafe fn unsafe_occupied_slices<'a, O: Observer, R: RingBuffer>(
+    indices: &'a O,
+    storage: &'a R,
+) -> (
+    &'a mut [MaybeUninit<R::Item>],
+    &'a mut [MaybeUninit<R::Item>],
+) {
+    storage.unsafe_slices(indices.read_index(), indices.write_index())
+}
+
+pub(crate) unsafe fn unsafe_vacant_slices<'a, O: Observer, R: RingBuffer>(
+    indices: &'a O,
+    storage: &'a R,
+) -> (
+    &'a mut [MaybeUninit<R::Item>],
+    &'a mut [MaybeUninit<R::Item>],
+) {
+    storage.unsafe_slices(
+        indices.write_index(),
+        indices.read_index() + indices.capacity().get(),
+    )
 }
