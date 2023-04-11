@@ -152,3 +152,33 @@ impl<S: Storage> Shared<S> {
 pub type Static<T, const N: usize> = [MaybeUninit<T>; N];
 #[cfg(feature = "alloc")]
 pub type Heap<T> = Vec<MaybeUninit<T>>;
+
+macro_rules! impl_rb_ctors {
+    ($Rb:ident) => {
+        impl<T, const N: usize> Default for $Rb<crate::storage::Static<T, N>> {
+            fn default() -> Self {
+                unsafe { Self::from_raw_parts(crate::utils::uninit_array(), 0, 0) }
+            }
+        }
+
+        #[cfg(feature = "alloc")]
+        impl<T> $Rb<crate::storage::Heap<T>> {
+            /// Creates a new instance of a ring buffer.
+            ///
+            /// *Panics if allocation failed or `capacity` is zero.*
+            pub fn new(capacity: usize) -> Self {
+                Self::try_new(capacity).unwrap()
+            }
+            /// Creates a new instance of a ring buffer returning an error if allocation failed.
+            ///
+            /// *Panics if `capacity` is zero.*
+            pub fn try_new(capacity: usize) -> Result<Self, alloc::collections::TryReserveError> {
+                let mut data = alloc::vec::Vec::new();
+                data.try_reserve_exact(capacity)?;
+                data.resize_with(capacity, core::mem::MaybeUninit::uninit);
+                Ok(unsafe { Self::from_raw_parts(data, 0, 0) })
+            }
+        }
+    };
+}
+pub(crate) use impl_rb_ctors;

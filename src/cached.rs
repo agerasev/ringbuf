@@ -1,6 +1,7 @@
 use crate::{
+    consumer::{impl_cons_traits, Cons},
+    producer::{impl_prod_traits, Prod},
     raw::{RawBase, RawCons, RawProd},
-    Cons, Prod,
 };
 use core::{
     cell::Cell,
@@ -50,12 +51,10 @@ where
     unsafe fn slice(&self, range: Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
         self.base.slice(range)
     }
-
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
         self.base.capacity()
     }
-
     #[inline]
     fn read_end(&self) -> usize {
         self.read.get()
@@ -76,12 +75,10 @@ where
     unsafe fn slice(&self, range: Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
         self.base.slice(range)
     }
-
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
         self.base.capacity()
     }
-
     #[inline]
     fn read_end(&self) -> usize {
         self.read
@@ -146,6 +143,9 @@ where
             base,
         }
     }
+    pub fn base(&self) -> &R {
+        &self.base
+    }
 
     /// Commit changes to the ring buffer.
     pub fn commit(&self) {
@@ -185,6 +185,9 @@ where
             base,
         }
     }
+    pub fn base(&self) -> &R {
+        &self.base
+    }
 
     /// Commit changes to the ring buffer.
     pub fn commit(&self) {
@@ -217,3 +220,6 @@ where
         unsafe { Prod::new(ptr::read(&this.base)) }
     }
 }
+
+impl_prod_traits!(CachedProd);
+impl_cons_traits!(CachedCons);

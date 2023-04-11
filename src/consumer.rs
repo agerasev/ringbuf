@@ -6,7 +6,7 @@ use crate::{
 };
 use core::{iter::Chain, mem::MaybeUninit, num::NonZeroUsize, ops::Deref, ptr, slice};
 #[cfg(feature = "std")]
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 
 /// Consumer part of ring buffer.
 ///
@@ -204,7 +204,7 @@ pub trait Consumer: Observer {
     }
 }
 
-pub struct IntoIter<C: Consumer>(C);
+pub struct IntoIter<C: Consumer>(pub(crate) C);
 impl<C: Consumer> IntoIter<C> {
     pub fn into_inner(self) -> C {
         self.0
@@ -256,7 +256,7 @@ pub struct Cons<R: Deref>
 where
     R::Target: RawBase,
 {
-    raw: R,
+    base: R,
 }
 
 impl<R: Deref> Cons<R>
@@ -266,8 +266,14 @@ where
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
-    pub unsafe fn new(raw: R) -> Self {
-        Self { raw }
+    pub unsafe fn new(base: R) -> Self {
+        Self { base }
+    }
+    pub fn base(&self) -> &R::Target {
+        &self.base
+    }
+    pub fn into_base(self) -> R {
+        self.base
     }
 }
 
@@ -279,19 +285,19 @@ where
 
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
-        self.raw.capacity()
+        self.base.capacity()
     }
     #[inline]
     unsafe fn slice(&self, range: core::ops::Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
-        self.raw.slice(range)
+        self.base.slice(range)
     }
     #[inline]
     fn read_end(&self) -> usize {
-        self.raw.read_end()
+        self.base.read_end()
     }
     #[inline]
     fn write_end(&self) -> usize {
-        self.raw.write_end()
+        self.base.write_end()
     }
 }
 
@@ -301,45 +307,53 @@ where
 {
     #[inline]
     unsafe fn set_read_end(&self, value: usize) {
-        self.raw.set_read_end(value)
+        self.base.set_read_end(value)
     }
 }
 
-impl<R: Deref> IntoIterator for Cons<R>
-where
-    R::Target: RawCons,
-{
-    type Item = <R::Target as RawBase>::Item;
-    type IntoIter = IntoIter<Self>;
+macro_rules! impl_cons_traits {
+    ($Cons:ident) => {
+        impl<R: core::ops::Deref> IntoIterator for $Cons<R>
+        where
+            R::Target: crate::raw::RawCons,
+        {
+            type Item = <R::Target as RawBase>::Item;
+            type IntoIter = crate::consumer::IntoIter<Self>;
 
-    fn into_iter(self) -> Self::IntoIter {
-        IntoIter(self)
-    }
-}
-
-#[cfg(feature = "std")]
-impl<R: Deref> Read for Cons<R>
-where
-    R::Target: RawCons<Item = u8>,
-{
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-        let n = self.pop_slice(buffer);
-        if n == 0 && !buffer.is_empty() {
-            Err(io::ErrorKind::WouldBlock.into())
-        } else {
-            Ok(n)
+            fn into_iter(self) -> Self::IntoIter {
+                crate::consumer::IntoIter(self)
+            }
         }
-    }
+
+        #[cfg(feature = "std")]
+        impl<R: core::ops::Deref> std::io::Read for $Cons<R>
+        where
+            R::Target: crate::raw::RawCons<Item = u8>,
+        {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                use crate::consumer::Consumer;
+                let n = self.pop_slice(buffer);
+                if n == 0 && !buffer.is_empty() {
+                    Err(std::io::ErrorKind::WouldBlock.into())
+                } else {
+                    Ok(n)
+                }
+            }
+        }
+    };
 }
+pub(crate) use impl_cons_traits;
+
+impl_cons_traits!(Cons);
 
 impl<R: Deref> Cons<R>
 where
     R::Target: RawCons,
 {
     pub fn cached(&mut self) -> CachedCons<&R::Target> {
-        unsafe { CachedCons::new(&self.raw) }
+        unsafe { CachedCons::new(&self.base) }
     }
     pub fn into_cached(self) -> CachedCons<R> {
-        unsafe { CachedCons::new(self.raw) }
+        unsafe { CachedCons::new(self.base) }
     }
 }

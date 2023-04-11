@@ -1,14 +1,11 @@
-#[cfg(feature = "alloc")]
-use crate::storage::Heap;
 use crate::{
     consumer::{Cons, Consumer},
     producer::Prod,
     raw::{RawBase, RawCons, RawProd, RawRb},
-    storage::{Shared, Static, Storage},
-    utils::uninit_array,
+    storage::{impl_rb_ctors, Shared, Storage},
 };
 #[cfg(feature = "alloc")]
-use alloc::{collections::TryReserveError, sync::Arc, vec::Vec};
+use alloc::sync::Arc;
 use core::{
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
@@ -127,27 +124,4 @@ impl<S: Storage> Drop for SharedRb<S> {
     }
 }
 
-impl<T, const N: usize> Default for SharedRb<Static<T, N>> {
-    fn default() -> Self {
-        unsafe { Self::from_raw_parts(uninit_array(), 0, 0) }
-    }
-}
-
-#[cfg(feature = "alloc")]
-impl<T> SharedRb<Heap<T>> {
-    /// Creates a new instance of a ring buffer.
-    ///
-    /// *Panics if allocation failed or `capacity` is zero.*
-    pub fn new(capacity: usize) -> Self {
-        Self::try_new(capacity).unwrap()
-    }
-    /// Creates a new instance of a ring buffer returning an error if allocation failed.
-    ///
-    /// *Panics if `capacity` is zero.*
-    pub fn try_new(capacity: usize) -> Result<Self, TryReserveError> {
-        let mut data = Vec::new();
-        data.try_reserve_exact(capacity)?;
-        data.resize_with(capacity, MaybeUninit::uninit);
-        Ok(unsafe { Self::from_raw_parts(data, 0, 0) })
-    }
-}
+impl_rb_ctors!(SharedRb);

@@ -6,9 +6,9 @@ use crate::{consumer::Consumer, producer::Producer};
 /// `count` is the number of items being moved, if `None` - as much as possible items will be moved.
 ///
 /// Returns number of items been moved.
-pub fn transfer<T, Rs: Consumer<Item = T>, Rd: Producer<Item = T>>(
-    src: &mut Rs,
-    dst: &mut Rd,
+pub fn transfer<T, C: Consumer<Item = T>, P: Producer<Item = T>>(
+    src: &mut C,
+    dst: &mut P,
     count: Option<usize>,
 ) -> usize {
     let (src_left, src_right) = src.occupied_slices();
