@@ -22,14 +22,14 @@ bench = []
 [dependencies]
 crossbeam-utils = { version = "0.8", default-features = false }
 
-# [[example]]
-# name = "simple"
-# required-features = ["alloc"]
-# 
-# [[example]]
-# name = "overwrite"
-# required-features = ["alloc"]
-# 
-# [[example]]
-# name = "message"
-# required-features = ["std"]
+[[example]]
+name = "simple"
+required-features = ["alloc"]
+
+[[example]]
+name = "overwrite"
+required-features = ["alloc"]
+
+[[example]]
+name = "message"
+required-features = ["std"]
