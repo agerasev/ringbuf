@@ -1,10 +1,10 @@
 use crate::{
     cached::CachedCons,
     observer::Observer,
-    raw::{RawBase, RawCons},
+    raw::{AsRaw, ConsMarker, RawCons},
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
-use core::{iter::Chain, mem::MaybeUninit, num::NonZeroUsize, ops::Deref, ptr, slice};
+use core::{iter::Chain, mem::MaybeUninit, ptr, slice};
 #[cfg(feature = "std")]
 use std::io::{self, Write};
 
@@ -252,16 +252,16 @@ pub type IterMut<'a, C: Consumer + ?Sized> =
     Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
 
 /// Producer wrapper of ring buffer.
-pub struct Cons<R: Deref>
+pub struct Cons<R: AsRaw>
 where
-    R::Target: RawBase,
+    R::Raw: RawCons,
 {
     base: R,
 }
 
-impl<R: Deref> Cons<R>
+impl<R: AsRaw> Cons<R>
 where
-    R::Target: RawBase,
+    R::Raw: RawCons,
 {
     /// # Safety
     ///
@@ -269,7 +269,7 @@ where
     pub unsafe fn new(base: R) -> Self {
         Self { base }
     }
-    pub fn base(&self) -> &R::Target {
+    pub fn base(&self) -> &R {
         &self.base
     }
     pub fn into_base(self) -> R {
@@ -277,47 +277,25 @@ where
     }
 }
 
-impl<R: Deref> RawBase for Cons<R>
+impl<R: AsRaw> AsRaw for Cons<R>
 where
-    R::Target: RawBase,
+    R::Raw: RawCons,
 {
-    type Item = <R::Target as RawBase>::Item;
-
+    type Raw = R::Raw;
     #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.base.capacity()
-    }
-    #[inline]
-    unsafe fn slice(&self, range: core::ops::Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
-        self.base.slice(range)
-    }
-    #[inline]
-    fn read_end(&self) -> usize {
-        self.base.read_end()
-    }
-    #[inline]
-    fn write_end(&self) -> usize {
-        self.base.write_end()
+    fn as_raw(&self) -> &Self::Raw {
+        self.base.as_raw()
     }
 }
-
-impl<R: Deref> RawCons for Cons<R>
-where
-    R::Target: RawCons,
-{
-    #[inline]
-    unsafe fn set_read_end(&self, value: usize) {
-        self.base.set_read_end(value)
-    }
-}
+impl<R: AsRaw> ConsMarker for Cons<R> where R::Raw: RawCons {}
 
 macro_rules! impl_cons_traits {
     ($Cons:ident) => {
-        impl<R: core::ops::Deref> IntoIterator for $Cons<R>
+        impl<R: crate::raw::AsRaw> IntoIterator for $Cons<R>
         where
-            R::Target: crate::raw::RawCons,
+            R::Raw: crate::raw::RawCons,
         {
-            type Item = <R::Target as RawBase>::Item;
+            type Item = <R::Raw as crate::raw::Raw>::Item;
             type IntoIter = crate::consumer::IntoIter<Self>;
 
             fn into_iter(self) -> Self::IntoIter {
@@ -326,9 +304,9 @@ macro_rules! impl_cons_traits {
         }
 
         #[cfg(feature = "std")]
-        impl<R: core::ops::Deref> std::io::Read for $Cons<R>
+        impl<R: crate::raw::AsRaw> std::io::Read for $Cons<R>
         where
-            R::Target: crate::raw::RawCons<Item = u8>,
+            R::Raw: crate::raw::RawCons<Item = u8>,
         {
             fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
                 use crate::consumer::Consumer;
@@ -346,11 +324,11 @@ pub(crate) use impl_cons_traits;
 
 impl_cons_traits!(Cons);
 
-impl<R: Deref> Cons<R>
+impl<R: AsRaw> Cons<R>
 where
-    R::Target: RawCons,
+    R::Raw: RawCons,
 {
-    pub fn cached(&mut self) -> CachedCons<&R::Target> {
+    pub fn cached(&mut self) -> CachedCons<&R> {
         unsafe { CachedCons::new(&self.base) }
     }
     pub fn into_cached(self) -> CachedCons<R> {

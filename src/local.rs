@@ -1,7 +1,7 @@
 use crate::{
     consumer::{Cons, Consumer},
     producer::Prod,
-    raw::{RawBase, RawCons, RawProd, RawRb},
+    raw::{AsRaw, Raw, RawCons, RawProd, RbMarker},
     storage::{impl_rb_ctors, Shared, Storage},
 };
 #[cfg(feature = "alloc")]
@@ -58,7 +58,7 @@ impl<S: Storage> LocalRb<S> {
     }
 }
 
-impl<S: Storage> RawBase for LocalRb<S> {
+impl<S: Storage> Raw for LocalRb<S> {
     type Item = S::Item;
 
     #[inline]
@@ -92,7 +92,15 @@ impl<S: Storage> RawProd for LocalRb<S> {
         self.write.set(value);
     }
 }
-impl<S: Storage> RawRb for LocalRb<S> {}
+
+impl<S: Storage> AsRaw for LocalRb<S> {
+    type Raw = Self;
+    #[inline]
+    fn as_raw(&self) -> &Self::Raw {
+        self
+    }
+}
+impl<S: Storage> RbMarker for LocalRb<S> {}
 
 impl<S: Storage> Drop for LocalRb<S> {
     fn drop(&mut self) {

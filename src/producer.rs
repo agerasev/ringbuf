@@ -3,10 +3,10 @@ use crate::utils::slice_assume_init_mut;
 use crate::{
     cached::CachedProd,
     observer::Observer,
-    raw::{RawBase, RawProd},
+    raw::{AsRaw, ProdMarker, RawProd},
     utils::write_slice,
 };
-use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Deref};
+use core::mem::MaybeUninit;
 #[cfg(feature = "std")]
 use std::{
     cmp,
@@ -138,16 +138,16 @@ pub trait Producer: Observer {
 }
 
 /// Producer wrapper of ring buffer.
-pub struct Prod<R: Deref>
+pub struct Prod<R: AsRaw>
 where
-    R::Target: RawBase,
+    R::Raw: RawProd,
 {
     base: R,
 }
 
-impl<R: Deref> Prod<R>
+impl<R: AsRaw> Prod<R>
 where
-    R::Target: RawBase,
+    R::Raw: RawProd,
 {
     /// # Safety
     ///
@@ -163,46 +163,25 @@ where
     }
 }
 
-impl<R: Deref> RawBase for Prod<R>
+impl<R: AsRaw> AsRaw for Prod<R>
 where
-    R::Target: RawBase,
+    R::Raw: RawProd,
 {
-    type Item = <R::Target as RawBase>::Item;
+    type Raw = R::Raw;
 
     #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.base.capacity()
-    }
-    #[inline]
-    unsafe fn slice(&self, range: core::ops::Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
-        self.base.slice(range)
-    }
-    #[inline]
-    fn read_end(&self) -> usize {
-        self.base.read_end()
-    }
-    #[inline]
-    fn write_end(&self) -> usize {
-        self.base.write_end()
+    fn as_raw(&self) -> &Self::Raw {
+        self.base.as_raw()
     }
 }
-
-impl<R: Deref> RawProd for Prod<R>
-where
-    R::Target: RawProd,
-{
-    #[inline]
-    unsafe fn set_write_end(&self, value: usize) {
-        self.base.set_write_end(value)
-    }
-}
+impl<R: AsRaw> ProdMarker for Prod<R> where R::Raw: RawProd {}
 
 macro_rules! impl_prod_traits {
     ($Prod:ident) => {
         #[cfg(feature = "std")]
-        impl<R: core::ops::Deref> std::io::Write for $Prod<R>
+        impl<R: crate::raw::AsRaw> std::io::Write for $Prod<R>
         where
-            R::Target: crate::raw::RawProd<Item = u8>,
+            R::Raw: crate::raw::RawProd<Item = u8>,
         {
             fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
                 use crate::producer::Producer;
@@ -218,9 +197,9 @@ macro_rules! impl_prod_traits {
             }
         }
 
-        impl<R: core::ops::Deref> core::fmt::Write for $Prod<R>
+        impl<R: crate::raw::AsRaw> core::fmt::Write for $Prod<R>
         where
-            R::Target: crate::raw::RawProd<Item = u8>,
+            R::Raw: crate::raw::RawProd<Item = u8>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 use crate::producer::Producer;
@@ -238,11 +217,11 @@ pub(crate) use impl_prod_traits;
 
 impl_prod_traits!(Prod);
 
-impl<R: Deref> Prod<R>
+impl<R: AsRaw> Prod<R>
 where
-    R::Target: RawProd,
+    R::Raw: RawProd,
 {
-    pub fn cached(&mut self) -> CachedProd<&R::Target> {
+    pub fn cached(&mut self) -> CachedProd<&R> {
         unsafe { CachedProd::new(&self.base) }
     }
     pub fn into_cached(self) -> CachedProd<R> {

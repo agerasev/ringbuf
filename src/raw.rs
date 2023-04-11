@@ -1,5 +1,9 @@
 use crate::traits::{Consumer, Observer, Producer, RingBuffer};
-use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Range};
+use core::{
+    mem::MaybeUninit,
+    num::NonZeroUsize,
+    ops::{Deref, Range},
+};
 
 /// Returns a pair of ranges between `begin` and `end` positions in a ring buffer with specific `capacity`.
 ///
@@ -34,7 +38,7 @@ pub fn ranges(capacity: NonZeroUsize, begin: usize, end: usize) -> (Range<usize>
 /// It allows us to distinguish situations when the buffer is empty (`read == write`) and when the buffer is full (`write - read` modulo `2 * capacity` equals to `capacity`)
 /// without using the space for an extra element in container.
 /// And obviously we cannot store more than `capacity` items in the buffer, so `write - read` modulo `2 * capacity` is not allowed to be greater than `capacity`.
-pub trait RawBase {
+pub trait Raw {
     type Item: Sized;
 
     /// Capacity of the ring buffer.
@@ -85,7 +89,7 @@ pub trait RawBase {
     fn write_end(&self) -> usize;
 }
 
-pub trait RawCons: RawBase {
+pub trait RawCons: Raw {
     /// Sets the new **read** position.
     ///
     /// # Safety
@@ -96,7 +100,7 @@ pub trait RawCons: RawBase {
     unsafe fn set_read_end(&self, value: usize);
 }
 
-pub trait RawProd: RawBase {
+pub trait RawProd: Raw {
     /// Sets the new **write** position.
     ///
     /// # Safety
@@ -107,35 +111,75 @@ pub trait RawProd: RawBase {
     unsafe fn set_write_end(&self, value: usize);
 }
 
-pub trait RawRb: RawProd + RawCons {}
+pub trait AsRaw {
+    type Raw: Raw;
+    fn as_raw(&self) -> &Self::Raw;
+}
 
-impl<R: RawBase> Observer for R {
-    type Item = R::Item;
+impl<R: Deref> AsRaw for R
+where
+    R::Target: AsRaw,
+{
+    type Raw = <R::Target as AsRaw>::Raw;
 
     #[inline]
-    fn capacity(&self) -> usize {
-        R::capacity(self).get()
-    }
-
-    fn occupied_len(&self) -> usize {
-        let modulus = self.modulus();
-        (modulus.get() + self.write_end() - self.read_end()) % modulus
-    }
-
-    fn vacant_len(&self) -> usize {
-        let modulus = self.modulus();
-        (self.capacity().get() + self.read_end() - self.write_end()) % modulus
-    }
-
-    fn is_empty(&self) -> bool {
-        self.read_end() == self.write_end()
+    fn as_raw(&self) -> &Self::Raw {
+        self.deref().as_raw()
     }
 }
 
-impl<R: RawProd> Producer for R {
+pub trait ConsMarker: AsRaw
+where
+    Self::Raw: RawCons,
+{
+}
+pub trait ProdMarker: AsRaw
+where
+    Self::Raw: RawProd,
+{
+}
+pub trait RbMarker: ProdMarker + ConsMarker
+where
+    Self::Raw: RawProd + RawCons,
+{
+}
+impl<R: RbMarker> ProdMarker for R where R::Raw: RawProd + RawCons {}
+impl<R: RbMarker> ConsMarker for R where R::Raw: RawProd + RawCons {}
+
+impl<R: AsRaw> Observer for R {
+    type Item = <R::Raw as Raw>::Item;
+
+    #[inline]
+    fn capacity(&self) -> usize {
+        self.as_raw().capacity().get()
+    }
+
+    fn occupied_len(&self) -> usize {
+        let raw = self.as_raw();
+        let modulus = raw.modulus();
+        (modulus.get() + raw.write_end() - raw.read_end()) % modulus
+    }
+
+    fn vacant_len(&self) -> usize {
+        let raw = self.as_raw();
+        let modulus = raw.modulus();
+        (raw.capacity().get() + raw.read_end() - raw.write_end()) % modulus
+    }
+
+    fn is_empty(&self) -> bool {
+        let raw = self.as_raw();
+        raw.read_end() == raw.write_end()
+    }
+}
+
+impl<R: ProdMarker> Producer for R
+where
+    R::Raw: RawProd,
+{
     fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        let raw = self.as_raw();
         let (first, second) =
-            unsafe { self.slices(self.write_end(), self.read_end() + self.capacity().get()) };
+            unsafe { raw.slices(raw.write_end(), raw.read_end() + raw.capacity().get()) };
         (first as &_, second as &_)
     }
 
@@ -145,17 +189,23 @@ impl<R: RawProd> Producer for R {
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
     ) {
-        unsafe { self.slices(self.write_end(), self.read_end() + self.capacity().get()) }
+        let raw = (self as &Self).as_raw();
+        unsafe { raw.slices(raw.write_end(), raw.read_end() + raw.capacity().get()) }
     }
 
     unsafe fn advance_write(&mut self, count: usize) {
-        self.set_write_end((self.write_end() + count) % self.modulus());
+        let raw = self.as_raw();
+        raw.set_write_end((raw.write_end() + count) % raw.modulus());
     }
 }
 
-impl<R: RawCons> Consumer for R {
+impl<R: ConsMarker> Consumer for R
+where
+    R::Raw: RawCons,
+{
     fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let (first, second) = unsafe { self.slices(self.read_end(), self.write_end()) };
+        let raw = self.as_raw();
+        let (first, second) = unsafe { raw.slices(raw.read_end(), raw.write_end()) };
         (first as &_, second as &_)
     }
 
@@ -165,12 +215,14 @@ impl<R: RawCons> Consumer for R {
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
     ) {
-        self.slices(self.read_end(), self.write_end())
+        let raw = (self as &Self).as_raw();
+        raw.slices(raw.read_end(), raw.write_end())
     }
 
     unsafe fn advance_read(&mut self, count: usize) {
-        self.set_read_end((self.read_end() + count) % self.modulus());
+        let raw = self.as_raw();
+        raw.set_read_end((raw.read_end() + count) % raw.modulus());
     }
 }
 
-impl<R: RawRb> RingBuffer for R {}
+impl<R: RbMarker> RingBuffer for R where R::Raw: RawProd + RawCons {}

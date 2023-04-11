@@ -1,13 +1,13 @@
 use crate::{
     consumer::{impl_cons_traits, Cons},
     producer::{impl_prod_traits, Prod},
-    raw::{RawBase, RawCons, RawProd},
+    raw::{AsRaw, ConsMarker, ProdMarker, Raw, RawCons, RawProd},
 };
 use core::{
     cell::Cell,
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
-    ops::{Deref, Range},
+    ops::Range,
     ptr,
 };
 
@@ -17,9 +17,9 @@ use core::{
 /// Items inserted by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
 ///
 /// Used to implement [`PostponedConsumer`](`crate::consumer::PostponedConsumer`).
-pub struct CachedCons<R: Deref>
+pub struct CachedCons<R: AsRaw>
 where
-    R::Target: RawCons,
+    R::Raw: RawCons,
 {
     base: R,
     read: Cell<usize>,
@@ -32,28 +32,28 @@ where
 /// A free space of items removed by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
 ///
 /// Used to implement [`PostponedConsumer`](`crate::consumer::PostponedConsumer`).
-pub struct CachedProd<R: Deref>
+pub struct CachedProd<R: AsRaw>
 where
-    R::Target: RawProd,
+    R::Raw: RawProd,
 {
     base: R,
     read: usize,
     write: Cell<usize>,
 }
 
-impl<R: Deref> RawBase for CachedCons<R>
+impl<R: AsRaw> Raw for CachedCons<R>
 where
-    R::Target: RawCons,
+    R::Raw: RawCons,
 {
-    type Item = <R::Target as RawBase>::Item;
+    type Item = <R::Raw as Raw>::Item;
 
     #[inline]
     unsafe fn slice(&self, range: Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
-        self.base.slice(range)
+        self.base.as_raw().slice(range)
     }
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
-        self.base.capacity()
+        self.base.as_raw().capacity()
     }
     #[inline]
     fn read_end(&self) -> usize {
@@ -65,19 +65,19 @@ where
     }
 }
 
-impl<R: Deref> RawBase for CachedProd<R>
+impl<R: AsRaw> Raw for CachedProd<R>
 where
-    R::Target: RawProd,
+    R::Raw: RawProd,
 {
-    type Item = <R::Target as RawBase>::Item;
+    type Item = <R::Raw as Raw>::Item;
 
     #[inline]
     unsafe fn slice(&self, range: Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
-        self.base.slice(range)
+        self.base.as_raw().slice(range)
     }
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
-        self.base.capacity()
+        self.base.as_raw().capacity()
     }
     #[inline]
     fn read_end(&self) -> usize {
@@ -89,9 +89,9 @@ where
     }
 }
 
-impl<R: Deref> RawCons for CachedCons<R>
+impl<R: AsRaw> RawCons for CachedCons<R>
 where
-    R::Target: RawCons,
+    R::Raw: RawCons,
 {
     #[inline]
     unsafe fn set_read_end(&self, value: usize) {
@@ -99,9 +99,9 @@ where
     }
 }
 
-impl<R: Deref> RawProd for CachedProd<R>
+impl<R: AsRaw> RawProd for CachedProd<R>
 where
-    R::Target: RawProd,
+    R::Raw: RawProd,
 {
     #[inline]
     unsafe fn set_write_end(&self, value: usize) {
@@ -109,27 +109,52 @@ where
     }
 }
 
-impl<R: Deref> Drop for CachedCons<R>
+impl<R: AsRaw> Drop for CachedCons<R>
 where
-    R::Target: RawCons,
+    R::Raw: RawCons,
 {
     fn drop(&mut self) {
         self.commit();
     }
 }
 
-impl<R: Deref> Drop for CachedProd<R>
+impl<R: AsRaw> Drop for CachedProd<R>
 where
-    R::Target: RawProd,
+    R::Raw: RawProd,
 {
     fn drop(&mut self) {
         self.commit();
     }
 }
 
-impl<R: Deref> CachedCons<R>
+impl<R: AsRaw> AsRaw for CachedCons<R>
 where
-    R::Target: RawCons,
+    R::Raw: RawCons,
+{
+    type Raw = Self;
+    #[inline]
+    fn as_raw(&self) -> &Self::Raw {
+        self
+    }
+}
+
+impl<R: AsRaw> AsRaw for CachedProd<R>
+where
+    R::Raw: RawProd,
+{
+    type Raw = Self;
+    #[inline]
+    fn as_raw(&self) -> &Self::Raw {
+        self
+    }
+}
+
+impl<R: AsRaw> ConsMarker for CachedCons<R> where R::Raw: RawCons {}
+impl<R: AsRaw> ProdMarker for CachedProd<R> where R::Raw: RawProd {}
+
+impl<R: AsRaw> CachedCons<R>
+where
+    R::Raw: RawCons,
 {
     /// Create new ring buffer cache.
     ///
@@ -138,8 +163,8 @@ where
     /// There must be only one instance containing the same ring buffer reference.
     pub unsafe fn new(base: R) -> Self {
         Self {
-            read: Cell::new(base.read_end()),
-            write: base.write_end(),
+            read: Cell::new(base.as_raw().read_end()),
+            write: base.as_raw().write_end(),
             base,
         }
     }
@@ -149,11 +174,11 @@ where
 
     /// Commit changes to the ring buffer.
     pub fn commit(&self) {
-        unsafe { self.base.set_read_end(self.read.get()) }
+        unsafe { self.base.as_raw().set_read_end(self.read.get()) }
     }
     /// Fetch changes to the ring buffer.
     pub fn fetch(&mut self) {
-        self.write = self.base.write_end();
+        self.write = self.base.as_raw().write_end();
     }
     /// Commit changes and fetch updates from the ring buffer.
     pub fn sync(&mut self) {
@@ -169,9 +194,9 @@ where
     }
 }
 
-impl<R: Deref> CachedProd<R>
+impl<R: AsRaw> CachedProd<R>
 where
-    R::Target: RawProd,
+    R::Raw: RawProd,
 {
     /// Create new ring buffer cache.
     ///
@@ -180,8 +205,8 @@ where
     /// There must be only one instance containing the same ring buffer reference.
     pub unsafe fn new(base: R) -> Self {
         Self {
-            read: base.read_end(),
-            write: Cell::new(base.write_end()),
+            read: base.as_raw().read_end(),
+            write: Cell::new(base.as_raw().write_end()),
             base,
         }
     }
@@ -191,11 +216,11 @@ where
 
     /// Commit changes to the ring buffer.
     pub fn commit(&self) {
-        unsafe { self.base.set_write_end(self.write.get()) }
+        unsafe { self.base.as_raw().set_write_end(self.write.get()) }
     }
     /// Fetch changes to the ring buffer.
     pub fn fetch(&mut self) {
-        self.read = self.base.read_end();
+        self.read = self.base.as_raw().read_end();
     }
     /// Commit changes and fetch updates from the ring buffer.
     pub fn sync(&mut self) {
@@ -205,8 +230,8 @@ where
 
     /// Discard new items pushed since last sync.
     pub fn discard(&mut self) {
-        let last_tail = self.base.write_end();
-        let (first, second) = unsafe { self.base.slices(last_tail, self.write.get()) };
+        let last_tail = self.base.as_raw().write_end();
+        let (first, second) = unsafe { self.base.as_raw().slices(last_tail, self.write.get()) };
         for item_mut in first.iter_mut().chain(second.iter_mut()) {
             unsafe { item_mut.assume_init_drop() };
         }
