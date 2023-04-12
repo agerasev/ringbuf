@@ -1,7 +1,7 @@
 use crate::{rb::PopAllIter, utils::TimeoutIterator, BlockingRb};
 use ringbuf::{
     traits::{Consumer, Observer, Producer, RingBuffer},
-    CachedCons, CachedProd, Cons, Prod,
+    Cons, Prod,
 };
 use std::{mem::MaybeUninit, num::NonZeroUsize, ops::Deref, time::Duration};
 
@@ -186,24 +186,7 @@ where
         self.base().wait_write(count, timeout)
     }
 }
-impl<R: Deref> BlockingProducer for CachedProd<R>
-where
-    R::Target: BlockingRingBuffer,
-{
-    fn wait_write(&self, count: usize, timeout: Option<Duration>) -> bool {
-        self.base().wait_write(count, timeout)
-    }
-}
-
 impl<R: Deref> BlockingConsumer for Cons<R>
-where
-    R::Target: BlockingRingBuffer,
-{
-    fn wait_read(&self, count: usize, timeout: Option<Duration>) -> bool {
-        self.base().wait_read(count, timeout)
-    }
-}
-impl<R: Deref> BlockingConsumer for CachedCons<R>
 where
     R::Target: BlockingRingBuffer,
 {
