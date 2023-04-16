@@ -1,9 +1,15 @@
 #[cfg(feature = "alloc")]
 use crate::storage::Heap;
-use crate::{storage::Static, Cons, Prod, SharedRb};
-
+use crate::{
+    index::{LocalIndex, SharedIndex},
+    storage::Static,
+    Cons, Prod, Rb,
+};
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
+
+pub type LocalRb<S> = Rb<S, LocalIndex, LocalIndex>;
+pub type SharedRb<S> = Rb<S, SharedIndex, SharedIndex>;
 
 /// Stack-allocated ring buffer with static capacity.
 ///

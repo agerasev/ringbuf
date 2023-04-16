@@ -1,7 +1,6 @@
 use crate::{
-    cached::CachedCons,
-    observer::{modulus, Observer},
-    ring_buffer::unsafe_occupied_slices,
+    //cached::CachedCons,
+    observer::Observer,
     traits::RingBuffer,
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
@@ -20,15 +19,6 @@ use std::io::{self, Write};
 /// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
 ///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub trait Consumer: Observer {
-    /// Sets the new **read** position.
-    ///
-    /// # Safety
-    ///
-    /// This call must cohere with ring buffer data modification.
-    ///
-    /// It is recommended to use [`Self::advance_write_index`] instead.
-    unsafe fn set_read_index(&self, value: usize);
-
     /// Moves `read` pointer by `count` places forward.
     ///
     /// # Safety
@@ -36,9 +26,14 @@ pub trait Consumer: Observer {
     /// First `count` items in occupied memory must be moved out or dropped.
     ///
     /// Must not be called concurrently.
-    unsafe fn advance_read_index(&self, count: usize) {
-        self.set_read_index((self.read_index() + count) % modulus(self));
-    }
+    unsafe fn advance_read(&self, count: usize);
+
+    unsafe fn unsafe_occupied_slices(
+        &self,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    );
 
     /// Provides a direct access to the ring buffer occupied memory.
     /// The difference from [`Self::as_slices`] is that this method provides slices of [`MaybeUninit`], so items may be moved out of slices.  
@@ -51,9 +46,12 @@ pub trait Consumer: Observer {
     /// All items are initialized. Elements must be removed starting from the beginning of first slice.
     /// When all items are removed from the first slice then items must be removed from the beginning of the second slice.
     ///
-    /// *This method must be followed by [`Self::advance_read_index`] call with the number of items being removed previously as argument.*
+    /// *This method must be followed by [`Self::advance_read`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
-    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]);
+    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        let (first, second) = unsafe { self.unsafe_occupied_slices() };
+        (first as &_, second as &_)
+    }
 
     /// Provides a direct mutable access to the ring buffer occupied memory.
     ///
@@ -61,13 +59,15 @@ pub trait Consumer: Observer {
     ///
     /// # Safety
     ///
-    /// When some item is replaced with uninitialized value then it must immediately consumed by [`Self::advance_read_index`].
+    /// When some item is replaced with uninitialized value then it must not be read anymore.
     unsafe fn occupied_slices_mut(
         &mut self,
     ) -> (
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
-    );
+    ) {
+        self.unsafe_occupied_slices()
+    }
 
     /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
     #[inline]
@@ -93,7 +93,7 @@ pub trait Consumer: Observer {
     fn try_pop(&mut self) -> Option<Self::Item> {
         if !self.is_empty() {
             let elem = unsafe { self.occupied_slices().0.get_unchecked(0).assume_init_read() };
-            unsafe { self.advance_read_index(1) };
+            unsafe { self.advance_read(1) };
             Some(elem)
         } else {
             None
@@ -123,7 +123,7 @@ pub trait Consumer: Observer {
                     right.len()
                 }
         };
-        unsafe { self.advance_read_index(count) };
+        unsafe { self.advance_read(count) };
         count
     }
 
@@ -174,7 +174,7 @@ pub trait Consumer: Observer {
                 ptr::drop_in_place(elem.as_mut_ptr());
             }
             let actual_count = usize::min(count, left.len() + right.len());
-            self.advance_read_index(actual_count);
+            self.advance_read(actual_count);
             actual_count
         }
     }
@@ -189,7 +189,7 @@ pub trait Consumer: Observer {
                 ptr::drop_in_place(elem.as_mut_ptr());
             }
             let count = left.len() + right.len();
-            self.advance_read_index(count);
+            self.advance_read(count);
             count
         }
     }
@@ -213,7 +213,7 @@ pub trait Consumer: Observer {
 
         let write_count = writer.write(left_init)?;
         assert!(write_count <= count);
-        unsafe { self.advance_read_index(write_count) };
+        unsafe { self.advance_read(write_count) };
         Ok(write_count)
     }
 }
@@ -282,7 +282,7 @@ impl<'a, C: Consumer> ExactSizeIterator for PopIter<'a, C> {
 }
 impl<'a, C: Consumer> Drop for PopIter<'a, C> {
     fn drop(&mut self) {
-        unsafe { self.target.advance_read_index(self.len - self.len()) };
+        unsafe { self.target.advance_read(self.len - self.len()) };
     }
 }
 
@@ -334,13 +334,23 @@ where
     fn capacity(&self) -> NonZeroUsize {
         self.base.capacity()
     }
+
     #[inline]
-    fn read_index(&self) -> usize {
-        self.base.read_index()
+    fn occupied_len(&self) -> usize {
+        self.base.occupied_len()
     }
     #[inline]
-    fn write_index(&self) -> usize {
-        self.base.write_index()
+    fn vacant_len(&self) -> usize {
+        self.base.vacant_len()
+    }
+
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.base.is_empty()
+    }
+    #[inline]
+    fn is_full(&self) -> bool {
+        self.base.is_full()
     }
 }
 impl<R: Deref> Consumer for Cons<R>
@@ -348,22 +358,18 @@ where
     R::Target: RingBuffer,
 {
     #[inline]
-    unsafe fn set_read_index(&self, value: usize) {
-        self.base.set_read_index(value);
+    unsafe fn advance_read(&self, count: usize) {
+        self.base.advance_read(count)
     }
+
     #[inline]
-    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let (first, second) = unsafe { unsafe_occupied_slices(&*self.base, &*self.base) };
-        (first as &_, second as &_)
-    }
-    #[inline]
-    unsafe fn occupied_slices_mut(
-        &mut self,
+    unsafe fn unsafe_occupied_slices(
+        &self,
     ) -> (
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
     ) {
-        unsafe_occupied_slices(&*self.base, &*self.base)
+        self.base.unsafe_occupied_slices()
     }
 }
 
@@ -401,7 +407,7 @@ macro_rules! impl_cons_traits {
 pub(crate) use impl_cons_traits;
 
 impl_cons_traits!(Cons);
-
+/*
 impl<R: Deref> Cons<R>
 where
     R::Target: RingBuffer,
@@ -413,3 +419,4 @@ where
         unsafe { CachedCons::new(self.base) }
     }
 }
+*/

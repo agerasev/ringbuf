@@ -1,9 +1,8 @@
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
 use crate::{
-    cached::CachedProd,
-    observer::{modulus, Observer},
-    ring_buffer::unsafe_vacant_slices,
+    //cached::CachedProd,
+    observer::Observer,
     traits::RingBuffer,
     utils::write_slice,
 };
@@ -25,15 +24,6 @@ use std::{
 /// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
 ///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub trait Producer: Observer {
-    /// Sets the new **write** position.
-    ///
-    /// # Safety
-    ///
-    /// This call must cohere with ring buffer data modification.
-    ///
-    /// It is recommended to use `Self::move_write_end` instead.
-    unsafe fn set_write_index(&self, value: usize);
-
     /// Moves `write` pointer by `count` places forward.
     ///
     /// # Safety
@@ -41,28 +31,38 @@ pub trait Producer: Observer {
     /// First `count` items in free space must be initialized.
     ///
     /// Must not be called concurrently.
-    unsafe fn advance_write_index(&self, count: usize) {
-        self.set_write_index((self.write_index() + count) % modulus(self));
-    }
+    unsafe fn advance_write(&self, count: usize);
+
+    unsafe fn unsafe_vacant_slices(
+        &self,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    );
 
     /// Provides a direct access to the ring buffer vacant memory.
     ///
     /// Returns a pair of slices of uninitialized memory, the second one may be empty.
-    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]);
+    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        let (first, second) = unsafe { self.unsafe_vacant_slices() };
+        (first as &_, second as &_)
+    }
 
     /// Mutable version of [`Self::vacant_slices`].
     ///
     /// Vacant memory is uninitialized. Initialized items must be put starting from the beginning of first slice.
     /// When first slice is fully filled then items must be put to the beginning of the second slice.
     ///
-    /// *This method must be followed by [`Self::advance_write_index`] call with the number of items being put previously as argument.*
+    /// *This method must be followed by [`Self::advance_write`] call with the number of items being put previously as argument.*
     /// *No other mutating calls allowed before that.*
     fn vacant_slices_mut(
         &mut self,
     ) -> (
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
-    );
+    ) {
+        unsafe { self.unsafe_vacant_slices() }
+    }
 
     /// Appends an item to the ring buffer.
     ///
@@ -71,7 +71,7 @@ pub trait Producer: Observer {
         if !self.is_full() {
             unsafe {
                 self.vacant_slices_mut().0.get_unchecked_mut(0).write(elem);
-                self.advance_write_index(1)
+                self.advance_write(1)
             };
             Ok(())
         } else {
@@ -96,7 +96,7 @@ pub trait Producer: Observer {
             }
             count += 1;
         }
-        unsafe { self.advance_write_index(count) };
+        unsafe { self.advance_write(count) };
         count
     }
 
@@ -123,7 +123,7 @@ pub trait Producer: Observer {
                     right.len()
                 }
         };
-        unsafe { self.advance_write_index(count) };
+        unsafe { self.advance_write(count) };
         count
     }
 
@@ -146,7 +146,7 @@ pub trait Producer: Observer {
 
         let read_count = reader.read(left_init)?;
         assert!(read_count <= count);
-        unsafe { self.advance_write_index(read_count) };
+        unsafe { self.advance_write(read_count) };
         Ok(read_count)
     }
 }
@@ -187,13 +187,23 @@ where
     fn capacity(&self) -> NonZeroUsize {
         self.base.capacity()
     }
+
     #[inline]
-    fn read_index(&self) -> usize {
-        self.base.read_index()
+    fn occupied_len(&self) -> usize {
+        self.base.occupied_len()
     }
     #[inline]
-    fn write_index(&self) -> usize {
-        self.base.write_index()
+    fn vacant_len(&self) -> usize {
+        self.base.vacant_len()
+    }
+
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.base.is_empty()
+    }
+    #[inline]
+    fn is_full(&self) -> bool {
+        self.base.is_full()
     }
 }
 
@@ -202,22 +212,18 @@ where
     R::Target: RingBuffer,
 {
     #[inline]
-    unsafe fn set_write_index(&self, value: usize) {
-        self.base.set_write_index(value);
+    unsafe fn advance_write(&self, count: usize) {
+        self.base.advance_write(count);
     }
+
     #[inline]
-    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let (first, second) = unsafe { unsafe_vacant_slices(&*self.base, &*self.base) };
-        (first as &_, second as &_)
-    }
-    #[inline]
-    fn vacant_slices_mut(
-        &mut self,
+    unsafe fn unsafe_vacant_slices(
+        &self,
     ) -> (
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
     ) {
-        unsafe { unsafe_vacant_slices(&*self.base, &*self.base) }
+        self.base.unsafe_vacant_slices()
     }
 }
 
@@ -261,7 +267,7 @@ macro_rules! impl_prod_traits {
 pub(crate) use impl_prod_traits;
 
 impl_prod_traits!(Prod);
-
+/*
 impl<R: Deref> Prod<R>
 where
     R::Target: RingBuffer,
@@ -273,3 +279,4 @@ where
         unsafe { CachedProd::new(self.base) }
     }
 }
+*/

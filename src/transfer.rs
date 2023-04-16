@@ -26,7 +26,7 @@ pub fn transfer<T, C: Consumer<Item = T>, P: Producer<Item = T>>(
         unsafe { dst_place.write(src_elem.as_ptr().read()) };
         actual_count += 1;
     }
-    unsafe { src.advance_read_index(actual_count) };
-    unsafe { dst.advance_write_index(actual_count) };
+    unsafe { src.advance_read(actual_count) };
+    unsafe { dst.advance_write(actual_count) };
     actual_count
 }
