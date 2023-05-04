@@ -8,9 +8,8 @@ use crate::{
     traits::{Observer, RingBuffer},
     Cons, Prod,
 };
-use alloc::rc::Rc;
 #[cfg(feature = "alloc")]
-use alloc::sync::Arc;
+use alloc::{rc::Rc, sync::Arc};
 use core::{
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
