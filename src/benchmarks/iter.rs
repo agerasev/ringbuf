@@ -6,7 +6,7 @@ const RB_SIZE: usize = 1024;
 #[bench]
 fn push_iter_x1000(b: &mut Bencher) {
     let buf = HeapRb::<i32>::new(RB_SIZE);
-    let (mut prod, mut cons) = buf.split();
+    let (mut prod, mut cons) = buf.split_arc();
 
     prod.push_slice(&[0; RB_SIZE / 2]);
     cons.skip(RB_SIZE / 2);
@@ -21,7 +21,7 @@ fn push_iter_x1000(b: &mut Bencher) {
 #[bench]
 fn pop_iter_x1000(b: &mut Bencher) {
     let buf = HeapRb::<i32>::new(RB_SIZE);
-    let (mut prod, mut cons) = buf.split();
+    let (mut prod, mut cons) = buf.split_arc();
 
     prod.push_slice(&[0; RB_SIZE / 2]);
     cons.skip(RB_SIZE / 2);
