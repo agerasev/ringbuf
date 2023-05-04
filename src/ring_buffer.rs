@@ -52,3 +52,7 @@ pub trait RingBuffer: Consumer + Producer {
         });
     }
 }
+
+pub trait Split<T, P: Producer<Item = T>, C: Consumer<Item = T>> {
+    fn split(self) -> (P, C);
+}

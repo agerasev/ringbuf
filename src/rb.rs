@@ -4,9 +4,9 @@ use crate::{
     consumer::Consumer,
     index::Index,
     producer::Producer,
+    ref_::{ArcFamily, Family, RcFamily, RefFamily},
     storage::{Shared, Static, Storage},
-    traits::{Observer, RingBuffer},
-    Cons, Prod,
+    traits::{Observer, RingBuffer, Split},
 };
 use alloc::rc::Rc;
 #[cfg(feature = "alloc")]
@@ -176,26 +176,181 @@ impl<S: Storage, R: Index, W: Index> Drop for Rb<S, R, W> {
     }
 }
 
-impl<S: Storage, R: Index, W: Index> Rb<S, R, W> {
-    pub fn split_ref(&mut self) -> (Prod<&Self>, Cons<&Self>) {
+/// Producer wrapper of ring buffer.
+pub struct Prod<A: Family, S: Storage, R: Index, W: Index> {
+    base: A::Ref<Rb<S, R, W>>,
+}
+/*
+impl<R: Deref> Prod<R>
+where
+    R::Target: RingBuffer,
+{
+    /// # Safety
+    ///
+    /// There must be no more than one consumer wrapper.
+    pub unsafe fn new(base: R) -> Self {
+        Self { base }
+    }
+    pub fn base(&self) -> &R {
+        &self.base
+    }
+    pub fn into_base(self) -> R {
+        self.base
+    }
+}
+impl<R: Deref> Observer for Prod<R>
+where
+    R::Target: RingBuffer,
+{
+    type Item = <R::Target as Observer>::Item;
+
+    #[inline]
+    fn capacity(&self) -> NonZeroUsize {
+        self.base.capacity()
+    }
+
+    #[inline]
+    fn occupied_len(&self) -> usize {
+        self.base.occupied_len()
+    }
+    #[inline]
+    fn vacant_len(&self) -> usize {
+        self.base.vacant_len()
+    }
+
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.base.is_empty()
+    }
+    #[inline]
+    fn is_full(&self) -> bool {
+        self.base.is_full()
+    }
+}
+impl<R: Deref> Producer for Prod<R>
+where
+    R::Target: RingBuffer,
+{
+    #[inline]
+    unsafe fn advance_write(&self, count: usize) {
+        self.base.advance_write(count);
+    }
+
+    #[inline]
+    unsafe fn unsafe_vacant_slices(
+        &self,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    ) {
+        self.base.unsafe_vacant_slices()
+    }
+}
+impl_prod_traits!(Prod);
+*/
+
+/// Producer wrapper of ring buffer.
+pub struct Cons<A: Family, S: Storage, R: Index, W: Index> {
+    base: A::Ref<Rb<S, R, W>>,
+}
+
+/*
+impl<R: Deref> Cons<R>
+where
+    R::Target: RingBuffer,
+{
+    /// # Safety
+    ///
+    /// There must be no more than one consumer wrapper.
+    pub unsafe fn new(base: R) -> Self {
+        Self { base }
+    }
+    pub fn base(&self) -> &R {
+        &self.base
+    }
+    pub fn into_base(self) -> R {
+        self.base
+    }
+}
+
+impl<R: Deref> Observer for Cons<R>
+where
+    R::Target: RingBuffer,
+{
+    type Item = <R::Target as Observer>::Item;
+
+    #[inline]
+    fn capacity(&self) -> NonZeroUsize {
+        self.base.capacity()
+    }
+
+    #[inline]
+    fn occupied_len(&self) -> usize {
+        self.base.occupied_len()
+    }
+    #[inline]
+    fn vacant_len(&self) -> usize {
+        self.base.vacant_len()
+    }
+
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.base.is_empty()
+    }
+    #[inline]
+    fn is_full(&self) -> bool {
+        self.base.is_full()
+    }
+}
+impl<R: Deref> Consumer for Cons<R>
+where
+    R::Target: RingBuffer,
+{
+    #[inline]
+    unsafe fn advance_read(&self, count: usize) {
+        self.base.advance_read(count)
+    }
+
+    #[inline]
+    unsafe fn unsafe_occupied_slices(
+        &self,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    ) {
+        self.base.unsafe_occupied_slices()
+    }
+}
+impl_cons_traits!(Cons);
+*/
+/*
+impl<'a, S: Storage, R: Index, W: Index>
+    Split<S::Item, Prod<RefFamily<'a>, S, R, W>, Cons<RefFamily<'a>, S, R, W>>
+    for &'a mut Rb<S, R, W>
+{
+    fn split(self) -> (Prod<RefFamily<'a>, S, R, W>, Cons<RefFamily<'a>, S, R, W>) {
         unsafe { (Prod::new(self), Cons::new(self)) }
     }
 }
 #[cfg(feature = "alloc")]
-impl<S: Storage, R: Index, W: Index> Rb<S, R, W> {
-    pub fn split_arc(self) -> (Prod<Arc<Self>>, Cons<Arc<Self>>) {
-        let arc = Arc::new(self);
-        unsafe { (Prod::new(arc.clone()), Cons::new(arc)) }
-    }
-}
-#[cfg(feature = "alloc")]
-impl<S: Storage, R: Index, W: Index> Rb<S, R, W> {
-    pub fn split_rc(self) -> (Prod<Rc<Self>>, Cons<Rc<Self>>) {
+impl<S: Storage, R: Index, W: Index>
+    Split<S::Item, Prod<RcFamily, S, R, W>, Cons<RcFamily, S, R, W>> for Rb<S, R, W>
+{
+    fn split(self) -> (Prod<RcFamily, S, R, W>, Cons<RcFamily, S, R, W>) {
         let rc = Rc::new(self);
         unsafe { (Prod::new(rc.clone()), Cons::new(rc)) }
     }
 }
-
+#[cfg(feature = "alloc")]
+impl<S: Storage, R: Index, W: Index>
+    Split<S::Item, Prod<ArcFamily, S, R, W>, Cons<ArcFamily, S, R, W>> for Rb<S, R, W>
+{
+    fn split(self) -> (Prod<ArcFamily, S, R, W>, Cons<ArcFamily, S, R, W>) {
+        let arc = Arc::new(self);
+        unsafe { (Prod::new(arc.clone()), Cons::new(arc)) }
+    }
+}
+*/
 impl<T, R: Index + Default, W: Index + Default, const N: usize> Default for Rb<Static<T, N>, R, W> {
     fn default() -> Self {
         unsafe { Self::from_raw_parts(crate::utils::uninit_array(), R::default(), W::default()) }

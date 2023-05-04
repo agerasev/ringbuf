@@ -151,82 +151,6 @@ pub trait Producer: Observer {
     }
 }
 
-/// Producer wrapper of ring buffer.
-pub struct Prod<R: Deref>
-where
-    R::Target: RingBuffer,
-{
-    base: R,
-}
-
-impl<R: Deref> Prod<R>
-where
-    R::Target: RingBuffer,
-{
-    /// # Safety
-    ///
-    /// There must be no more than one consumer wrapper.
-    pub unsafe fn new(base: R) -> Self {
-        Self { base }
-    }
-    pub fn base(&self) -> &R {
-        &self.base
-    }
-    pub fn into_base(self) -> R {
-        self.base
-    }
-}
-
-impl<R: Deref> Observer for Prod<R>
-where
-    R::Target: RingBuffer,
-{
-    type Item = <R::Target as Observer>::Item;
-
-    #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.base.capacity()
-    }
-
-    #[inline]
-    fn occupied_len(&self) -> usize {
-        self.base.occupied_len()
-    }
-    #[inline]
-    fn vacant_len(&self) -> usize {
-        self.base.vacant_len()
-    }
-
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.base.is_empty()
-    }
-    #[inline]
-    fn is_full(&self) -> bool {
-        self.base.is_full()
-    }
-}
-
-impl<R: Deref> Producer for Prod<R>
-where
-    R::Target: RingBuffer,
-{
-    #[inline]
-    unsafe fn advance_write(&self, count: usize) {
-        self.base.advance_write(count);
-    }
-
-    #[inline]
-    unsafe fn unsafe_vacant_slices(
-        &self,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    ) {
-        self.base.unsafe_vacant_slices()
-    }
-}
-
 macro_rules! impl_prod_traits {
     ($Prod:ident) => {
         #[cfg(feature = "std")]
@@ -266,7 +190,6 @@ macro_rules! impl_prod_traits {
 }
 pub(crate) use impl_prod_traits;
 
-impl_prod_traits!(Prod);
 /*
 impl<R: Deref> Prod<R>
 where

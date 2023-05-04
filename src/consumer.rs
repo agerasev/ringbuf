@@ -298,81 +298,6 @@ pub type Iter<'a, C: Consumer> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a,
 #[allow(type_alias_bounds)]
 pub type IterMut<'a, C: Consumer> = Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
 
-/// Producer wrapper of ring buffer.
-pub struct Cons<R: Deref>
-where
-    R::Target: RingBuffer,
-{
-    base: R,
-}
-
-impl<R: Deref> Cons<R>
-where
-    R::Target: RingBuffer,
-{
-    /// # Safety
-    ///
-    /// There must be no more than one consumer wrapper.
-    pub unsafe fn new(base: R) -> Self {
-        Self { base }
-    }
-    pub fn base(&self) -> &R {
-        &self.base
-    }
-    pub fn into_base(self) -> R {
-        self.base
-    }
-}
-
-impl<R: Deref> Observer for Cons<R>
-where
-    R::Target: RingBuffer,
-{
-    type Item = <R::Target as Observer>::Item;
-
-    #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.base.capacity()
-    }
-
-    #[inline]
-    fn occupied_len(&self) -> usize {
-        self.base.occupied_len()
-    }
-    #[inline]
-    fn vacant_len(&self) -> usize {
-        self.base.vacant_len()
-    }
-
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.base.is_empty()
-    }
-    #[inline]
-    fn is_full(&self) -> bool {
-        self.base.is_full()
-    }
-}
-impl<R: Deref> Consumer for Cons<R>
-where
-    R::Target: RingBuffer,
-{
-    #[inline]
-    unsafe fn advance_read(&self, count: usize) {
-        self.base.advance_read(count)
-    }
-
-    #[inline]
-    unsafe fn unsafe_occupied_slices(
-        &self,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    ) {
-        self.base.unsafe_occupied_slices()
-    }
-}
-
 macro_rules! impl_cons_traits {
     ($Cons:ident) => {
         impl<R: core::ops::Deref> IntoIterator for $Cons<R>
@@ -406,7 +331,6 @@ macro_rules! impl_cons_traits {
 }
 pub(crate) use impl_cons_traits;
 
-impl_cons_traits!(Cons);
 /*
 impl<R: Deref> Cons<R>
 where

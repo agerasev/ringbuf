@@ -14,6 +14,7 @@ pub mod index;
 mod observer;
 pub mod producer;
 mod rb;
+pub mod ref_;
 mod ring_buffer;
 pub mod storage;
 mod transfer;
@@ -24,14 +25,15 @@ mod tests;
 
 pub use alias::*;
 //pub use cached::{CachedCons, CachedProd};
-pub use consumer::Cons;
-pub use producer::Prod;
-pub use rb::Rb;
+pub use rb::{Cons, Prod, Rb};
 pub use transfer::transfer;
 
 pub mod traits {
     pub use crate::{
-        consumer::Consumer, observer::Observer, producer::Producer, ring_buffer::RingBuffer,
+        consumer::Consumer,
+        observer::Observer,
+        producer::Producer,
+        ring_buffer::{RingBuffer, Split},
     };
 }
 
