@@ -22,7 +22,7 @@ use core::{
 ///
 /// Equals to `2 * capacity`.
 #[inline]
-fn modulus(this: &impl Observer) -> NonZeroUsize {
+pub(crate) fn modulus(this: &impl Observer) -> NonZeroUsize {
     unsafe { NonZeroUsize::new_unchecked(2 * this.capacity().get()) }
 }
 
@@ -101,18 +101,10 @@ impl<S: Storage, R: Index, W: Index> Rb<S, R, W> {
         )
     }
 
-    pub unsafe fn slices(
-        &self,
-        start: usize,
-        end: usize,
-    ) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        let (first, second) = ranges(self.capacity(), start, end);
-        (self.storage.slice(first), self.storage.slice(second))
-    }
-    pub unsafe fn read_index(&self) -> &R {
+    pub unsafe fn read_index_ref(&self) -> &R {
         &self.read
     }
-    pub unsafe fn write_index(&self) -> &W {
+    pub unsafe fn write_index_ref(&self) -> &W {
         &self.write
     }
 }
@@ -142,7 +134,7 @@ impl<S: Storage, R: Index, W: Index> Observer for Rb<S, R, W> {
 
 impl<S: Storage, R: Index, W: Index> Producer for Rb<S, R, W> {
     #[inline]
-    unsafe fn advance_write(&self, count: usize) {
+    unsafe fn advance_write_index(&self, count: usize) {
         self.write.set((self.write.get() + count) % modulus(self));
     }
 
@@ -150,13 +142,13 @@ impl<S: Storage, R: Index, W: Index> Producer for Rb<S, R, W> {
     unsafe fn unsafe_vacant_slices(
         &self,
     ) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        unsafe { self.slices(self.write.get(), self.read.get() + self.capacity().get()) }
+        self.unsafe_slices(self.write.get(), self.read.get() + self.capacity().get())
     }
 }
 
 impl<S: Storage, R: Index, W: Index> Consumer for Rb<S, R, W> {
     #[inline]
-    unsafe fn advance_read(&self, count: usize) {
+    unsafe fn advance_read_index(&self, count: usize) {
         self.read.set((self.read.get() + count) % modulus(self));
     }
 
@@ -164,11 +156,37 @@ impl<S: Storage, R: Index, W: Index> Consumer for Rb<S, R, W> {
     unsafe fn unsafe_occupied_slices(
         &self,
     ) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        self.slices(self.read.get(), self.write.get())
+        self.unsafe_slices(self.read.get(), self.write.get())
     }
 }
 
-impl<S: Storage, R: Index, W: Index> RingBuffer for Rb<S, R, W> {}
+impl<S: Storage, R: Index, W: Index> RingBuffer for Rb<S, R, W> {
+    fn read_index(&self) -> usize {
+        unsafe { self.read_index_ref() }.get()
+    }
+    fn write_index(&self) -> usize {
+        unsafe { self.write_index_ref() }.get()
+    }
+
+    unsafe fn set_read_index(&self, value: usize) {
+        unsafe { self.read_index_ref() }.set(value);
+    }
+    unsafe fn set_write_index(&self, value: usize) {
+        unsafe { self.write_index_ref() }.set(value);
+    }
+
+    unsafe fn unsafe_slices(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> (
+        &mut [MaybeUninit<Self::Item>],
+        &mut [MaybeUninit<Self::Item>],
+    ) {
+        let (first, second) = ranges(self.capacity(), start, end);
+        (self.storage.slice(first), self.storage.slice(second))
+    }
+}
 
 impl<S: Storage, R: Index, W: Index> Drop for Rb<S, R, W> {
     fn drop(&mut self) {

@@ -8,7 +8,7 @@ extern crate alloc;
 extern crate std;
 
 mod alias;
-//mod cached;
+mod cached;
 pub mod consumer;
 pub mod index;
 mod observer;
@@ -23,7 +23,7 @@ mod utils;
 mod tests;
 
 pub use alias::*;
-//pub use cached::{CachedCons, CachedProd};
+pub use cached::{CachedCons, CachedProd};
 pub use consumer::Cons;
 pub use producer::Prod;
 pub use rb::Rb;

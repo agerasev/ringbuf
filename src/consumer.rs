@@ -1,5 +1,5 @@
 use crate::{
-    //cached::CachedCons,
+    cached::CachedCons,
     observer::Observer,
     traits::RingBuffer,
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
@@ -26,7 +26,7 @@ pub trait Consumer: Observer {
     /// First `count` items in occupied memory must be moved out or dropped.
     ///
     /// Must not be called concurrently.
-    unsafe fn advance_read(&self, count: usize);
+    unsafe fn advance_read_index(&self, count: usize);
 
     unsafe fn unsafe_occupied_slices(
         &self,
@@ -93,7 +93,7 @@ pub trait Consumer: Observer {
     fn try_pop(&mut self) -> Option<Self::Item> {
         if !self.is_empty() {
             let elem = unsafe { self.occupied_slices().0.get_unchecked(0).assume_init_read() };
-            unsafe { self.advance_read(1) };
+            unsafe { self.advance_read_index(1) };
             Some(elem)
         } else {
             None
@@ -123,7 +123,7 @@ pub trait Consumer: Observer {
                     right.len()
                 }
         };
-        unsafe { self.advance_read(count) };
+        unsafe { self.advance_read_index(count) };
         count
     }
 
@@ -174,7 +174,7 @@ pub trait Consumer: Observer {
                 ptr::drop_in_place(elem.as_mut_ptr());
             }
             let actual_count = usize::min(count, left.len() + right.len());
-            self.advance_read(actual_count);
+            self.advance_read_index(actual_count);
             actual_count
         }
     }
@@ -189,7 +189,7 @@ pub trait Consumer: Observer {
                 ptr::drop_in_place(elem.as_mut_ptr());
             }
             let count = left.len() + right.len();
-            self.advance_read(count);
+            self.advance_read_index(count);
             count
         }
     }
@@ -213,7 +213,7 @@ pub trait Consumer: Observer {
 
         let write_count = writer.write(left_init)?;
         assert!(write_count <= count);
-        unsafe { self.advance_read(write_count) };
+        unsafe { self.advance_read_index(write_count) };
         Ok(write_count)
     }
 }
@@ -282,7 +282,7 @@ impl<'a, C: Consumer> ExactSizeIterator for PopIter<'a, C> {
 }
 impl<'a, C: Consumer> Drop for PopIter<'a, C> {
     fn drop(&mut self) {
-        unsafe { self.target.advance_read(self.len - self.len()) };
+        unsafe { self.target.advance_read_index(self.len - self.len()) };
     }
 }
 
@@ -358,8 +358,8 @@ where
     R::Target: RingBuffer,
 {
     #[inline]
-    unsafe fn advance_read(&self, count: usize) {
-        self.base.advance_read(count)
+    unsafe fn advance_read_index(&self, count: usize) {
+        self.base.advance_read_index(count)
     }
 
     #[inline]
@@ -407,7 +407,7 @@ macro_rules! impl_cons_traits {
 pub(crate) use impl_cons_traits;
 
 impl_cons_traits!(Cons);
-/*
+
 impl<R: Deref> Cons<R>
 where
     R::Target: RingBuffer,
@@ -419,4 +419,3 @@ where
         unsafe { CachedCons::new(self.base) }
     }
 }
-*/

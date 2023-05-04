@@ -1,5 +1,5 @@
 use crate::{traits::*, BlockingRb};
-use ringbuf::{traits::*, HeapRb};
+use ringbuf::traits::*;
 use std::{iter::once, thread};
 
 const THE_BOOK_FOREWORD: &str = r#"
@@ -16,8 +16,8 @@ This book fully embraces the potential of Rust to empower its users. It's a frie
 #[test]
 #[cfg_attr(miri, ignore)]
 fn wait() {
-    let buf = BlockingRb::from(HeapRb::<u8>::new(7));
-    let (mut prod, mut cons) = buf.split();
+    let buf = BlockingRb::<u8>::new(7);
+    let (mut prod, mut cons) = buf.split_arc();
 
     let smsg = THE_BOOK_FOREWORD;
 
@@ -58,8 +58,8 @@ fn wait() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn slice_all() {
-    let buf = BlockingRb::from(HeapRb::<u8>::new(7));
-    let (mut prod, mut cons) = buf.split();
+    let buf = BlockingRb::<u8>::new(7);
+    let (mut prod, mut cons) = buf.split_arc();
 
     let smsg = THE_BOOK_FOREWORD;
 
@@ -85,8 +85,8 @@ fn slice_all() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn iter_all() {
-    let buf = BlockingRb::from(HeapRb::<u8>::new(7));
-    let (mut prod, mut cons) = buf.split();
+    let buf = BlockingRb::<u8>::new(7);
+    let (mut prod, mut cons) = buf.split_arc();
 
     let smsg = THE_BOOK_FOREWORD;
 

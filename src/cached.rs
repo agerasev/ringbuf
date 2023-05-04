@@ -1,7 +1,7 @@
 use crate::{
     consumer::{impl_cons_traits, Cons},
     producer::{impl_prod_traits, Prod, Producer},
-    ring_buffer::{unsafe_occupied_slices, unsafe_vacant_slices},
+    rb::modulus,
     traits::{Consumer, Observer, RingBuffer},
 };
 use core::{
@@ -52,13 +52,19 @@ where
     fn capacity(&self) -> NonZeroUsize {
         self.base.capacity()
     }
-    #[inline]
-    fn read_index(&self) -> usize {
-        self.read.get()
+
+    fn occupied_len(&self) -> usize {
+        let modulus = modulus(self);
+        (modulus.get() + self.write - self.read.get()) % modulus
     }
+    fn vacant_len(&self) -> usize {
+        let modulus = modulus(self);
+        (self.capacity().get() + self.read.get() - self.write) % modulus
+    }
+
     #[inline]
-    fn write_index(&self) -> usize {
-        self.write
+    fn is_empty(&self) -> bool {
+        self.read.get() == self.write
     }
 }
 
@@ -67,22 +73,18 @@ where
     R::Target: RingBuffer,
 {
     #[inline]
-    unsafe fn set_read_index(&self, value: usize) {
-        self.read.set(value);
+    unsafe fn advance_read_index(&self, count: usize) {
+        self.read.set((self.read.get() + count) % modulus(self));
     }
+
     #[inline]
-    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let (first, second) = unsafe { unsafe_occupied_slices(self, &*self.base) };
-        (first as &_, second as &_)
-    }
-    #[inline]
-    unsafe fn occupied_slices_mut(
-        &mut self,
+    unsafe fn unsafe_occupied_slices(
+        &self,
     ) -> (
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
     ) {
-        unsafe_occupied_slices(self, &*self.base)
+        self.base.unsafe_slices(self.read.get(), self.write)
     }
 }
 
@@ -96,13 +98,19 @@ where
     fn capacity(&self) -> NonZeroUsize {
         self.base.capacity()
     }
-    #[inline]
-    fn read_index(&self) -> usize {
-        self.read
+
+    fn occupied_len(&self) -> usize {
+        let modulus = modulus(self);
+        (modulus.get() + self.write.get() - self.read) % modulus
     }
+    fn vacant_len(&self) -> usize {
+        let modulus = modulus(self);
+        (self.capacity().get() + self.read - self.write.get()) % modulus
+    }
+
     #[inline]
-    fn write_index(&self) -> usize {
-        self.write.get()
+    fn is_empty(&self) -> bool {
+        self.read == self.write.get()
     }
 }
 
@@ -111,22 +119,19 @@ where
     R::Target: RingBuffer,
 {
     #[inline]
-    unsafe fn set_write_index(&self, value: usize) {
-        self.write.set(value);
+    unsafe fn advance_write_index(&self, count: usize) {
+        self.write.set((self.write.get() + count) % modulus(self));
     }
+
     #[inline]
-    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let (first, second) = unsafe { unsafe_vacant_slices(self, &*self.base) };
-        (first as &_, second as &_)
-    }
-    #[inline]
-    fn vacant_slices_mut(
-        &mut self,
+    unsafe fn unsafe_vacant_slices(
+        &self,
     ) -> (
         &mut [MaybeUninit<Self::Item>],
         &mut [MaybeUninit<Self::Item>],
     ) {
-        unsafe { unsafe_vacant_slices(self, &*self.base) }
+        self.base
+            .unsafe_slices(self.write.get(), self.read + self.capacity().get())
     }
 }
 

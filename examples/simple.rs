@@ -2,7 +2,7 @@ use ringbuf::{traits::*, HeapRb};
 
 fn main() {
     let rb = HeapRb::<i32>::new(2);
-    let (mut prod, mut cons) = rb.split();
+    let (mut prod, mut cons) = rb.split_arc();
 
     prod.try_push(0).unwrap();
     prod.try_push(1).unwrap();

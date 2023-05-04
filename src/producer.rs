@@ -1,11 +1,6 @@
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
-use crate::{
-    //cached::CachedProd,
-    observer::Observer,
-    traits::RingBuffer,
-    utils::write_slice,
-};
+use crate::{cached::CachedProd, observer::Observer, traits::RingBuffer, utils::write_slice};
 use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Deref};
 #[cfg(feature = "std")]
 use std::{
@@ -31,7 +26,7 @@ pub trait Producer: Observer {
     /// First `count` items in free space must be initialized.
     ///
     /// Must not be called concurrently.
-    unsafe fn advance_write(&self, count: usize);
+    unsafe fn advance_write_index(&self, count: usize);
 
     unsafe fn unsafe_vacant_slices(
         &self,
@@ -71,7 +66,7 @@ pub trait Producer: Observer {
         if !self.is_full() {
             unsafe {
                 self.vacant_slices_mut().0.get_unchecked_mut(0).write(elem);
-                self.advance_write(1)
+                self.advance_write_index(1)
             };
             Ok(())
         } else {
@@ -96,7 +91,7 @@ pub trait Producer: Observer {
             }
             count += 1;
         }
-        unsafe { self.advance_write(count) };
+        unsafe { self.advance_write_index(count) };
         count
     }
 
@@ -123,7 +118,7 @@ pub trait Producer: Observer {
                     right.len()
                 }
         };
-        unsafe { self.advance_write(count) };
+        unsafe { self.advance_write_index(count) };
         count
     }
 
@@ -146,7 +141,7 @@ pub trait Producer: Observer {
 
         let read_count = reader.read(left_init)?;
         assert!(read_count <= count);
-        unsafe { self.advance_write(read_count) };
+        unsafe { self.advance_write_index(read_count) };
         Ok(read_count)
     }
 }
@@ -212,8 +207,8 @@ where
     R::Target: RingBuffer,
 {
     #[inline]
-    unsafe fn advance_write(&self, count: usize) {
-        self.base.advance_write(count);
+    unsafe fn advance_write_index(&self, count: usize) {
+        self.base.advance_write_index(count);
     }
 
     #[inline]
@@ -267,7 +262,7 @@ macro_rules! impl_prod_traits {
 pub(crate) use impl_prod_traits;
 
 impl_prod_traits!(Prod);
-/*
+
 impl<R: Deref> Prod<R>
 where
     R::Target: RingBuffer,
@@ -279,4 +274,3 @@ where
         unsafe { CachedProd::new(self.base) }
     }
 }
-*/
