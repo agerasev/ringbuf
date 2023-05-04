@@ -43,6 +43,9 @@ pub struct Semaphore {
 
 impl Semaphore {
     pub fn wait<F: Fn() -> bool>(&self, f: F, timeout: Option<Duration>) -> bool {
+        if f() {
+            return true;
+        }
         let mut guard_slot = Some(self.mutex.lock().unwrap());
         for timeout in TimeoutIterator::new(timeout) {
             if f() {
@@ -59,6 +62,6 @@ impl Semaphore {
     pub fn notify<F: FnOnce()>(&self, f: F) {
         let _guard = self.mutex.lock();
         f();
-        self.condvar.notify_one();
+        self.condvar.notify_all();
     }
 }

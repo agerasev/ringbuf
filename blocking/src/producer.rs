@@ -8,10 +8,10 @@ use ringbuf::{
 use std::{ops::Deref, time::Duration};
 
 pub trait BlockingProducer: Producer {
-    fn wait_write(&self, count: usize, timeout: Option<Duration>) -> bool;
+    fn wait_vacant(&self, count: usize, timeout: Option<Duration>) -> bool;
 
     fn push(&mut self, item: Self::Item, timeout: Option<Duration>) -> Result<(), Self::Item> {
-        if self.wait_write(1, timeout) {
+        if self.wait_vacant(1, timeout) {
             assert!(self.try_push(item).is_ok());
             Ok(())
         } else {
@@ -30,7 +30,7 @@ pub trait BlockingProducer: Producer {
             if iter.peek().is_none() {
                 break;
             }
-            if self.wait_write(1, timeout) {
+            if self.wait_vacant(1, timeout) {
                 count += self.push_iter(&mut iter);
             }
         }
@@ -46,7 +46,7 @@ pub trait BlockingProducer: Producer {
             if slice.is_empty() {
                 break;
             }
-            if self.wait_write(1, timeout) {
+            if self.wait_vacant(1, timeout) {
                 let n = self.push_slice(slice);
                 slice = &slice[n..];
                 count += n;
@@ -56,10 +56,10 @@ pub trait BlockingProducer: Producer {
     }
 }
 
-impl<S: Storage, R: Index, W: Index> BlockingProducer for Rb<S, R, BlockingIndex<W>> {
-    fn wait_write(&self, count: usize, timeout: Option<Duration>) -> bool {
+impl<S: Storage, R: Index, W: Index> BlockingProducer for Rb<S, BlockingIndex<R>, W> {
+    fn wait_vacant(&self, count: usize, timeout: Option<Duration>) -> bool {
         debug_assert!(count <= self.capacity().get());
-        unsafe { self.write_index_ref() }
+        unsafe { self.read_index_ref() }
             .sem
             .wait(|| self.vacant_len() >= count, timeout)
     }
@@ -69,7 +69,7 @@ impl<R: Deref> BlockingProducer for Prod<R>
 where
     R::Target: RingBuffer + BlockingProducer,
 {
-    fn wait_write(&self, count: usize, timeout: Option<Duration>) -> bool {
-        self.base().wait_write(count, timeout)
+    fn wait_vacant(&self, count: usize, timeout: Option<Duration>) -> bool {
+        self.base().wait_vacant(count, timeout)
     }
 }

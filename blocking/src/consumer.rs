@@ -8,10 +8,10 @@ use ringbuf::{
 use std::{ops::Deref, time::Duration};
 
 pub trait BlockingConsumer: Consumer {
-    fn wait_read(&self, count: usize, timeout: Option<Duration>) -> bool;
+    fn wait_occupied(&self, count: usize, timeout: Option<Duration>) -> bool;
 
     fn pop_wait(&mut self, timeout: Option<Duration>) -> Option<Self::Item> {
-        if self.wait_read(1, timeout) {
+        if self.wait_occupied(1, timeout) {
             Some(self.try_pop().unwrap())
         } else {
             None
@@ -34,7 +34,7 @@ pub trait BlockingConsumer: Consumer {
             if slice.is_empty() {
                 break;
             }
-            if self.wait_read(1, timeout) {
+            if self.wait_occupied(1, timeout) {
                 let n = self.pop_slice(slice);
                 slice = &mut slice[n..];
                 count += n;
@@ -53,7 +53,7 @@ impl<'a, C: BlockingConsumer> Iterator for PopAllIter<'a, C> {
     type Item = C::Item;
     fn next(&mut self) -> Option<Self::Item> {
         let timeout = self.timeout.next()?;
-        if self.target.wait_read(1, timeout) {
+        if self.target.wait_occupied(1, timeout) {
             self.target.try_pop()
         } else {
             None
@@ -61,10 +61,10 @@ impl<'a, C: BlockingConsumer> Iterator for PopAllIter<'a, C> {
     }
 }
 
-impl<S: Storage, R: Index, W: Index> BlockingConsumer for Rb<S, BlockingIndex<R>, W> {
-    fn wait_read(&self, count: usize, timeout: Option<Duration>) -> bool {
+impl<S: Storage, R: Index, W: Index> BlockingConsumer for Rb<S, R, BlockingIndex<W>> {
+    fn wait_occupied(&self, count: usize, timeout: Option<Duration>) -> bool {
         debug_assert!(count <= self.capacity().get());
-        unsafe { self.read_index_ref() }
+        unsafe { self.write_index_ref() }
             .sem
             .wait(|| self.occupied_len() >= count, timeout)
     }
@@ -74,7 +74,7 @@ impl<R: Deref> BlockingConsumer for Cons<R>
 where
     R::Target: RingBuffer + BlockingConsumer,
 {
-    fn wait_read(&self, count: usize, timeout: Option<Duration>) -> bool {
-        self.base().wait_read(count, timeout)
+    fn wait_occupied(&self, count: usize, timeout: Option<Duration>) -> bool {
+        self.base().wait_occupied(count, timeout)
     }
 }
