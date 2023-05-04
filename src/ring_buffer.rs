@@ -1,26 +1,5 @@
-use crate::{consumer::Consumer, producer::Producer, traits::Observer};
-use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Range};
-
-/// Returns a pair of ranges between `start` and `end` indices in a ring buffer with specific `capacity`.
-///
-/// `start` and `end` may be arbitrary large, but must satisfy the following condition: `0 <= (start - end) % (2 * capacity) <= capacity`.
-/// Actual indices are taken modulo `capacity`.
-///
-/// The first range starts from `start`. If the first slice is empty then second slice is empty too.
-pub(crate) fn ranges(
-    capacity: NonZeroUsize,
-    start: usize,
-    end: usize,
-) -> (Range<usize>, Range<usize>) {
-    let (head_quo, head_rem) = (start / capacity, start % capacity);
-    let (tail_quo, tail_rem) = (end / capacity, end % capacity);
-
-    if (head_quo + tail_quo) % 2 == 0 {
-        (head_rem..tail_rem, 0..0)
-    } else {
-        (head_rem..capacity.get(), 0..tail_rem)
-    }
-}
+use crate::{consumer::Consumer, observer::Observer, producer::Producer};
+use core::mem::MaybeUninit;
 
 /// An abstract ring buffer.
 ///
@@ -34,12 +13,13 @@ pub(crate) fn ranges(
 /// It allows us to distinguish situations when the buffer is empty (`read == write`) and when the buffer is full (`write - read` modulo `2 * capacity` equals to `capacity`)
 /// without using the space for an extra element in container.
 /// And obviously we cannot store more than `capacity` items in the buffer, so `write - read` modulo `2 * capacity` is not allowed to be greater than `capacity`.
-pub trait RingBuffer: Consumer + Producer {
-    /// Returns part of underlying raw ring buffer memory as slices.
-    ///
-    /// # Safety
-    ///
-    /// Only non-overlapping slices allowed to exist at the same time.
+pub trait RingBuffer: Observer + Consumer + Producer {
+    fn read_index(&self) -> usize;
+    fn write_index(&self) -> usize;
+
+    unsafe fn set_read_index(&self, value: usize);
+    unsafe fn set_write_index(&self, value: usize);
+
     unsafe fn unsafe_slices(
         &self,
         start: usize,
@@ -87,27 +67,4 @@ pub trait RingBuffer: Consumer + Producer {
             elems
         });
     }
-}
-
-pub(crate) unsafe fn unsafe_occupied_slices<'a, O: Observer, R: RingBuffer>(
-    indices: &'a O,
-    storage: &'a R,
-) -> (
-    &'a mut [MaybeUninit<R::Item>],
-    &'a mut [MaybeUninit<R::Item>],
-) {
-    storage.unsafe_slices(indices.read_index(), indices.write_index())
-}
-
-pub(crate) unsafe fn unsafe_vacant_slices<'a, O: Observer, R: RingBuffer>(
-    indices: &'a O,
-    storage: &'a R,
-) -> (
-    &'a mut [MaybeUninit<R::Item>],
-    &'a mut [MaybeUninit<R::Item>],
-) {
-    storage.unsafe_slices(
-        indices.write_index(),
-        indices.read_index() + indices.capacity().get(),
-    )
 }

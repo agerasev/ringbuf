@@ -10,11 +10,11 @@ extern crate std;
 mod alias;
 mod cached;
 pub mod consumer;
-mod local;
+pub mod index;
 mod observer;
 pub mod producer;
+mod rb;
 mod ring_buffer;
-mod shared;
 pub mod storage;
 mod transfer;
 mod utils;
@@ -25,9 +25,8 @@ mod tests;
 pub use alias::*;
 pub use cached::{CachedCons, CachedProd};
 pub use consumer::Cons;
-pub use local::LocalRb;
 pub use producer::Prod;
-pub use shared::SharedRb;
+pub use rb::Rb;
 pub use transfer::transfer;
 
 pub mod traits {

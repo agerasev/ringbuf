@@ -1,6 +1,6 @@
 use crate::{traits::*, BlockingRb};
-use ringbuf::{traits::*, HeapRb};
-use std::{iter::once, thread};
+use ringbuf::traits::*;
+use std::{iter::once, thread, time::Duration};
 
 const THE_BOOK_FOREWORD: &str = r#"
 It wasn't always so clear, but the Rust programming language is fundamentally about empowerment: no matter what kind of code you are writing now, Rust empowers you to reach farther, to program with confidence in a wider variety of domains than you did before.
@@ -13,23 +13,25 @@ This book fully embraces the potential of Rust to empower its users. It's a frie
 - Nicholas Matsakis and Aaron Turon
 "#;
 
+const TIMEOUT: Option<Duration> = Some(Duration::from_millis(100));
+
 #[test]
 #[cfg_attr(miri, ignore)]
 fn wait() {
-    let buf = BlockingRb::from(HeapRb::<u8>::new(7));
-    let (mut prod, mut cons) = buf.split();
+    let buf = BlockingRb::<u8>::new(7);
+    let (mut prod, mut cons) = buf.split_arc();
 
     let smsg = THE_BOOK_FOREWORD;
 
     let pjh = thread::spawn(move || {
         let mut bytes = smsg.as_bytes();
         while !bytes.is_empty() {
-            prod.wait_write(1, None);
+            assert!(prod.wait_vacant(1, TIMEOUT));
             let n = prod.push_slice(bytes);
             assert!(n > 0);
             bytes = &bytes[n..bytes.len()]
         }
-        prod.wait_write(1, None);
+        assert!(prod.wait_vacant(1, TIMEOUT));
         prod.try_push(0).unwrap();
     });
 
@@ -37,7 +39,7 @@ fn wait() {
         let mut bytes = Vec::<u8>::new();
         let mut buffer = [0; 5];
         loop {
-            cons.wait_read(1, None);
+            assert!(cons.wait_occupied(1, TIMEOUT));
             let n = cons.pop_slice(&mut buffer);
             assert!(n > 0);
             bytes.extend_from_slice(&buffer[0..n]);
@@ -58,21 +60,21 @@ fn wait() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn slice_all() {
-    let buf = BlockingRb::from(HeapRb::<u8>::new(7));
-    let (mut prod, mut cons) = buf.split();
+    let buf = BlockingRb::<u8>::new(7);
+    let (mut prod, mut cons) = buf.split_arc();
 
     let smsg = THE_BOOK_FOREWORD;
 
     let pjh = thread::spawn(move || {
         let bytes = smsg.as_bytes();
-        assert_eq!(prod.push_slice_all(bytes, None), bytes.len());
-        prod.push(0, None).unwrap();
+        assert_eq!(prod.push_slice_all(bytes, TIMEOUT), bytes.len());
+        prod.push(0, TIMEOUT).unwrap();
     });
 
     let cjh = thread::spawn(move || {
         let mut bytes = vec![0u8; smsg.as_bytes().len()];
-        assert_eq!(cons.pop_slice_all(&mut bytes, None), bytes.len());
-        assert_eq!(cons.pop_wait(None).unwrap(), 0);
+        assert_eq!(cons.pop_slice_all(&mut bytes, TIMEOUT), bytes.len());
+        assert_eq!(cons.pop_wait(TIMEOUT).unwrap(), 0);
         String::from_utf8(bytes).unwrap()
     });
 
@@ -85,22 +87,22 @@ fn slice_all() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn iter_all() {
-    let buf = BlockingRb::from(HeapRb::<u8>::new(7));
-    let (mut prod, mut cons) = buf.split();
+    let buf = BlockingRb::<u8>::new(7);
+    let (mut prod, mut cons) = buf.split_arc();
 
     let smsg = THE_BOOK_FOREWORD;
 
     let pjh = thread::spawn(move || {
         let bytes = smsg.as_bytes();
         assert_eq!(
-            prod.push_iter_all(bytes.iter().copied().chain(once(0)), None),
+            prod.push_iter_all(bytes.iter().copied().chain(once(0)), TIMEOUT),
             bytes.len() + 1
         );
     });
 
     let cjh = thread::spawn(move || {
         let bytes = cons
-            .pop_iter_all(None)
+            .pop_iter_all(TIMEOUT)
             .take_while(|x| *x != 0)
             .collect::<Vec<_>>();
         String::from_utf8(bytes).unwrap()
