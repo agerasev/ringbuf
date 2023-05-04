@@ -43,29 +43,6 @@ fn ranges(capacity: NonZeroUsize, start: usize, end: usize) -> (Range<usize>, Ra
 }
 
 /// Ring buffer that could be shared between threads.
-///
-/// Note that there is no explicit requirement of `T: Send`. Instead [`Rb`] will work just fine even with `T: !Send`
-/// until you try to send its [`Producer`] or [`Consumer`] to another thread.
-#[cfg_attr(
-    feature = "std",
-    doc = r##"
-```
-use std::thread;
-use ringbuf::{Rb, storage::Heap, traits::*};
-
-let rb = Rb::<Heap<i32>>::new(256);
-let (mut prod, mut cons) = rb.split();
-thread::spawn(move || {
-    prod.try_push(123).unwrap();
-})
-.join();
-thread::spawn(move || {
-    assert_eq!(cons.try_pop().unwrap(), 123);
-})
-.join();
-```
-"##
-)]
 pub struct Rb<S: Storage, R: Index, W: Index> {
     storage: Shared<S>,
     read: R,
