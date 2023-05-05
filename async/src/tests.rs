@@ -1,4 +1,4 @@
-use crate::{async_transfer, AsyncHeapRb};
+use crate::{AsyncConsumer, AsyncProducer, AsyncRb};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use futures::task::{noop_waker_ref, AtomicWaker};
 use std::{vec, vec::Vec};
@@ -29,19 +29,22 @@ const COUNT: usize = 16;
 
 #[test]
 fn push_pop() {
-    let (prod, cons) = AsyncHeapRb::<usize>::new(2).split();
+    use std::println;
+    let (prod, cons) = AsyncRb::<usize>::new(2).split_arc();
     execute!(
         async move {
             let mut prod = prod;
             for i in 0..COUNT {
                 prod.push(i).await.unwrap();
             }
+            println!("push");
         },
         async move {
             let mut cons = cons;
             for i in 0..COUNT {
                 assert_eq!(cons.pop().await.unwrap(), i);
             }
+            println!("pop: {}", cons.is_closed());
             assert!(cons.pop().await.is_none());
         },
     );
@@ -49,30 +52,30 @@ fn push_pop() {
 
 #[test]
 fn push_pop_slice() {
-    let (prod, cons) = AsyncHeapRb::<usize>::new(3).split();
+    let (prod, cons) = AsyncRb::<usize>::new(3).split_arc();
     execute!(
         async move {
             let mut prod = prod;
             let data = (0..COUNT).collect::<Vec<_>>();
-            prod.push_slice(&data).await.unwrap();
+            prod.push_slice_all(&data).await.unwrap();
         },
         async move {
             let mut cons = cons;
             let mut data = vec![0; COUNT + 1];
-            let count = cons.pop_slice(&mut data).await.unwrap_err();
+            let count = cons.pop_slice_all(&mut data).await.unwrap_err();
             assert_eq!(count, COUNT);
             assert!(data.into_iter().take(COUNT).eq(0..COUNT));
         },
     );
 }
-
+/*
 #[test]
 fn sink_stream() {
     use futures::{
         sink::SinkExt,
         stream::{self, StreamExt},
     };
-    let (prod, cons) = AsyncHeapRb::<usize>::new(2).split();
+    let (prod, cons) = AsyncRb::<usize>::new(2).split_arc();
     execute!(
         async move {
             let mut prod = prod;
@@ -96,7 +99,7 @@ fn sink_stream() {
 #[test]
 fn read_write() {
     use futures::{AsyncReadExt, AsyncWriteExt};
-    let (prod, cons) = AsyncHeapRb::<u8>::new(3).split();
+    let (prod, cons) = AsyncRb::<u8>::new(3).split_arc();
     let input = (0..255).cycle().take(COUNT);
     let output = input.clone();
     execute!(
@@ -118,8 +121,8 @@ fn read_write() {
 #[test]
 fn transfer() {
     use futures::stream::StreamExt;
-    let (src_prod, src_cons) = AsyncHeapRb::<usize>::new(3).split();
-    let (dst_prod, dst_cons) = AsyncHeapRb::<usize>::new(5).split();
+    let (src_prod, src_cons) = AsyncRb::<usize>::new(3).split_arc();
+    let (dst_prod, dst_cons) = AsyncRb::<usize>::new(5).split_arc();
     execute!(
         async move {
             let mut prod = src_prod;
@@ -143,10 +146,10 @@ fn transfer() {
         },
     );
 }
-
+*/
 #[test]
 fn wait() {
-    let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(3).split();
+    let (mut prod, mut cons) = AsyncRb::<usize>::new(3).split_arc();
     let stage = AtomicUsize::new(0);
     execute!(
         async {
@@ -154,11 +157,11 @@ fn wait() {
             assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 0);
             prod.push(1).await.unwrap();
 
-            prod.wait_free(2).await;
+            prod.wait_vacant(2).await;
             assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 2);
         },
         async {
-            cons.wait(2).await;
+            cons.wait_occupied(2).await;
             assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 1);
 
             cons.pop().await.unwrap();

@@ -1,9 +1,9 @@
-use async_ringbuf::AsyncHeapRb;
+use async_ringbuf::{AsyncConsumer, AsyncProducer, AsyncRb};
 use futures::{executor::block_on, join};
 
 async fn async_main() {
-    let rb = AsyncHeapRb::<i32>::new(2);
-    let (prod, cons) = rb.split();
+    let rb = AsyncRb::<i32>::new(2);
+    let (prod, cons) = rb.split_arc();
 
     join!(
         async move {
