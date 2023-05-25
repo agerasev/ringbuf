@@ -7,33 +7,21 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-mod alias;
-mod cached;
-pub mod consumer;
-pub mod index;
-mod observer;
-pub mod producer;
 mod rb;
-mod ring_buffer;
-pub mod storage;
+pub mod traits;
 mod transfer;
 mod utils;
 
 #[cfg(test)]
 mod tests;
 
-pub use alias::*;
-pub use cached::{CachedCons, CachedProd};
+pub use rb::*;
+pub use traits::consumer;
+pub use traits::producer;
+
 pub use consumer::Cons;
 pub use producer::Prod;
-pub use rb::Rb;
 pub use transfer::transfer;
-
-pub mod traits {
-    pub use crate::{
-        consumer::Consumer, observer::Observer, producer::Producer, ring_buffer::RingBuffer,
-    };
-}
 
 #[cfg(feature = "bench")]
 extern crate test;

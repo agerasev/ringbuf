@@ -1,7 +1,7 @@
+use super::base::modulus;
 use crate::{
     consumer::{impl_cons_traits, Cons},
     producer::{impl_prod_traits, Prod, Producer},
-    rb::modulus,
     traits::{Consumer, Observer, RingBuffer},
 };
 use core::{

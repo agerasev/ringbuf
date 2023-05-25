@@ -1,8 +1,7 @@
+use super::{Observer, RingBuffer};
 use crate::{
     cached::CachedCons,
     delegate_observer_methods,
-    observer::Observer,
-    traits::RingBuffer,
     utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice},
 };
 use core::{iter::Chain, mem::MaybeUninit, ops::Deref, ptr, slice};

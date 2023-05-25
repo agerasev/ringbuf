@@ -1,4 +1,4 @@
-use crate::{consumer::Consumer, observer::Observer, producer::Producer};
+use super::{Consumer, Observer, Producer};
 use core::mem::MaybeUninit;
 
 /// An abstract ring buffer.

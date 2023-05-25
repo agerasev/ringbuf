@@ -1,9 +1,7 @@
+use super::{Observer, RingBuffer};
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
-use crate::{
-    cached::CachedProd, delegate_observer_methods, observer::Observer, traits::RingBuffer,
-    utils::write_slice,
-};
+use crate::{cached::CachedProd, delegate_observer_methods, utils::write_slice};
 use core::{mem::MaybeUninit, ops::Deref};
 #[cfg(feature = "std")]
 use std::{
