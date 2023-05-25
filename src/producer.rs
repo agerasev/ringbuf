@@ -1,7 +1,10 @@
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
-use crate::{cached::CachedProd, observer::Observer, traits::RingBuffer, utils::write_slice};
-use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Deref};
+use crate::{
+    cached::CachedProd, delegate_observer_methods, observer::Observer, traits::RingBuffer,
+    utils::write_slice,
+};
+use core::{mem::MaybeUninit, ops::Deref};
 #[cfg(feature = "std")]
 use std::{
     cmp,
@@ -146,6 +149,68 @@ pub trait Producer: Observer {
     }
 }
 
+#[macro_export]
+macro_rules! delegate_producer_methods {
+    ($ref:expr, $mut:expr) => {
+        #[inline]
+        unsafe fn advance_write_index(&self, count: usize) {
+            $ref(self).advance_write_index(count)
+        }
+
+        #[inline]
+        unsafe fn unsafe_vacant_slices(
+            &self,
+        ) -> (
+            &mut [MaybeUninit<Self::Item>],
+            &mut [MaybeUninit<Self::Item>],
+        ) {
+            $ref(self).unsafe_vacant_slices()
+        }
+
+        #[inline]
+        fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+            $ref(self).vacant_slices()
+        }
+
+        #[inline]
+        fn vacant_slices_mut(
+            &mut self,
+        ) -> (
+            &mut [MaybeUninit<Self::Item>],
+            &mut [MaybeUninit<Self::Item>],
+        ) {
+            $mut(self).vacant_slices_mut()
+        }
+
+        #[inline]
+        fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
+            $mut(self).try_push(elem)
+        }
+
+        #[inline]
+        fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, mut iter: I) -> usize {
+            $mut(self).push_iter(elems)
+        }
+
+        #[inline]
+        fn push_slice(&mut self, elems: &[Self::Item]) -> usize
+        where
+            Self::Item: Copy,
+        {
+            $mut(self).push_slice(elems)
+        }
+
+        #[inline]
+        #[cfg(feature = "std")]
+        fn read_from<S: Read>(&mut self, reader: &mut S, count: Option<usize>) -> io::Result<usize>
+        where
+            Self: Producer<Item = u8>,
+        {
+            $mut(self).read_from(reader, count)
+        }
+    };
+}
+
 /// Producer wrapper of ring buffer.
 pub struct Prod<R: Deref>
 where
@@ -178,28 +243,7 @@ where
 {
     type Item = <R::Target as Observer>::Item;
 
-    #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.base.capacity()
-    }
-
-    #[inline]
-    fn occupied_len(&self) -> usize {
-        self.base.occupied_len()
-    }
-    #[inline]
-    fn vacant_len(&self) -> usize {
-        self.base.vacant_len()
-    }
-
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.base.is_empty()
-    }
-    #[inline]
-    fn is_full(&self) -> bool {
-        self.base.is_full()
-    }
+    delegate_observer_methods!(Self::base);
 }
 
 impl<R: Deref> Producer for Prod<R>

@@ -34,3 +34,33 @@ pub trait Observer: Sized {
         self.vacant_len() == 0
     }
 }
+
+#[macro_export]
+macro_rules! delegate_observer_methods {
+    ($ref:expr) => {
+        #[inline]
+        fn capacity(&self) -> core::num::NonZeroUsize {
+            $ref(self).capacity()
+        }
+
+        #[inline]
+        fn occupied_len(&self) -> usize {
+            $ref(self).occupied_len()
+        }
+
+        #[inline]
+        fn vacant_len(&self) -> usize {
+            $ref(self).vacant_len()
+        }
+
+        #[inline]
+        fn is_empty(&self) -> bool {
+            $ref(self).is_empty()
+        }
+
+        #[inline]
+        fn is_full(&self) -> bool {
+            $ref(self).is_full()
+        }
+    };
+}
