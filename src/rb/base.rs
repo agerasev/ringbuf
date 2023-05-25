@@ -1,8 +1,8 @@
+use super::index::Index;
 #[cfg(feature = "alloc")]
 use crate::storage::Heap;
 use crate::{
     consumer::Consumer,
-    index::Index,
     producer::Producer,
     storage::{Shared, Static, Storage},
     traits::{Observer, RingBuffer},
@@ -21,7 +21,7 @@ use core::{
 ///
 /// Equals to `2 * capacity`.
 #[inline]
-pub(crate) fn modulus(this: &impl Observer) -> NonZeroUsize {
+fn modulus(this: &impl Observer) -> NonZeroUsize {
     unsafe { NonZeroUsize::new_unchecked(2 * this.capacity().get()) }
 }
 
@@ -56,7 +56,7 @@ impl<S: Storage, R: Index, W: Index> Rb<S, R, W> {
     ///
     /// The items in storage inside `read..write` range must be initialized, items outside this range must be uninitialized.
     /// `read` and `write` positions must be valid (see [`RbBase`](`crate::ring_buffer::RbBase`)).
-    pub unsafe fn from_raw_parts(storage: S, read: R, write: W) -> Self {
+    pub(crate) unsafe fn from_raw_parts(storage: S, read: R, write: W) -> Self {
         Self {
             storage: Shared::new(storage),
             read,
@@ -68,7 +68,7 @@ impl<S: Storage, R: Index, W: Index> Rb<S, R, W> {
     /// # Safety
     ///
     /// Initialized contents of the storage must be properly dropped.
-    pub unsafe fn into_raw_parts(self) -> (S, R, W) {
+    pub(crate) unsafe fn into_raw_parts(self) -> (S, R, W) {
         let this = ManuallyDrop::new(self);
         (
             ptr::read(&this.storage).into_inner(),
@@ -77,10 +77,10 @@ impl<S: Storage, R: Index, W: Index> Rb<S, R, W> {
         )
     }
 
-    pub unsafe fn read_index_ref(&self) -> &R {
+    unsafe fn read_index_ref(&self) -> &R {
         &self.read
     }
-    pub unsafe fn write_index_ref(&self) -> &W {
+    unsafe fn write_index_ref(&self) -> &W {
         &self.write
     }
 }

@@ -1,6 +1,6 @@
 #[cfg(feature = "alloc")]
-use crate::storage::Heap;
-use crate::{
+use super::storage::Heap;
+use super::{
     index::{LocalIndex, SharedIndex},
     storage::Static,
     Cons, Prod, Rb,

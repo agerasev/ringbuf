@@ -19,8 +19,6 @@ pub use rb::*;
 pub use traits::consumer;
 pub use traits::producer;
 
-pub use consumer::Cons;
-pub use producer::Prod;
 pub use transfer::transfer;
 
 #[cfg(feature = "bench")]
