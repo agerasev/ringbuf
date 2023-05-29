@@ -92,22 +92,13 @@ fn push_pop_all() {
         assert_eq!(indices(cons.base()), (CAP * i % MOD, (CAP * i + 2) % MOD));
 
         assert_eq!(cons.try_pop().unwrap(), v.0);
-        assert_eq!(
-            indices(cons.base()),
-            ((CAP * i + 1) % MOD, (CAP * i + 2) % MOD)
-        );
+        assert_eq!(indices(cons.base()), ((CAP * i + 1) % MOD, (CAP * i + 2) % MOD));
 
         assert_eq!(cons.try_pop().unwrap(), v.1);
-        assert_eq!(
-            indices(cons.base()),
-            ((CAP * i + 2) % MOD, (CAP * i + 2) % MOD)
-        );
+        assert_eq!(indices(cons.base()), ((CAP * i + 2) % MOD, (CAP * i + 2) % MOD));
 
         assert_eq!(cons.try_pop(), None);
-        assert_eq!(
-            indices(cons.base()),
-            ((CAP * i + 2) % MOD, (CAP * i + 2) % MOD)
-        );
+        assert_eq!(indices(cons.base()), ((CAP * i + 2) % MOD, (CAP * i + 2) % MOD));
     }
 }
 

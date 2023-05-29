@@ -20,14 +20,7 @@ pub trait RingBuffer: Observer + Consumer + Producer {
     unsafe fn set_read_index(&self, value: usize);
     unsafe fn set_write_index(&self, value: usize);
 
-    unsafe fn unsafe_slices(
-        &self,
-        start: usize,
-        end: usize,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    );
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]);
 
     /// Pushes an item to the ring buffer overwriting the latest item if the buffer is full.
     ///
@@ -56,10 +49,7 @@ pub trait RingBuffer: Observer + Consumer + Producer {
         Self::Item: Copy,
     {
         if elems.len() > self.vacant_len() {
-            self.skip(usize::min(
-                elems.len() - self.vacant_len(),
-                self.occupied_len(),
-            ));
+            self.skip(usize::min(elems.len() - self.vacant_len(), self.occupied_len()));
         }
         self.push_slice(if elems.len() > self.vacant_len() {
             &elems[(elems.len() - self.vacant_len())..]
@@ -67,4 +57,11 @@ pub trait RingBuffer: Observer + Consumer + Producer {
             elems
         });
     }
+}
+
+pub trait Split {
+    type Prod: Producer;
+    type Cons: Consumer;
+
+    fn split(self) -> (Self::Prod, Self::Cons);
 }

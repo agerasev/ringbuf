@@ -24,13 +24,6 @@ pub trait Consumer: Observer {
     /// Must not be called concurrently.
     unsafe fn advance_read_index(&self, count: usize);
 
-    unsafe fn unsafe_occupied_slices(
-        &self,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    );
-
     /// Provides a direct access to the ring buffer occupied memory.
     /// The difference from [`Self::as_slices`] is that this method provides slices of [`MaybeUninit`], so items may be moved out of slices.  
     ///
@@ -44,10 +37,7 @@ pub trait Consumer: Observer {
     ///
     /// *This method must be followed by [`Self::advance_read`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
-    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let (first, second) = unsafe { self.unsafe_occupied_slices() };
-        (first as &_, second as &_)
-    }
+    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]);
 
     /// Provides a direct mutable access to the ring buffer occupied memory.
     ///
@@ -56,14 +46,7 @@ pub trait Consumer: Observer {
     /// # Safety
     ///
     /// When some item is replaced with uninitialized value then it must not be read anymore.
-    unsafe fn occupied_slices_mut(
-        &mut self,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    ) {
-        self.unsafe_occupied_slices()
-    }
+    unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]);
 
     /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
     #[inline]
@@ -303,12 +286,7 @@ macro_rules! delegate_consumer_methods {
         }
 
         #[inline]
-        unsafe fn unsafe_occupied_slices(
-            &self,
-        ) -> (
-            &mut [MaybeUninit<Self::Item>],
-            &mut [MaybeUninit<Self::Item>],
-        ) {
+        unsafe fn unsafe_occupied_slices(&self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
             $ref(self).unsafe_occupied_slices()
         }
 
@@ -318,12 +296,7 @@ macro_rules! delegate_consumer_methods {
         }
 
         #[inline]
-        unsafe fn occupied_slices_mut(
-            &mut self,
-        ) -> (
-            &mut [MaybeUninit<Self::Item>],
-            &mut [MaybeUninit<Self::Item>],
-        ) {
+        unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
             $mut(self).occupied_slices_mut()
         }
 
@@ -377,11 +350,7 @@ macro_rules! delegate_consumer_methods {
 
         #[inline]
         #[cfg(feature = "std")]
-        fn write_into<S: Write>(
-            &mut self,
-            writer: &mut S,
-            count: Option<usize>,
-        ) -> io::Result<usize>
+        fn write_into<S: Write>(&mut self, writer: &mut S, count: Option<usize>) -> io::Result<usize>
         where
             Self: Consumer<Item = u8>,
         {

@@ -1,7 +1,7 @@
 pub mod consumer;
-mod observer;
+pub mod observer;
 pub mod producer;
-mod ring_buffer;
+pub mod ring_buffer;
 
 pub use consumer::Consumer;
 pub use observer::Observer;

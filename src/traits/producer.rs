@@ -29,20 +29,10 @@ pub trait Producer: Observer {
     /// Must not be called concurrently.
     unsafe fn advance_write_index(&self, count: usize);
 
-    unsafe fn unsafe_vacant_slices(
-        &self,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    );
-
     /// Provides a direct access to the ring buffer vacant memory.
     ///
     /// Returns a pair of slices of uninitialized memory, the second one may be empty.
-    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let (first, second) = unsafe { self.unsafe_vacant_slices() };
-        (first as &_, second as &_)
-    }
+    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]);
 
     /// Mutable version of [`Self::vacant_slices`].
     ///
@@ -51,14 +41,7 @@ pub trait Producer: Observer {
     ///
     /// *This method must be followed by [`Self::advance_write`] call with the number of items being put previously as argument.*
     /// *No other mutating calls allowed before that.*
-    fn vacant_slices_mut(
-        &mut self,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    ) {
-        unsafe { self.unsafe_vacant_slices() }
-    }
+    fn vacant_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]);
 
     /// Appends an item to the ring buffer.
     ///
@@ -156,12 +139,7 @@ macro_rules! delegate_producer_methods {
         }
 
         #[inline]
-        unsafe fn unsafe_vacant_slices(
-            &self,
-        ) -> (
-            &mut [MaybeUninit<Self::Item>],
-            &mut [MaybeUninit<Self::Item>],
-        ) {
+        unsafe fn unsafe_vacant_slices(&self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
             $ref(self).unsafe_vacant_slices()
         }
 
@@ -171,12 +149,7 @@ macro_rules! delegate_producer_methods {
         }
 
         #[inline]
-        fn vacant_slices_mut(
-            &mut self,
-        ) -> (
-            &mut [MaybeUninit<Self::Item>],
-            &mut [MaybeUninit<Self::Item>],
-        ) {
+        fn vacant_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
             $mut(self).vacant_slices_mut()
         }
 
