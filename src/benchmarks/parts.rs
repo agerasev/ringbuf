@@ -3,18 +3,16 @@ use test::{black_box, Bencher};
 
 const RB_SIZE: usize = 256;
 
-/*
 #[bench]
-fn make_postponed(b: &mut Bencher) {
+fn make_frozen(b: &mut Bencher) {
     let buf = SharedRb::<Static<u64, RB_SIZE>>::default();
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
     b.iter(|| {
-        black_box(prod.cached());
-        black_box(cons.cached());
+        black_box(prod.freeze());
+        black_box(cons.freeze());
     });
 }
-*/
 
 #[bench]
 fn advance(b: &mut Bencher) {
@@ -27,18 +25,16 @@ fn advance(b: &mut Bencher) {
     });
 }
 
-/*
 #[bench]
-fn advance_postponed(b: &mut Bencher) {
+fn advance_frozen(b: &mut Bencher) {
     let buf = SharedRb::<Static<u64, RB_SIZE>>::default();
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
     b.iter(|| {
-        unsafe { prod.cached().advance_write_index(1) };
-        unsafe { cons.cached().advance_read_index(1) };
+        unsafe { prod.freeze().advance_write_index(1) };
+        unsafe { cons.freeze().advance_read_index(1) };
     });
 }
-*/
 
 #[bench]
 fn get_occupied_slices(b: &mut Bencher) {

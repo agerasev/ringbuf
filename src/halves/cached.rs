@@ -1,10 +1,9 @@
+use super::macros::*;
 use crate::{
     frozen::{FrozenCons, FrozenProd},
     traits::{Consumer, Observer, Producer},
 };
 use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Deref};
-
-use super::macros::{impl_cons_traits, impl_prod_traits};
 
 /// Producer wrapper of ring buffer.
 pub struct CachedProd<R: Deref>
@@ -139,26 +138,5 @@ where
 impl_prod_traits!(CachedProd);
 impl_cons_traits!(CachedCons);
 
-impl<R: Deref> CachedProd<R>
-where
-    R::Target: Producer,
-{
-    pub fn freeze(&mut self) -> &mut FrozenProd<R> {
-        &mut self.frozen
-    }
-    pub fn into_frozen(self) -> FrozenProd<R> {
-        self.frozen
-    }
-}
-
-impl<R: Deref> CachedCons<R>
-where
-    R::Target: Consumer,
-{
-    pub fn freeze(&mut self) -> &mut FrozenCons<R> {
-        &mut self.frozen
-    }
-    pub fn into_frozen(self) -> FrozenCons<R> {
-        self.frozen
-    }
-}
+impl_prod_freeze!(CachedProd);
+impl_cons_freeze!(CachedCons);

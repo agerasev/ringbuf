@@ -1,3 +1,4 @@
+use super::macros::*;
 use crate::traits::{Consumer, Observer, Producer};
 use core::{
     cell::Cell,
@@ -6,8 +7,6 @@ use core::{
     ops::Deref,
     ptr,
 };
-
-use super::macros::{impl_cons_traits, impl_prod_traits};
 
 /// Caching read end of some ring buffer.
 ///

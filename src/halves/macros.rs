@@ -69,3 +69,37 @@ macro_rules! impl_cons_traits {
     };
 }
 pub(crate) use impl_cons_traits;
+
+macro_rules! impl_prod_freeze {
+    ($Prod:ident) => {
+        impl<R: Deref> $Prod<R>
+        where
+            R::Target: crate::traits::Producer,
+        {
+            pub fn freeze(&mut self) -> crate::halves::FrozenProd<&Self> {
+                unsafe { crate::halves::FrozenProd::new(self) }
+            }
+            //pub fn into_frozen(self) -> crate::halves::FrozenProd<Self> {
+            //    unsafe { crate::halves::FrozenProd::new(self) }
+            //}
+        }
+    };
+}
+pub(crate) use impl_prod_freeze;
+
+macro_rules! impl_cons_freeze {
+    ($Cons:ident) => {
+        impl<R: Deref> $Cons<R>
+        where
+            R::Target: crate::traits::Consumer,
+        {
+            pub fn freeze(&mut self) -> crate::halves::FrozenCons<&Self> {
+                unsafe { crate::halves::FrozenCons::new(self) }
+            }
+            //pub fn into_frozen(self) -> crate::halves::FrozenCons<Self> {
+            //    unsafe { crate::halves::FrozenProd::new(self) }
+            //}
+        }
+    };
+}
+pub(crate) use impl_cons_freeze;

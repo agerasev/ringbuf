@@ -1,4 +1,5 @@
-use crate::{storage::Static, traits::*, LocalRb as Rb};
+use super::Rb;
+use crate::{storage::Static, traits::*};
 
 #[test]
 fn producer() {

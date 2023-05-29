@@ -40,25 +40,24 @@ fn push_pop_x100(b: &mut Bencher) {
         }
     });
 }
-/*
+
 #[bench]
-fn push_pop_x100_cached(b: &mut Bencher) {
+fn push_pop_x100_frozen(b: &mut Bencher) {
     let buf = SharedRb::<Static<u64, RB_SIZE>>::default();
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
     b.iter(|| {
         {
-            let mut prod_cache = prod.cached();
+            let mut prod_cache = prod.freeze();
             for _ in 0..BATCH_SIZE {
                 prod_cache.try_push(1).unwrap();
             }
         }
         {
-            let mut cons_cache = cons.cached();
+            let mut cons_cache = cons.freeze();
             for _ in 0..BATCH_SIZE {
                 black_box(cons_cache.try_pop().unwrap());
             }
         }
     });
 }
-*/

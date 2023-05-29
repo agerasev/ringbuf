@@ -1,8 +1,7 @@
-use super::macros::{impl_cons_traits, impl_prod_traits};
+use super::macros::*;
 use crate::{
     //cached::FrozenCons,
     delegate_observer_methods,
-    frozen::{FrozenCons, FrozenProd},
     traits::{Consumer, Observer, Producer},
 };
 use core::{mem::MaybeUninit, ops::Deref};
@@ -100,26 +99,5 @@ where
 impl_prod_traits!(Prod);
 impl_cons_traits!(Cons);
 
-impl<R: Deref> Prod<R>
-where
-    R::Target: Producer,
-{
-    pub fn freeze(&mut self) -> FrozenProd<&R::Target> {
-        unsafe { FrozenProd::new(&self.base) }
-    }
-    pub fn into_frozen(self) -> FrozenProd<R> {
-        unsafe { FrozenProd::new(self.base) }
-    }
-}
-
-impl<R: Deref> Cons<R>
-where
-    R::Target: Consumer,
-{
-    pub fn freeze(&mut self) -> FrozenCons<&R::Target> {
-        unsafe { FrozenCons::new(&self.base) }
-    }
-    pub fn into_frozen(self) -> FrozenCons<R> {
-        unsafe { FrozenCons::new(self.base) }
-    }
-}
+impl_prod_freeze!(Prod);
+impl_cons_freeze!(Cons);
