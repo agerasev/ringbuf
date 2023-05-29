@@ -21,7 +21,30 @@ use core::{
 };
 use crossbeam_utils::CachePadded;
 
-/// Ring buffer that could be shared between threads.
+/// Ring buffer that can be shared between threads.
+///
+/// Note that there is no explicit requirement of `T: Send`. Instead [`Rb`] will work just fine even with `T: !Send`
+/// until you try to send its [`Prod`] or [`Cons`] to another thread.
+#[cfg_attr(
+    feature = "std",
+    doc = r##"
+```
+use std::thread;
+use ringbuf::{SharedRb, storage::Heap, traits::*};
+
+let rb = SharedRb::<Heap<i32>>::new(256);
+let (mut prod, mut cons) = rb.split_arc();
+thread::spawn(move || {
+    prod.try_push(123).unwrap();
+})
+.join();
+thread::spawn(move || {
+    assert_eq!(cons.try_pop().unwrap(), 123);
+})
+.join();
+```
+"##
+)]
 pub struct SharedRb<S: Storage> {
     storage: Shared<S>,
     read: CachePadded<AtomicUsize>,

@@ -20,7 +20,7 @@ use core::{
     ptr,
 };
 
-/// Ring buffer that could be shared between threads.
+/// Ring buffer for single-threaded use only.
 pub struct LocalRb<S: Storage> {
     storage: Shared<S>,
     read: Cell<usize>,

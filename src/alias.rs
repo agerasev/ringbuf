@@ -1,40 +1,8 @@
 #[cfg(feature = "alloc")]
 use super::storage::Heap;
-use super::{
-    index::{LocalIndex, SharedIndex},
-    storage::Static,
-    Cons, Prod, Rb,
-};
+use super::{storage::Static, Cons, Prod, SharedRb};
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
-
-pub type LocalRb<S> = Rb<S, LocalIndex, LocalIndex>;
-
-/// Ring buffer that can be shared between threads.
-///
-/// Note that there is no explicit requirement of `T: Send`. Instead [`Rb`] will work just fine even with `T: !Send`
-/// until you try to send its [`Prod`] or [`Cons`] to another thread.
-#[cfg_attr(
-    feature = "std",
-    doc = r##"
-```
-use std::thread;
-use ringbuf::{SharedRb, storage::Heap, traits::*};
-
-let rb = SharedRb::<Heap<i32>>::new(256);
-let (mut prod, mut cons) = rb.split_arc();
-thread::spawn(move || {
-    prod.try_push(123).unwrap();
-})
-.join();
-thread::spawn(move || {
-    assert_eq!(cons.try_pop().unwrap(), 123);
-})
-.join();
-```
-"##
-)]
-pub type SharedRb<S> = Rb<S, SharedIndex, SharedIndex>;
 
 /// Stack-allocated ring buffer with static capacity.
 ///

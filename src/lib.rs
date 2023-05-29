@@ -7,6 +7,7 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+mod alias;
 mod halves;
 mod rbs;
 pub mod storage;
@@ -17,6 +18,7 @@ mod utils;
 #[cfg(test)]
 mod tests;
 
+pub use alias::*;
 pub use halves::*;
 pub use rbs::*;
 pub use traits::consumer;
