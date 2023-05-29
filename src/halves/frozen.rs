@@ -1,9 +1,4 @@
-use super::base::modulus;
-use crate::{
-    consumer::{impl_cons_traits, Cons},
-    producer::{impl_prod_traits, Prod, Producer},
-    traits::{Consumer, Observer, RingBuffer},
-};
+use crate::traits::{Consumer, Observer, Producer, RingBuffer};
 use core::{
     cell::Cell,
     mem::{ManuallyDrop, MaybeUninit},
@@ -18,13 +13,13 @@ use core::{
 /// Items inserted by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
 ///
 /// Used to implement [`PostponedConsumer`](`crate::consumer::PostponedConsumer`).
-pub struct CachedCons<R: Deref>
+pub struct FrozenCons<R: Deref>
 where
     R::Target: RingBuffer,
 {
-    base: R,
+    pub(crate) base: R,
     read: Cell<usize>,
-    write: usize,
+    write: Cell<usize>,
 }
 
 /// Caching write end of some ring buffer.
@@ -33,16 +28,16 @@ where
 /// A free space of items removed by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
 ///
 /// Used to implement [`PostponedConsumer`](`crate::consumer::PostponedConsumer`).
-pub struct CachedProd<R: Deref>
+pub struct FrozenProd<R: Deref>
 where
     R::Target: RingBuffer,
 {
-    base: R,
-    read: usize,
+    pub(crate) base: R,
+    read: Cell<usize>,
     write: Cell<usize>,
 }
 
-impl<R: Deref> Observer for CachedCons<R>
+impl<R: Deref> Observer for FrozenCons<R>
 where
     R::Target: RingBuffer,
 {
@@ -53,37 +48,17 @@ where
         self.base.capacity()
     }
 
-    fn occupied_len(&self) -> usize {
-        let modulus = modulus(self);
-        (modulus.get() + self.write - self.read.get()) % modulus
-    }
-    fn vacant_len(&self) -> usize {
-        let modulus = modulus(self);
-        (self.capacity().get() + self.read.get() - self.write) % modulus
-    }
-
     #[inline]
-    fn is_empty(&self) -> bool {
-        self.read.get() == self.write
+    fn read_index(&self) -> usize {
+        self.read.get()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.write.get()
     }
 }
 
-impl<R: Deref> Consumer for CachedCons<R>
-where
-    R::Target: RingBuffer,
-{
-    #[inline]
-    unsafe fn advance_read_index(&self, count: usize) {
-        self.read.set((self.read.get() + count) % modulus(self));
-    }
-
-    #[inline]
-    unsafe fn unsafe_occupied_slices(&self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        self.base.unsafe_slices(self.read.get(), self.write)
-    }
-}
-
-impl<R: Deref> Observer for CachedProd<R>
+impl<R: Deref> Observer for FrozenProd<R>
 where
     R::Target: RingBuffer,
 {
@@ -94,37 +69,57 @@ where
         self.base.capacity()
     }
 
-    fn occupied_len(&self) -> usize {
-        let modulus = modulus(self);
-        (modulus.get() + self.write.get() - self.read) % modulus
-    }
-    fn vacant_len(&self) -> usize {
-        let modulus = modulus(self);
-        (self.capacity().get() + self.read - self.write.get()) % modulus
-    }
-
     #[inline]
-    fn is_empty(&self) -> bool {
-        self.read == self.write.get()
+    fn read_index(&self) -> usize {
+        self.read.get()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.write.get()
     }
 }
 
-impl<R: Deref> Producer for CachedProd<R>
+impl<R: Deref> Consumer for FrozenCons<R>
 where
     R::Target: RingBuffer,
 {
     #[inline]
-    unsafe fn advance_write_index(&self, count: usize) {
-        self.write.set((self.write.get() + count) % modulus(self));
+    unsafe fn set_read_index(&self, value: usize) {
+        self.read.set(value);
     }
 
-    #[inline]
-    unsafe fn unsafe_vacant_slices(&self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        self.base.unsafe_slices(self.write.get(), self.read + self.capacity().get())
+    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        let rb = self.base.deref();
+        let (first, second) = unsafe { rb.unsafe_slices(rb.read_index(), rb.write_index()) };
+        (first as &_, second as &_)
+    }
+    unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        let rb = self.base.deref();
+        rb.unsafe_slices(rb.read_index(), rb.write_index())
     }
 }
 
-impl<R: Deref> Drop for CachedCons<R>
+impl<R: Deref> Producer for FrozenProd<R>
+where
+    R::Target: RingBuffer,
+{
+    #[inline]
+    unsafe fn set_write_index(&self, value: usize) {
+        self.write.set(value);
+    }
+
+    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        let rb = self.base.deref();
+        let (first, second) = unsafe { rb.unsafe_slices(rb.write_index(), rb.read_index() + rb.capacity().get()) };
+        (first as &_, second as &_)
+    }
+    fn vacant_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        let rb = self.base.deref();
+        unsafe { rb.unsafe_slices(rb.write_index(), rb.read_index() + rb.capacity().get()) }
+    }
+}
+
+impl<R: Deref> Drop for FrozenCons<R>
 where
     R::Target: RingBuffer,
 {
@@ -133,7 +128,7 @@ where
     }
 }
 
-impl<R: Deref> Drop for CachedProd<R>
+impl<R: Deref> Drop for FrozenProd<R>
 where
     R::Target: RingBuffer,
 {
@@ -142,7 +137,7 @@ where
     }
 }
 
-impl<R: Deref> CachedCons<R>
+impl<R: Deref> FrozenCons<R>
 where
     R::Target: RingBuffer,
 {
@@ -154,7 +149,7 @@ where
     pub unsafe fn new(base: R) -> Self {
         Self {
             read: Cell::new(base.read_index()),
-            write: base.write_index(),
+            write: Cell::new(base.write_index()),
             base,
         }
     }
@@ -167,24 +162,25 @@ where
         unsafe { self.base.set_read_index(self.read.get()) }
     }
     /// Fetch changes to the ring buffer.
-    pub fn fetch(&mut self) {
-        self.write = self.base.write_index();
+    pub fn fetch(&self) {
+        self.write.set(self.base.write_index());
     }
     /// Commit changes and fetch updates from the ring buffer.
-    pub fn sync(&mut self) {
+    pub fn sync(&self) {
         self.commit();
         self.fetch();
     }
-
+    /*
     /// Commit and destroy `Self` returning underlying consumer.
     pub fn release(self) -> Cons<R> {
         self.commit();
         let this = ManuallyDrop::new(self);
         unsafe { Cons::new(ptr::read(&this.base)) }
     }
+    */
 }
 
-impl<R: Deref> CachedProd<R>
+impl<R: Deref> FrozenProd<R>
 where
     R::Target: RingBuffer,
 {
@@ -195,7 +191,7 @@ where
     /// There must be only one instance containing the same ring buffer reference.
     pub unsafe fn new(base: R) -> Self {
         Self {
-            read: base.read_index(),
+            read: Cell::new(base.read_index()),
             write: Cell::new(base.write_index()),
             base,
         }
@@ -209,11 +205,11 @@ where
         unsafe { self.base.set_write_index(self.write.get()) }
     }
     /// Fetch changes to the ring buffer.
-    pub fn fetch(&mut self) {
-        self.read = self.base.read_index();
+    pub fn fetch(&self) {
+        self.read.set(self.base.read_index());
     }
     /// Commit changes and fetch updates from the ring buffer.
-    pub fn sync(&mut self) {
+    pub fn sync(&self) {
         self.commit();
         self.fetch();
     }
@@ -227,14 +223,15 @@ where
         }
         self.write.set(last_tail);
     }
-
+    /*
     /// Commit and destroy `Self` returning underlying producer.
     pub fn release(self) -> Prod<R> {
         self.commit();
         let this = ManuallyDrop::new(self);
         unsafe { Prod::new(ptr::read(&this.base)) }
     }
+    */
 }
 
-impl_prod_traits!(CachedProd);
-impl_cons_traits!(CachedCons);
+//impl_prod_traits!(FrozenProd);
+//impl_cons_traits!(FrozenCons);

@@ -1,17 +1,15 @@
 use crate::{
-    //cached::CachedCons,
-    delegate_observer_methods,
+    frozen::{FrozenCons, FrozenProd},
     traits::{Consumer, Observer, Producer, RingBuffer},
 };
-use core::{cell::Cell, mem::MaybeUninit, ops::Deref};
+use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Deref};
 
 /// Producer wrapper of ring buffer.
 pub struct CachedProd<R: Deref>
 where
     R::Target: RingBuffer,
 {
-    base: R,
-    read: Cell<usize>,
+    frozen: FrozenProd<R>,
 }
 
 /// Consumer wrapper of ring buffer.
@@ -19,8 +17,7 @@ pub struct CachedCons<R: Deref>
 where
     R::Target: RingBuffer,
 {
-    base: R,
-    write: Cell<usize>,
+    frozen: FrozenCons<R>,
 }
 
 impl<R: Deref> CachedProd<R>
@@ -32,20 +29,15 @@ where
     /// There must be no more than one consumer wrapper.
     pub unsafe fn new(base: R) -> Self {
         Self {
-            read: Cell::new(base.read_index()),
-            base,
+            frozen: FrozenProd::new(base),
         }
     }
     pub fn base(&self) -> &R {
-        &self.base
+        &self.frozen.base
     }
-    pub fn into_base(self) -> R {
-        self.base
-    }
-
-    pub fn fetch(&self) {
-        self.read.set(self.base.read_index());
-    }
+    //pub fn into_base(self) -> R {
+    //    self.frozen.base
+    //}
 }
 
 impl<R: Deref> CachedCons<R>
@@ -57,20 +49,15 @@ where
     /// There must be no more than one consumer wrapper.
     pub unsafe fn new(base: R) -> Self {
         Self {
-            write: Cell::new(base.write_index()),
-            base,
+            frozen: FrozenCons::new(base),
         }
     }
     pub fn base(&self) -> &R {
-        &self.base
+        &self.frozen.base
     }
-    pub fn into_base(self) -> R {
-        self.base
-    }
-
-    pub fn fetch(&self) {
-        self.write.set(self.base.write_index());
-    }
+    //pub fn into_base(self) -> R {
+    //    self.frozen.base
+    //}
 }
 
 impl<R: Deref> Observer for CachedProd<R>
@@ -79,7 +66,20 @@ where
 {
     type Item = <R::Target as Observer>::Item;
 
-    delegate_observer_methods!(Self::base);
+    #[inline]
+    fn capacity(&self) -> NonZeroUsize {
+        self.frozen.capacity()
+    }
+
+    #[inline]
+    fn read_index(&self) -> usize {
+        self.frozen.fetch();
+        self.frozen.read_index()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.frozen.write_index()
+    }
 }
 
 impl<R: Deref> Observer for CachedCons<R>
@@ -88,7 +88,20 @@ where
 {
     type Item = <R::Target as Observer>::Item;
 
-    delegate_observer_methods!(Self::base);
+    #[inline]
+    fn capacity(&self) -> NonZeroUsize {
+        self.frozen.capacity()
+    }
+
+    #[inline]
+    fn read_index(&self) -> usize {
+        self.frozen.read_index()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.frozen.fetch();
+        self.frozen.write_index()
+    }
 }
 
 impl<R: Deref> Producer for CachedProd<R>
@@ -97,21 +110,19 @@ where
 {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
-        self.base.set_write_index(value);
+        self.frozen.set_write_index(value);
+        self.frozen.commit();
     }
 
     #[inline]
     fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let rb = self.base.deref();
-        self.fetch();
-        let (first, second) = unsafe { rb.unsafe_slices(rb.write_index(), self.read.get() + rb.capacity().get()) };
-        (first as &_, second as &_)
+        self.frozen.fetch();
+        self.frozen.vacant_slices()
     }
     #[inline]
     fn vacant_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        let rb = self.base.deref();
-        self.fetch();
-        unsafe { rb.unsafe_slices(rb.write_index(), self.read.get() + rb.capacity().get()) }
+        self.frozen.fetch();
+        self.frozen.vacant_slices_mut()
     }
 }
 
@@ -121,123 +132,18 @@ where
 {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
-        self.base.set_read_index(value)
+        self.frozen.set_read_index(value);
+        self.frozen.commit();
     }
 
     #[inline]
     fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let rb = self.base.deref();
-        self.fetch();
-        let (first, second) = unsafe { rb.unsafe_slices(rb.read_index(), self.write.get()) };
-        (first as &_, second as &_)
+        self.frozen.fetch();
+        self.frozen.occupied_slices()
     }
     #[inline]
     unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        let rb = self.base.deref();
-        self.fetch();
-        rb.unsafe_slices(rb.read_index(), self.write.get())
+        self.frozen.fetch();
+        self.frozen.occupied_slices_mut()
     }
 }
-
-macro_rules! impl_prod_traits {
-    ($CachedProd:ident) => {
-        #[cfg(feature = "std")]
-        impl<R: core::ops::Deref> std::io::Write for $CachedProd<R>
-        where
-            R::Target: crate::traits::RingBuffer<Item = u8>,
-        {
-            fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
-                use crate::producer::Producer;
-                let n = self.push_slice(buffer);
-                if n == 0 && !buffer.is_empty() {
-                    Err(std::io::ErrorKind::WouldBlock.into())
-                } else {
-                    Ok(n)
-                }
-            }
-            fn flush(&mut self) -> std::io::Result<()> {
-                Ok(())
-            }
-        }
-
-        impl<R: core::ops::Deref> core::fmt::Write for $CachedProd<R>
-        where
-            R::Target: crate::traits::RingBuffer<Item = u8>,
-        {
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                use crate::producer::Producer;
-                let n = self.push_slice(s.as_bytes());
-                if n != s.len() {
-                    Err(core::fmt::Error::default())
-                } else {
-                    Ok(())
-                }
-            }
-        }
-    };
-}
-pub(crate) use impl_prod_traits;
-
-impl_prod_traits!(CachedProd);
-/*
-impl<R: Deref> CachedProd<R>
-where
-    R::Target: RingBuffer,
-{
-    pub fn cached(&mut self) -> CachedProd<&R::Target> {
-        unsafe { CachedProd::new(&self.base) }
-    }
-    pub fn into_cached(self) -> CachedProd<R> {
-        unsafe { CachedProd::new(self.base) }
-    }
-}
-*/
-
-macro_rules! impl_cons_traits {
-    ($CachedCons:ident) => {
-        impl<R: core::ops::Deref> IntoIterator for $CachedCons<R>
-        where
-            R::Target: RingBuffer,
-        {
-            type Item = <R::Target as crate::traits::Observer>::Item;
-            type IntoIter = crate::consumer::IntoIter<Self>;
-
-            fn into_iter(self) -> Self::IntoIter {
-                crate::consumer::IntoIter(self)
-            }
-        }
-
-        #[cfg(feature = "std")]
-        impl<R: core::ops::Deref> std::io::Read for $CachedCons<R>
-        where
-            R::Target: crate::traits::RingBuffer<Item = u8>,
-        {
-            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-                use crate::consumer::Consumer;
-                let n = self.pop_slice(buffer);
-                if n == 0 && !buffer.is_empty() {
-                    Err(std::io::ErrorKind::WouldBlock.into())
-                } else {
-                    Ok(n)
-                }
-            }
-        }
-    };
-}
-pub(crate) use impl_cons_traits;
-
-impl_cons_traits!(CachedCons);
-
-/*
-impl<R: Deref> CachedCons<R>
-where
-    R::Target: RingBuffer,
-{
-    pub fn cached(&mut self) -> CachedCons<&R::Target> {
-        unsafe { CachedCons::new(&self.base) }
-    }
-    pub fn into_cached(self) -> CachedCons<R> {
-        unsafe { CachedCons::new(self.base) }
-    }
-}
-*/
