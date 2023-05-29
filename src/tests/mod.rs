@@ -1,9 +1,11 @@
+use crate::SharedRb as Rb;
+
 mod access;
 mod basic;
-//mod cached;
 #[cfg(feature = "alloc")]
 mod drop;
 mod fmt_write;
+mod frozen;
 mod iter;
 mod overwrite;
 #[cfg(feature = "std")]
