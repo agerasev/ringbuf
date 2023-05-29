@@ -3,14 +3,14 @@ use crate::{
     //cached::FrozenCons,
     delegate_observer_methods,
     frozen::{FrozenCons, FrozenProd},
-    traits::{Consumer, Observer, Producer, RingBuffer},
+    traits::{Consumer, Observer, Producer},
 };
 use core::{mem::MaybeUninit, ops::Deref};
 
 /// Producer wrapper of ring buffer.
 pub struct Prod<R: Deref>
 where
-    R::Target: RingBuffer,
+    R::Target: Producer,
 {
     base: R,
 }
@@ -18,14 +18,14 @@ where
 /// Consumer wrapper of ring buffer.
 pub struct Cons<R: Deref>
 where
-    R::Target: RingBuffer,
+    R::Target: Consumer,
 {
     base: R,
 }
 
 impl<R: Deref> Prod<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Producer,
 {
     /// # Safety
     ///
@@ -43,7 +43,7 @@ where
 
 impl<R: Deref> Cons<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Consumer,
 {
     /// # Safety
     ///
@@ -61,7 +61,7 @@ where
 
 impl<R: Deref> Observer for Prod<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Producer,
 {
     type Item = <R::Target as Observer>::Item;
 
@@ -70,7 +70,7 @@ where
 
 impl<R: Deref> Observer for Cons<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Consumer,
 {
     type Item = <R::Target as Observer>::Item;
 
@@ -79,7 +79,7 @@ where
 
 impl<R: Deref> Producer for Prod<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Producer,
 {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
@@ -89,7 +89,7 @@ where
 
 impl<R: Deref> Consumer for Cons<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Consumer,
 {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
@@ -102,7 +102,7 @@ impl_cons_traits!(Cons);
 
 impl<R: Deref> Prod<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Producer,
 {
     pub fn freeze(&mut self) -> FrozenProd<&R::Target> {
         unsafe { FrozenProd::new(&self.base) }
@@ -114,7 +114,7 @@ where
 
 impl<R: Deref> Cons<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Consumer,
 {
     pub fn freeze(&mut self) -> FrozenCons<&R::Target> {
         unsafe { FrozenCons::new(&self.base) }

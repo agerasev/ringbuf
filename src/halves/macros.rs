@@ -3,7 +3,7 @@ macro_rules! impl_prod_traits {
         #[cfg(feature = "std")]
         impl<R: core::ops::Deref> std::io::Write for $Prod<R>
         where
-            R::Target: crate::traits::RingBuffer<Item = u8>,
+            R::Target: crate::traits::Producer<Item = u8>,
         {
             fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
                 use crate::producer::Producer;
@@ -21,7 +21,7 @@ macro_rules! impl_prod_traits {
 
         impl<R: core::ops::Deref> core::fmt::Write for $Prod<R>
         where
-            R::Target: crate::traits::RingBuffer<Item = u8>,
+            R::Target: crate::traits::Producer<Item = u8>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 use crate::producer::Producer;
@@ -41,7 +41,7 @@ macro_rules! impl_cons_traits {
     ($Cons:ident) => {
         impl<R: core::ops::Deref> IntoIterator for $Cons<R>
         where
-            R::Target: RingBuffer,
+            R::Target: crate::traits::Consumer,
         {
             type Item = <R::Target as crate::traits::Observer>::Item;
             type IntoIter = crate::consumer::IntoIter<Self>;
@@ -54,7 +54,7 @@ macro_rules! impl_cons_traits {
         #[cfg(feature = "std")]
         impl<R: core::ops::Deref> std::io::Read for $Cons<R>
         where
-            R::Target: crate::traits::RingBuffer<Item = u8>,
+            R::Target: crate::traits::Consumer<Item = u8>,
         {
             fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
                 use crate::consumer::Consumer;

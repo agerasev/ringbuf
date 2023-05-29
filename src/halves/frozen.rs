@@ -1,4 +1,4 @@
-use crate::traits::{Consumer, Observer, Producer, RingBuffer};
+use crate::traits::{Consumer, Observer, Producer};
 use core::{
     cell::Cell,
     mem::{ManuallyDrop, MaybeUninit},
@@ -17,7 +17,7 @@ use super::macros::{impl_cons_traits, impl_prod_traits};
 /// Used to implement [`PostponedConsumer`](`crate::consumer::PostponedConsumer`).
 pub struct FrozenCons<R: Deref>
 where
-    R::Target: RingBuffer,
+    R::Target: Consumer,
 {
     pub(crate) base: R,
     read: Cell<usize>,
@@ -32,7 +32,7 @@ where
 /// Used to implement [`PostponedConsumer`](`crate::consumer::PostponedConsumer`).
 pub struct FrozenProd<R: Deref>
 where
-    R::Target: RingBuffer,
+    R::Target: Producer,
 {
     pub(crate) base: R,
     read: Cell<usize>,
@@ -41,7 +41,7 @@ where
 
 impl<R: Deref> Observer for FrozenCons<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Consumer,
 {
     type Item = <R::Target as Observer>::Item;
 
@@ -66,7 +66,7 @@ where
 
 impl<R: Deref> Observer for FrozenProd<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Producer,
 {
     type Item = <R::Target as Observer>::Item;
 
@@ -91,7 +91,7 @@ where
 
 impl<R: Deref> Consumer for FrozenCons<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Consumer,
 {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
@@ -101,7 +101,7 @@ where
 
 impl<R: Deref> Producer for FrozenProd<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Producer,
 {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
@@ -111,7 +111,7 @@ where
 
 impl<R: Deref> Drop for FrozenCons<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Consumer,
 {
     fn drop(&mut self) {
         self.commit();
@@ -120,7 +120,7 @@ where
 
 impl<R: Deref> Drop for FrozenProd<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Producer,
 {
     fn drop(&mut self) {
         self.commit();
@@ -129,7 +129,7 @@ where
 
 impl<R: Deref> FrozenCons<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Consumer,
 {
     /// Create new ring buffer cache.
     ///
@@ -172,7 +172,7 @@ where
 
 impl<R: Deref> FrozenProd<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Producer,
 {
     /// Create new ring buffer cache.
     ///

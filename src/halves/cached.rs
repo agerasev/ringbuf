@@ -1,6 +1,6 @@
 use crate::{
     frozen::{FrozenCons, FrozenProd},
-    traits::{Consumer, Observer, Producer, RingBuffer},
+    traits::{Consumer, Observer, Producer},
 };
 use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Deref};
 
@@ -9,7 +9,7 @@ use super::macros::{impl_cons_traits, impl_prod_traits};
 /// Producer wrapper of ring buffer.
 pub struct CachedProd<R: Deref>
 where
-    R::Target: RingBuffer,
+    R::Target: Producer,
 {
     frozen: FrozenProd<R>,
 }
@@ -17,14 +17,14 @@ where
 /// Consumer wrapper of ring buffer.
 pub struct CachedCons<R: Deref>
 where
-    R::Target: RingBuffer,
+    R::Target: Consumer,
 {
     frozen: FrozenCons<R>,
 }
 
 impl<R: Deref> CachedProd<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Producer,
 {
     /// # Safety
     ///
@@ -44,7 +44,7 @@ where
 
 impl<R: Deref> CachedCons<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Consumer,
 {
     /// # Safety
     ///
@@ -64,7 +64,7 @@ where
 
 impl<R: Deref> Observer for CachedProd<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Producer,
 {
     type Item = <R::Target as Observer>::Item;
 
@@ -90,7 +90,7 @@ where
 
 impl<R: Deref> Observer for CachedCons<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Consumer,
 {
     type Item = <R::Target as Observer>::Item;
 
@@ -116,7 +116,7 @@ where
 
 impl<R: Deref> Producer for CachedProd<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Producer,
 {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
@@ -127,7 +127,7 @@ where
 
 impl<R: Deref> Consumer for CachedCons<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Consumer,
 {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
@@ -141,7 +141,7 @@ impl_cons_traits!(CachedCons);
 
 impl<R: Deref> CachedProd<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Producer,
 {
     pub fn freeze(&mut self) -> &mut FrozenProd<R> {
         &mut self.frozen
@@ -153,7 +153,7 @@ where
 
 impl<R: Deref> CachedCons<R>
 where
-    R::Target: RingBuffer,
+    R::Target: Consumer,
 {
     pub fn freeze(&mut self) -> &mut FrozenCons<R> {
         &mut self.frozen
