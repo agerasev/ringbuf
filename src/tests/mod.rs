@@ -8,8 +8,8 @@ mod iter;
 mod overwrite;
 #[cfg(feature = "std")]
 mod read_write;
-//#[cfg(feature = "std")]
-//mod shared;
+#[cfg(feature = "std")]
+mod shared;
 #[cfg(feature = "alloc")]
 mod skip;
 mod slice;
