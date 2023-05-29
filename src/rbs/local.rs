@@ -1,4 +1,7 @@
-use super::utils::{modulus, ranges};
+use super::{
+    init::rb_impl_init,
+    utils::{modulus, ranges},
+};
 #[cfg(feature = "alloc")]
 use crate::storage::Heap;
 use crate::{
@@ -9,7 +12,7 @@ use crate::{
     traits::{ring_buffer::Split, Observer, RingBuffer},
 };
 #[cfg(feature = "alloc")]
-use alloc::{rc::Rc, sync::Arc};
+use alloc::rc::Rc;
 use core::{
     cell::Cell,
     mem::{ManuallyDrop, MaybeUninit},
@@ -31,7 +34,7 @@ impl<S: Storage> LocalRb<S> {
     ///
     /// The items in storage inside `read..write` range must be initialized, items outside this range must be uninitialized.
     /// `read` and `write` positions must be valid (see [`RbBase`](`crate::ring_buffer::RbBase`)).
-    pub(crate) unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
+    pub unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
         Self {
             storage: Shared::new(storage),
             read: Cell::new(read),
@@ -43,7 +46,7 @@ impl<S: Storage> LocalRb<S> {
     /// # Safety
     ///
     /// Initialized contents of the storage must be properly dropped.
-    pub(crate) unsafe fn into_raw_parts(self) -> (S, usize, usize) {
+    pub unsafe fn into_raw_parts(self) -> (S, usize, usize) {
         let this = ManuallyDrop::new(self);
         (ptr::read(&this.storage).into_inner(), this.read.get(), this.write.get())
     }
@@ -161,27 +164,4 @@ impl<S: Storage> LocalRb<S> {
     }
 }
 
-impl<T, const N: usize> Default for LocalRb<Static<T, N>> {
-    fn default() -> Self {
-        unsafe { Self::from_raw_parts(crate::utils::uninit_array(), usize::default(), usize::default()) }
-    }
-}
-
-#[cfg(feature = "alloc")]
-impl<T> LocalRb<Heap<T>> {
-    /// Creates a new instance of a ring buffer.
-    ///
-    /// *Panics if allocation failed or `capacity` is zero.*
-    pub fn new(capacity: usize) -> Self {
-        Self::try_new(capacity).unwrap()
-    }
-    /// Creates a new instance of a ring buffer returning an error if allocation failed.
-    ///
-    /// *Panics if `capacity` is zero.*
-    pub fn try_new(capacity: usize) -> Result<Self, alloc::collections::TryReserveError> {
-        let mut data = alloc::vec::Vec::new();
-        data.try_reserve_exact(capacity)?;
-        data.resize_with(capacity, core::mem::MaybeUninit::uninit);
-        Ok(unsafe { Self::from_raw_parts(data, usize::default(), usize::default()) })
-    }
-}
+rb_impl_init!(LocalRb);
