@@ -122,6 +122,17 @@ where
         self.frozen.set_write_index(value);
         self.frozen.commit();
     }
+
+    fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
+        if self.frozen.is_full() {
+            self.frozen.fetch();
+        }
+        let r = self.frozen.try_push(elem);
+        if r.is_ok() {
+            self.frozen.commit();
+        }
+        r
+    }
 }
 
 impl<R: Deref> Consumer for CachedCons<R>
@@ -132,6 +143,17 @@ where
     unsafe fn set_read_index(&self, value: usize) {
         self.frozen.set_read_index(value);
         self.frozen.commit();
+    }
+
+    fn try_pop(&mut self) -> Option<<Self as Observer>::Item> {
+        if self.frozen.is_empty() {
+            self.frozen.fetch();
+        }
+        let r = self.frozen.try_pop();
+        if r.is_some() {
+            self.frozen.commit();
+        }
+        r
     }
 }
 
