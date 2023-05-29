@@ -1,7 +1,4 @@
-use super::{
-    init::rb_impl_init,
-    utils::{modulus, ranges},
-};
+use super::{init::rb_impl_init, utils::ranges};
 #[cfg(feature = "alloc")]
 use crate::storage::Heap;
 use crate::{
@@ -88,26 +85,20 @@ impl<S: Storage> Observer for SharedRb<S> {
         self.storage.len()
     }
 
-    fn occupied_len(&self) -> usize {
-        let modulus = modulus(self);
-        (modulus.get() + self.write.load(Ordering::Acquire) - self.read.load(Ordering::Acquire)) % modulus
-    }
-    fn vacant_len(&self) -> usize {
-        let modulus = modulus(self);
-        (self.capacity().get() + self.read.load(Ordering::Acquire) - self.write.load(Ordering::Acquire)) % modulus
-    }
-
     #[inline]
-    fn is_empty(&self) -> bool {
-        self.read.load(Ordering::Acquire) == self.write.load(Ordering::Acquire)
+    fn read_index(&self) -> usize {
+        self.read.load(Ordering::Acquire)
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.write.load(Ordering::Acquire)
     }
 }
 
 impl<S: Storage> Producer for SharedRb<S> {
     #[inline]
-    unsafe fn advance_write_index(&self, count: usize) {
-        self.write
-            .store((self.write.load(Ordering::Acquire) + count) % modulus(self), Ordering::Release);
+    unsafe fn set_write_index(&self, value: usize) {
+        self.write.store(value, Ordering::Release);
     }
 
     #[inline]
@@ -133,9 +124,8 @@ impl<S: Storage> Producer for SharedRb<S> {
 
 impl<S: Storage> Consumer for SharedRb<S> {
     #[inline]
-    unsafe fn advance_read_index(&self, count: usize) {
-        self.read
-            .store((self.read.load(Ordering::Acquire) + count) % modulus(self), Ordering::Release);
+    unsafe fn set_read_index(&self, value: usize) {
+        self.read.store(value, Ordering::Release);
     }
 
     #[inline]
@@ -150,20 +140,6 @@ impl<S: Storage> Consumer for SharedRb<S> {
 }
 
 impl<S: Storage> RingBuffer for SharedRb<S> {
-    fn read_index(&self) -> usize {
-        self.read.load(Ordering::Acquire)
-    }
-    fn write_index(&self) -> usize {
-        self.write.load(Ordering::Acquire)
-    }
-
-    unsafe fn set_read_index(&self, value: usize) {
-        self.read.store(value, Ordering::Release);
-    }
-    unsafe fn set_write_index(&self, value: usize) {
-        self.write.store(value, Ordering::Release);
-    }
-
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
         let (first, second) = ranges(self.capacity(), start, end);
         (self.storage.slice(first), self.storage.slice(second))

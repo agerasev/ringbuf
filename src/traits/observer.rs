@@ -1,12 +1,5 @@
+use super::utils::modulus;
 use core::num::NonZeroUsize;
-
-/// Modulus for pointers to item in ring buffer storage.
-///
-/// Equals to `2 * capacity`.
-#[inline]
-pub fn modulus(this: &impl Observer) -> NonZeroUsize {
-    unsafe { NonZeroUsize::new_unchecked(2 * this.capacity().get()) }
-}
 
 pub trait Observer: Sized {
     type Item: Sized;
@@ -16,22 +9,31 @@ pub trait Observer: Sized {
     /// It is constant during the whole ring buffer lifetime.
     fn capacity(&self) -> NonZeroUsize;
 
+    fn read_index(&self) -> usize;
+    fn write_index(&self) -> usize;
+
     /// The number of items stored in the buffer.
     ///
     /// *Actual number may be greater or less than returned value due to concurring activity of producer or consumer respectively.*
-    fn occupied_len(&self) -> usize;
+    fn occupied_len(&self) -> usize {
+        let modulus = modulus(self);
+        (modulus.get() + self.write_index() - self.read_index()) % modulus
+    }
 
     /// The number of remaining free places in the buffer.
     ///
     /// *Actual number may be greater or less than returned value due to concurring activity of consumer or producer respectively.*
-    fn vacant_len(&self) -> usize;
+    fn vacant_len(&self) -> usize {
+        let modulus = modulus(self);
+        (self.capacity().get() + self.read_index() - self.write_index()) % modulus
+    }
 
     /// Checks if the ring buffer is empty.
     ///
     /// *The result may become irrelevant at any time because of concurring producer activity.*
     #[inline]
     fn is_empty(&self) -> bool {
-        self.occupied_len() == 0
+        self.read_index() == self.write_index()
     }
 
     /// Checks if the ring buffer is full.
@@ -49,6 +51,15 @@ macro_rules! delegate_observer_methods {
         #[inline]
         fn capacity(&self) -> core::num::NonZeroUsize {
             $ref(self).capacity()
+        }
+
+        #[inline]
+        fn read_index(&self) -> usize {
+            $ref(self).read_index()
+        }
+        #[inline]
+        fn write_index(&self) -> usize {
+            $ref(self).write_index()
         }
 
         #[inline]

@@ -1,4 +1,4 @@
-use super::Observer;
+use super::{utils::modulus, Observer};
 use crate::utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice};
 use core::{iter::Chain, mem::MaybeUninit, ptr, slice};
 #[cfg(feature = "std")]
@@ -15,6 +15,8 @@ use std::io::{self, Write};
 /// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
 ///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub trait Consumer: Observer {
+    unsafe fn set_read_index(&self, value: usize);
+
     /// Moves `read` pointer by `count` places forward.
     ///
     /// # Safety
@@ -22,7 +24,9 @@ pub trait Consumer: Observer {
     /// First `count` items in occupied memory must be moved out or dropped.
     ///
     /// Must not be called concurrently.
-    unsafe fn advance_read_index(&self, count: usize);
+    unsafe fn advance_read_index(&self, count: usize) {
+        self.set_read_index((self.read_index() + count) % modulus(self));
+    }
 
     /// Provides a direct access to the ring buffer occupied memory.
     /// The difference from [`Self::as_slices`] is that this method provides slices of [`MaybeUninit`], so items may be moved out of slices.  

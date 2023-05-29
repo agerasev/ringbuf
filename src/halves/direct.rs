@@ -80,8 +80,8 @@ where
     R::Target: RingBuffer,
 {
     #[inline]
-    unsafe fn advance_write_index(&self, count: usize) {
-        self.base.advance_write_index(count);
+    unsafe fn set_write_index(&self, value: usize) {
+        self.base.set_write_index(value)
     }
 
     #[inline]
@@ -102,8 +102,8 @@ where
     R::Target: RingBuffer,
 {
     #[inline]
-    unsafe fn advance_read_index(&self, count: usize) {
-        self.base.advance_read_index(count)
+    unsafe fn set_read_index(&self, value: usize) {
+        self.base.set_read_index(value)
     }
 
     #[inline]

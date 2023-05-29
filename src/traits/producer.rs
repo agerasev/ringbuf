@@ -1,4 +1,4 @@
-use super::Observer;
+use super::{utils::modulus, Observer};
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
 use crate::utils::write_slice;
@@ -20,6 +20,8 @@ use std::{
 /// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
 ///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub trait Producer: Observer {
+    unsafe fn set_write_index(&self, value: usize);
+
     /// Moves `write` pointer by `count` places forward.
     ///
     /// # Safety
@@ -27,7 +29,9 @@ pub trait Producer: Observer {
     /// First `count` items in free space must be initialized.
     ///
     /// Must not be called concurrently.
-    unsafe fn advance_write_index(&self, count: usize);
+    unsafe fn advance_write_index(&self, count: usize) {
+        self.set_write_index((self.write_index() + count) % modulus(self));
+    }
 
     /// Provides a direct access to the ring buffer vacant memory.
     ///

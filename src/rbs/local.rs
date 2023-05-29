@@ -1,7 +1,4 @@
-use super::{
-    init::rb_impl_init,
-    utils::{modulus, ranges},
-};
+use super::{init::rb_impl_init, utils::ranges};
 #[cfg(feature = "alloc")]
 use crate::storage::Heap;
 use crate::{
@@ -60,25 +57,20 @@ impl<S: Storage> Observer for LocalRb<S> {
         self.storage.len()
     }
 
-    fn occupied_len(&self) -> usize {
-        let modulus = modulus(self);
-        (modulus.get() + self.write.get() - self.read.get()) % modulus
-    }
-    fn vacant_len(&self) -> usize {
-        let modulus = modulus(self);
-        (self.capacity().get() + self.read.get() - self.write.get()) % modulus
-    }
-
     #[inline]
-    fn is_empty(&self) -> bool {
-        self.read.get() == self.write.get()
+    fn read_index(&self) -> usize {
+        self.read.get()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.write.get()
     }
 }
 
 impl<S: Storage> Producer for LocalRb<S> {
     #[inline]
-    unsafe fn advance_write_index(&self, count: usize) {
-        self.write.set((self.write.get() + count) % modulus(self));
+    unsafe fn set_write_index(&self, value: usize) {
+        self.write.set(value);
     }
 
     #[inline]
@@ -94,8 +86,8 @@ impl<S: Storage> Producer for LocalRb<S> {
 
 impl<S: Storage> Consumer for LocalRb<S> {
     #[inline]
-    unsafe fn advance_read_index(&self, count: usize) {
-        self.read.set((self.read.get() + count) % modulus(self));
+    unsafe fn set_read_index(&self, value: usize) {
+        self.read.set(value);
     }
 
     #[inline]
@@ -110,20 +102,6 @@ impl<S: Storage> Consumer for LocalRb<S> {
 }
 
 impl<S: Storage> RingBuffer for LocalRb<S> {
-    fn read_index(&self) -> usize {
-        self.read.get()
-    }
-    fn write_index(&self) -> usize {
-        self.write.get()
-    }
-
-    unsafe fn set_read_index(&self, value: usize) {
-        self.read.set(value);
-    }
-    unsafe fn set_write_index(&self, value: usize) {
-        self.write.set(value);
-    }
-
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
         let (first, second) = ranges(self.capacity(), start, end);
         (self.storage.slice(first), self.storage.slice(second))

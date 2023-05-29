@@ -14,12 +14,6 @@ use core::mem::MaybeUninit;
 /// without using the space for an extra element in container.
 /// And obviously we cannot store more than `capacity` items in the buffer, so `write - read` modulo `2 * capacity` is not allowed to be greater than `capacity`.
 pub trait RingBuffer: Observer + Consumer + Producer {
-    fn read_index(&self) -> usize;
-    fn write_index(&self) -> usize;
-
-    unsafe fn set_read_index(&self, value: usize);
-    unsafe fn set_write_index(&self, value: usize);
-
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]);
 
     /// Pushes an item to the ring buffer overwriting the latest item if the buffer is full.

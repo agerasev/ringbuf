@@ -78,12 +78,7 @@ where
     }
 
     #[inline]
-    unsafe fn unsafe_occupied_slices(
-        &self,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    ) {
+    unsafe fn unsafe_occupied_slices(&self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
         self.base.unsafe_slices(self.read.get(), self.write)
     }
 }
@@ -124,14 +119,8 @@ where
     }
 
     #[inline]
-    unsafe fn unsafe_vacant_slices(
-        &self,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    ) {
-        self.base
-            .unsafe_slices(self.write.get(), self.read + self.capacity().get())
+    unsafe fn unsafe_vacant_slices(&self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        self.base.unsafe_slices(self.write.get(), self.read + self.capacity().get())
     }
 }
 
