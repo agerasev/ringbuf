@@ -4,6 +4,8 @@ use crate::{
 };
 use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Deref};
 
+use super::macros::{impl_cons_traits, impl_prod_traits};
+
 /// Producer wrapper of ring buffer.
 pub struct CachedProd<R: Deref>
 where
@@ -145,5 +147,32 @@ where
     unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
         self.frozen.fetch();
         self.frozen.occupied_slices_mut()
+    }
+}
+
+impl_prod_traits!(CachedProd);
+impl_cons_traits!(CachedCons);
+
+impl<R: Deref> CachedProd<R>
+where
+    R::Target: RingBuffer,
+{
+    pub fn freeze(&mut self) -> &mut FrozenProd<R> {
+        &mut self.frozen
+    }
+    pub fn into_frozen(self) -> FrozenProd<R> {
+        self.frozen
+    }
+}
+
+impl<R: Deref> CachedCons<R>
+where
+    R::Target: RingBuffer,
+{
+    pub fn freeze(&mut self) -> &mut FrozenCons<R> {
+        &mut self.frozen
+    }
+    pub fn into_frozen(self) -> FrozenCons<R> {
+        self.frozen
     }
 }

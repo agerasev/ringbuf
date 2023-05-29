@@ -7,6 +7,8 @@ use core::{
     ptr,
 };
 
+use super::macros::{impl_cons_traits, impl_prod_traits};
+
 /// Caching read end of some ring buffer.
 ///
 /// A free space of removed items is not visible for an opposite write end until [`Self::commit`]/[`Self::sync`] is called or `Self` is dropped.
@@ -233,5 +235,5 @@ where
     */
 }
 
-//impl_prod_traits!(FrozenProd);
-//impl_cons_traits!(FrozenCons);
+impl_prod_traits!(FrozenProd);
+impl_cons_traits!(FrozenCons);

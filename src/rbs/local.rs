@@ -1,4 +1,4 @@
-use super::{init::rb_impl_init, utils::ranges};
+use super::{macros::rb_impl_init, utils::ranges};
 #[cfg(feature = "alloc")]
 use crate::storage::Heap;
 use crate::{
