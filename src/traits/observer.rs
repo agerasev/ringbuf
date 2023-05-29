@@ -1,5 +1,5 @@
 use super::utils::modulus;
-use core::num::NonZeroUsize;
+use core::{mem::MaybeUninit, num::NonZeroUsize};
 
 pub trait Observer: Sized {
     type Item: Sized;
@@ -11,6 +11,8 @@ pub trait Observer: Sized {
 
     fn read_index(&self) -> usize;
     fn write_index(&self) -> usize;
+
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]);
 
     /// The number of items stored in the buffer.
     ///
@@ -60,6 +62,11 @@ macro_rules! delegate_observer_methods {
         #[inline]
         fn write_index(&self) -> usize {
             $ref(self).write_index()
+        }
+
+        #[inline]
+        unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+            $ref(self).unsafe_slices(start, end)
         }
 
         #[inline]

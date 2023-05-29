@@ -93,32 +93,17 @@ impl<S: Storage> Observer for SharedRb<S> {
     fn write_index(&self) -> usize {
         self.write.load(Ordering::Acquire)
     }
+
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
+        let (first, second) = ranges(self.capacity(), start, end);
+        (self.storage.slice(first), self.storage.slice(second))
+    }
 }
 
 impl<S: Storage> Producer for SharedRb<S> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         self.write.store(value, Ordering::Release);
-    }
-
-    #[inline]
-    fn vacant_slices(&self) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
-        let (first, second) = unsafe {
-            self.unsafe_slices(
-                self.write.load(Ordering::Acquire),
-                self.read.load(Ordering::Acquire) + self.capacity().get(),
-            )
-        };
-        (first as &_, second as &_)
-    }
-    #[inline]
-    fn vacant_slices_mut(&mut self) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        unsafe {
-            self.unsafe_slices(
-                self.write.load(Ordering::Acquire),
-                self.read.load(Ordering::Acquire) + self.capacity().get(),
-            )
-        }
     }
 }
 
@@ -127,24 +112,9 @@ impl<S: Storage> Consumer for SharedRb<S> {
     unsafe fn set_read_index(&self, value: usize) {
         self.read.store(value, Ordering::Release);
     }
-
-    #[inline]
-    fn occupied_slices(&self) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
-        let (first, second) = unsafe { self.unsafe_slices(self.read.load(Ordering::Acquire), self.write.load(Ordering::Acquire)) };
-        (first as &_, second as &_)
-    }
-    #[inline]
-    unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        self.unsafe_slices(self.read.load(Ordering::Acquire), self.write.load(Ordering::Acquire))
-    }
 }
 
-impl<S: Storage> RingBuffer for SharedRb<S> {
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        let (first, second) = ranges(self.capacity(), start, end);
-        (self.storage.slice(first), self.storage.slice(second))
-    }
-}
+impl<S: Storage> RingBuffer for SharedRb<S> {}
 
 impl<S: Storage> Drop for SharedRb<S> {
     fn drop(&mut self) {

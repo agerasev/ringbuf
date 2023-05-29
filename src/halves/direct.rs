@@ -85,16 +85,6 @@ where
     unsafe fn set_write_index(&self, value: usize) {
         self.base.set_write_index(value)
     }
-
-    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let rb = self.base.deref();
-        let (first, second) = unsafe { rb.unsafe_slices(rb.write_index(), rb.read_index() + rb.capacity().get()) };
-        (first as &_, second as &_)
-    }
-    fn vacant_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        let rb = self.base.deref();
-        unsafe { rb.unsafe_slices(rb.write_index(), rb.read_index() + rb.capacity().get()) }
-    }
 }
 
 impl<R: Deref> Consumer for Cons<R>
@@ -104,16 +94,6 @@ where
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
         self.base.set_read_index(value)
-    }
-
-    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let rb = self.base.deref();
-        let (first, second) = unsafe { rb.unsafe_slices(rb.read_index(), rb.write_index()) };
-        (first as &_, second as &_)
-    }
-    unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        let rb = self.base.deref();
-        rb.unsafe_slices(rb.read_index(), rb.write_index())
     }
 }
 

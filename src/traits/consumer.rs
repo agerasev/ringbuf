@@ -41,7 +41,10 @@ pub trait Consumer: Observer {
     ///
     /// *This method must be followed by [`Self::advance_read`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
-    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]);
+    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        let (first, second) = unsafe { self.unsafe_slices(self.read_index(), self.write_index()) };
+        (first as &_, second as &_)
+    }
 
     /// Provides a direct mutable access to the ring buffer occupied memory.
     ///
@@ -50,7 +53,9 @@ pub trait Consumer: Observer {
     /// # Safety
     ///
     /// When some item is replaced with uninitialized value then it must not be read anymore.
-    unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]);
+    unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        self.unsafe_slices(self.read_index(), self.write_index())
+    }
 
     /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
     #[inline]

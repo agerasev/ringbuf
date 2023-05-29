@@ -65,22 +65,17 @@ impl<S: Storage> Observer for LocalRb<S> {
     fn write_index(&self) -> usize {
         self.write.get()
     }
+
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
+        let (first, second) = ranges(self.capacity(), start, end);
+        (self.storage.slice(first), self.storage.slice(second))
+    }
 }
 
 impl<S: Storage> Producer for LocalRb<S> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         self.write.set(value);
-    }
-
-    #[inline]
-    fn vacant_slices(&self) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
-        let (first, second) = unsafe { self.unsafe_slices(self.write.get(), self.read.get() + self.capacity().get()) };
-        (first as &_, second as &_)
-    }
-    #[inline]
-    fn vacant_slices_mut(&mut self) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        unsafe { self.unsafe_slices(self.write.get(), self.read.get() + self.capacity().get()) }
     }
 }
 
@@ -89,24 +84,9 @@ impl<S: Storage> Consumer for LocalRb<S> {
     unsafe fn set_read_index(&self, value: usize) {
         self.read.set(value);
     }
-
-    #[inline]
-    fn occupied_slices(&self) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
-        let (first, second) = unsafe { self.unsafe_slices(self.read.get(), self.write.get()) };
-        (first as &_, second as &_)
-    }
-    #[inline]
-    unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        self.unsafe_slices(self.read.get(), self.write.get())
-    }
 }
 
-impl<S: Storage> RingBuffer for LocalRb<S> {
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        let (first, second) = ranges(self.capacity(), start, end);
-        (self.storage.slice(first), self.storage.slice(second))
-    }
-}
+impl<S: Storage> RingBuffer for LocalRb<S> {}
 
 impl<S: Storage> Drop for LocalRb<S> {
     fn drop(&mut self) {

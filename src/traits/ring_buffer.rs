@@ -1,5 +1,4 @@
 use super::{Consumer, Observer, Producer};
-use core::mem::MaybeUninit;
 
 /// An abstract ring buffer.
 ///
@@ -14,8 +13,6 @@ use core::mem::MaybeUninit;
 /// without using the space for an extra element in container.
 /// And obviously we cannot store more than `capacity` items in the buffer, so `write - read` modulo `2 * capacity` is not allowed to be greater than `capacity`.
 pub trait RingBuffer: Observer + Consumer + Producer {
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]);
-
     /// Pushes an item to the ring buffer overwriting the latest item if the buffer is full.
     ///
     /// Returns overwritten item if overwriting took place.

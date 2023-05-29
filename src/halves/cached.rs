@@ -82,6 +82,10 @@ where
     fn write_index(&self) -> usize {
         self.frozen.write_index()
     }
+
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        self.frozen.unsafe_slices(start, end)
+    }
 }
 
 impl<R: Deref> Observer for CachedCons<R>
@@ -104,6 +108,10 @@ where
         self.frozen.fetch();
         self.frozen.write_index()
     }
+
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        self.frozen.unsafe_slices(start, end)
+    }
 }
 
 impl<R: Deref> Producer for CachedProd<R>
@@ -115,17 +123,6 @@ where
         self.frozen.set_write_index(value);
         self.frozen.commit();
     }
-
-    #[inline]
-    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        self.frozen.fetch();
-        self.frozen.vacant_slices()
-    }
-    #[inline]
-    fn vacant_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        self.frozen.fetch();
-        self.frozen.vacant_slices_mut()
-    }
 }
 
 impl<R: Deref> Consumer for CachedCons<R>
@@ -136,17 +133,6 @@ where
     unsafe fn set_read_index(&self, value: usize) {
         self.frozen.set_read_index(value);
         self.frozen.commit();
-    }
-
-    #[inline]
-    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        self.frozen.fetch();
-        self.frozen.occupied_slices()
-    }
-    #[inline]
-    unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        self.frozen.fetch();
-        self.frozen.occupied_slices_mut()
     }
 }
 

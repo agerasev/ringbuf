@@ -36,7 +36,10 @@ pub trait Producer: Observer {
     /// Provides a direct access to the ring buffer vacant memory.
     ///
     /// Returns a pair of slices of uninitialized memory, the second one may be empty.
-    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]);
+    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        let (first, second) = unsafe { self.unsafe_slices(self.write_index(), self.read_index() + self.capacity().get()) };
+        (first as &_, second as &_)
+    }
 
     /// Mutable version of [`Self::vacant_slices`].
     ///
@@ -45,7 +48,9 @@ pub trait Producer: Observer {
     ///
     /// *This method must be followed by [`Self::advance_write`] call with the number of items being put previously as argument.*
     /// *No other mutating calls allowed before that.*
-    fn vacant_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]);
+    fn vacant_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        unsafe { self.unsafe_slices(self.write_index(), self.read_index() + self.capacity().get()) }
+    }
 
     /// Appends an item to the ring buffer.
     ///
