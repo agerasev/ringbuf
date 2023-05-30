@@ -79,9 +79,9 @@ macro_rules! impl_prod_freeze {
             pub fn freeze(&mut self) -> crate::halves::FrozenProd<&Self> {
                 unsafe { crate::halves::FrozenProd::new(self) }
             }
-            //pub fn into_frozen(self) -> crate::halves::FrozenProd<Self> {
-            //    unsafe { crate::halves::FrozenProd::new(self) }
-            //}
+            pub fn into_frozen(self) -> crate::halves::FrozenProd<Self> {
+                unsafe { crate::halves::FrozenProd::new(self) }
+            }
         }
     };
 }
@@ -96,9 +96,9 @@ macro_rules! impl_cons_freeze {
             pub fn freeze(&mut self) -> crate::halves::FrozenCons<&Self> {
                 unsafe { crate::halves::FrozenCons::new(self) }
             }
-            //pub fn into_frozen(self) -> crate::halves::FrozenCons<Self> {
-            //    unsafe { crate::halves::FrozenProd::new(self) }
-            //}
+            pub fn into_frozen(self) -> crate::halves::FrozenCons<Self> {
+                unsafe { crate::halves::FrozenCons::new(self) }
+            }
         }
     };
 }
