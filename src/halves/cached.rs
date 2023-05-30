@@ -1,31 +1,24 @@
-use super::{macros::*, Based};
-use crate::{
-    direct::Obs,
+use super::{
     frozen::{FrozenCons, FrozenProd},
-    traits::{observer::Observe, Consumer, Observer, Producer},
+    macros::*,
+};
+use crate::{
+    rbs::based::{Based, RbRef},
+    traits::{Consumer, Observer, Producer},
 };
 use core::{mem::MaybeUninit, num::NonZeroUsize};
 
 /// Producer wrapper of ring buffer.
-pub struct CachedProd<R: Based>
-where
-    R::Base: Producer,
-{
+pub struct CachedProd<R: RbRef> {
     frozen: FrozenProd<R>,
 }
 
 /// Consumer wrapper of ring buffer.
-pub struct CachedCons<R: Based>
-where
-    R::Base: Consumer,
-{
+pub struct CachedCons<R: RbRef> {
     frozen: FrozenCons<R>,
 }
 
-impl<R: Based> CachedProd<R>
-where
-    R::Base: Producer,
-{
+impl<R: RbRef> CachedProd<R> {
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
@@ -35,14 +28,11 @@ where
         }
     }
     pub fn into_base_ref(self) -> R {
-        self.frozen.release()
+        self.frozen.into_base_ref()
     }
 }
 
-impl<R: Based> CachedCons<R>
-where
-    R::Base: Consumer,
-{
+impl<R: RbRef> CachedCons<R> {
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
@@ -52,15 +42,12 @@ where
         }
     }
     pub fn into_base_ref(self) -> R {
-        self.frozen.release()
+        self.frozen.into_base_ref()
     }
 }
 
-impl<R: Based> Observer for CachedProd<R>
-where
-    R::Base: Producer,
-{
-    type Item = <R::Base as Observer>::Item;
+impl<R: RbRef> Observer for CachedProd<R> {
+    type Item = <R::Target as Observer>::Item;
 
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
@@ -82,11 +69,8 @@ where
     }
 }
 
-impl<R: Based> Observer for CachedCons<R>
-where
-    R::Base: Consumer,
-{
-    type Item = <R::Base as Observer>::Item;
+impl<R: RbRef> Observer for CachedCons<R> {
+    type Item = <R::Target as Observer>::Item;
 
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
@@ -108,10 +92,7 @@ where
     }
 }
 
-impl<R: Based> Producer for CachedProd<R>
-where
-    R::Base: Producer,
-{
+impl<R: RbRef> Producer for CachedProd<R> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         self.frozen.set_write_index(value);
@@ -130,10 +111,7 @@ where
     }
 }
 
-impl<R: Based> Consumer for CachedCons<R>
-where
-    R::Base: Consumer,
-{
+impl<R: RbRef> Consumer for CachedCons<R> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
         self.frozen.set_read_index(value);
@@ -155,43 +133,23 @@ where
 impl_prod_traits!(CachedProd);
 impl_cons_traits!(CachedCons);
 
-impl_prod_freeze!(CachedProd);
-impl_cons_freeze!(CachedCons);
-
-impl<R: Based> Based for CachedProd<R>
-where
-    R::Base: Producer,
-{
-    type Base = Self;
-    fn base_deref(&self) -> &Self::Base {
-        self
+unsafe impl<R: RbRef> Based for CachedProd<R> {
+    type Rb = R::Target;
+    type RbRef = R;
+    fn rb(&self) -> &Self::Rb {
+        self.frozen.rb()
+    }
+    fn rb_ref(&self) -> &Self::RbRef {
+        self.frozen.rb_ref()
     }
 }
-impl<R: Based> Based for CachedCons<R>
-where
-    R::Base: Consumer,
-{
-    type Base = Self;
-    fn base_deref(&self) -> &Self::Base {
-        self
+unsafe impl<R: RbRef> Based for CachedCons<R> {
+    type Rb = R::Target;
+    type RbRef = R;
+    fn rb(&self) -> &Self::Rb {
+        self.frozen.rb()
     }
-}
-
-impl<R: Based + Clone> Observe for CachedProd<R>
-where
-    R::Base: Producer,
-{
-    type Obs = Obs<R>;
-    fn observe(&self) -> Self::Obs {
-        unsafe { Obs::new(self.frozen.ref_.clone()) }
-    }
-}
-impl<R: Based + Clone> Observe for CachedCons<R>
-where
-    R::Base: Consumer,
-{
-    type Obs = Obs<R>;
-    fn observe(&self) -> Self::Obs {
-        unsafe { Obs::new(self.frozen.ref_.clone()) }
+    fn rb_ref(&self) -> &Self::RbRef {
+        self.frozen.rb_ref()
     }
 }

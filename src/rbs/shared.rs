@@ -3,10 +3,7 @@ use super::{macros::rb_impl_init, utils::ranges};
 use crate::storage::Heap;
 use crate::{
     consumer::Consumer,
-    halves::{
-        cached::{CachedCons, CachedProd},
-        Based,
-    },
+    halves::cached::{CachedCons, CachedProd},
     producer::Producer,
     storage::{Shared, Static, Storage},
     traits::{ring_buffer::Split, Observer, RingBuffer},
@@ -154,10 +151,3 @@ impl<S: Storage> SharedRb<S> {
 }
 
 rb_impl_init!(SharedRb);
-
-impl<S: Storage> Based for SharedRb<S> {
-    type Base = Self;
-    fn base_deref(&self) -> &Self::Base {
-        self
-    }
-}

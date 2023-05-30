@@ -1,9 +1,9 @@
 macro_rules! impl_prod_traits {
     ($Prod:ident) => {
         #[cfg(feature = "std")]
-        impl<R: $crate::halves::Based> std::io::Write for $Prod<R>
+        impl<R: $crate::rbs::based::RbRef> std::io::Write for $Prod<R>
         where
-            R::Base: $crate::traits::Producer<Item = u8>,
+            R::Target: $crate::traits::Producer<Item = u8>,
         {
             fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
                 use $crate::producer::Producer;
@@ -19,9 +19,9 @@ macro_rules! impl_prod_traits {
             }
         }
 
-        impl<R: $crate::halves::Based> core::fmt::Write for $Prod<R>
+        impl<R: $crate::rbs::based::RbRef> core::fmt::Write for $Prod<R>
         where
-            R::Base: $crate::traits::Producer<Item = u8>,
+            R::Target: $crate::traits::Producer<Item = u8>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
                 use $crate::producer::Producer;
@@ -39,11 +39,11 @@ pub(crate) use impl_prod_traits;
 
 macro_rules! impl_cons_traits {
     ($Cons:ident) => {
-        impl<R: $crate::halves::Based> IntoIterator for $Cons<R>
+        impl<R: $crate::rbs::based::RbRef> IntoIterator for $Cons<R>
         where
-            R::Base: $crate::traits::Consumer,
+            R::Target: $crate::traits::Consumer,
         {
-            type Item = <R::Base as $crate::traits::Observer>::Item;
+            type Item = <R::Target as $crate::traits::Observer>::Item;
             type IntoIter = $crate::consumer::IntoIter<Self>;
 
             fn into_iter(self) -> Self::IntoIter {
@@ -52,9 +52,9 @@ macro_rules! impl_cons_traits {
         }
 
         #[cfg(feature = "std")]
-        impl<R: $crate::halves::Based> std::io::Read for $Cons<R>
+        impl<R: $crate::rbs::based::RbRef> std::io::Read for $Cons<R>
         where
-            R::Base: $crate::traits::Consumer<Item = u8>,
+            R::Target: $crate::traits::Consumer<Item = u8>,
         {
             fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
                 use $crate::consumer::Consumer;
@@ -69,37 +69,3 @@ macro_rules! impl_cons_traits {
     };
 }
 pub(crate) use impl_cons_traits;
-
-macro_rules! impl_prod_freeze {
-    ($Prod:ident) => {
-        impl<R: $crate::halves::Based> $Prod<R>
-        where
-            R::Base: $crate::traits::Producer,
-        {
-            pub fn freeze(&mut self) -> $crate::halves::FrozenProd<&Self> {
-                unsafe { $crate::halves::FrozenProd::new(self) }
-            }
-            pub fn into_frozen(self) -> $crate::halves::FrozenProd<Self> {
-                unsafe { $crate::halves::FrozenProd::new(self) }
-            }
-        }
-    };
-}
-pub(crate) use impl_prod_freeze;
-
-macro_rules! impl_cons_freeze {
-    ($Cons:ident) => {
-        impl<R: $crate::halves::Based> $Cons<R>
-        where
-            R::Base: $crate::traits::Consumer,
-        {
-            pub fn freeze(&mut self) -> $crate::halves::FrozenCons<&Self> {
-                unsafe { $crate::halves::FrozenCons::new(self) }
-            }
-            pub fn into_frozen(self) -> $crate::halves::FrozenCons<Self> {
-                unsafe { $crate::halves::FrozenCons::new(self) }
-            }
-        }
-    };
-}
-pub(crate) use impl_cons_freeze;

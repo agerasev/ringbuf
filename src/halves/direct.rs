@@ -1,174 +1,157 @@
-use super::{macros::*, Based};
+use super::{
+    frozen::{FrozenCons, FrozenProd},
+    macros::*,
+};
 use crate::{
     //cached::FrozenCons,
     delegate_observer_methods,
+    rbs::based::{Based, RbRef},
     traits::{observer::Observe, Consumer, Observer, Producer},
 };
 use core::mem::MaybeUninit;
 
-pub struct Obs<R: Based> {
+pub struct Obs<R: RbRef> {
     ref_: R,
 }
 
 /// Producer wrapper of ring buffer.
-pub struct Prod<R: Based>
-where
-    R::Base: Producer,
-{
+pub struct Prod<R: RbRef> {
     ref_: R,
 }
 
 /// Consumer wrapper of ring buffer.
-pub struct Cons<R: Based>
-where
-    R::Base: Consumer,
-{
+pub struct Cons<R: RbRef> {
     ref_: R,
 }
 
-impl<R: Based> Obs<R> {
+impl<R: RbRef> Obs<R> {
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
-    pub unsafe fn new(ref_: R) -> Self {
+    pub fn new(ref_: R) -> Self {
         Self { ref_ }
-    }
-    #[inline]
-    pub fn base(&self) -> &R::Base {
-        self.ref_.base_deref()
     }
 }
 
-impl<R: Based> Prod<R>
-where
-    R::Base: Producer,
-{
+impl<B: Based> Observe for B {
+    type Obs = Obs<B::RbRef>;
+    fn observe(&self) -> Self::Obs {
+        Obs::new(self.rb_ref().clone())
+    }
+}
+
+impl<R: RbRef> Prod<R> {
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
     pub unsafe fn new(ref_: R) -> Self {
         Self { ref_ }
-    }
-
-    pub fn base_ref(&self) -> &R {
-        &self.ref_
     }
     pub fn into_base_ref(self) -> R {
         self.ref_
     }
-    #[inline]
-    pub fn base(&self) -> &R::Base {
-        self.ref_.base_deref()
-    }
 }
 
-impl<R: Based> Cons<R>
-where
-    R::Base: Consumer,
-{
+impl<R: RbRef> Cons<R> {
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
     pub unsafe fn new(ref_: R) -> Self {
         Self { ref_ }
     }
-
-    pub fn base_ref(&self) -> &R {
-        &self.ref_
-    }
     pub fn into_base_ref(self) -> R {
         self.ref_
     }
-    #[inline]
-    fn base(&self) -> &R::Base {
-        self.ref_.base_deref()
-    }
 }
 
-impl<R: Based> Observer for Obs<R> {
-    type Item = <R::Base as Observer>::Item;
+impl<R: RbRef> Observer for Obs<R> {
+    type Item = <R::Target as Observer>::Item;
 
-    delegate_observer_methods!(Self::base);
+    delegate_observer_methods!(Based::rb);
 }
 
-impl<R: Based> Observer for Prod<R>
-where
-    R::Base: Producer,
-{
-    type Item = <R::Base as Observer>::Item;
+impl<R: RbRef> Observer for Prod<R> {
+    type Item = <R::Target as Observer>::Item;
 
-    delegate_observer_methods!(Self::base);
+    delegate_observer_methods!(Based::rb);
 }
 
-impl<R: Based> Observer for Cons<R>
-where
-    R::Base: Consumer,
-{
-    type Item = <R::Base as Observer>::Item;
+impl<R: RbRef> Observer for Cons<R> {
+    type Item = <R::Target as Observer>::Item;
 
-    delegate_observer_methods!(Self::base);
+    delegate_observer_methods!(Based::rb);
 }
 
-impl<R: Based> Producer for Prod<R>
-where
-    R::Base: Producer,
-{
+impl<R: RbRef> Producer for Prod<R> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
-        self.base().set_write_index(value)
+        self.rb().set_write_index(value)
     }
 }
 
-impl<R: Based> Consumer for Cons<R>
-where
-    R::Base: Consumer,
-{
+impl<R: RbRef> Consumer for Cons<R> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
-        self.base().set_read_index(value)
+        self.rb().set_read_index(value)
     }
 }
 
 impl_prod_traits!(Prod);
 impl_cons_traits!(Cons);
 
-impl_prod_freeze!(Prod);
-impl_cons_freeze!(Cons);
-
-impl<R: Based> Based for Prod<R>
-where
-    R::Base: Producer,
-{
-    type Base = Self;
-    fn base_deref(&self) -> &Self::Base {
-        self
+impl<R: RbRef> Prod<R> {
+    pub fn freeze(&mut self) -> FrozenProd<&R::Target> {
+        unsafe { FrozenProd::new(self.rb()) }
+    }
+    pub fn into_frozen(self) -> FrozenProd<R> {
+        unsafe { FrozenProd::new(self.into_base_ref()) }
     }
 }
-impl<R: Based> Based for Cons<R>
-where
-    R::Base: Consumer,
-{
-    type Base = Self;
-    fn base_deref(&self) -> &Self::Base {
-        self
+impl<R: RbRef> Cons<R> {
+    pub fn freeze(&mut self) -> FrozenCons<&R::Target> {
+        unsafe { FrozenCons::new(self.rb()) }
+    }
+    pub fn into_frozen(self) -> FrozenCons<R> {
+        unsafe { FrozenCons::new(self.into_base_ref()) }
     }
 }
 
-impl<R: Based + Clone> Observe for Prod<R>
-where
-    R::Base: Producer,
-{
-    type Obs = Obs<R>;
-    fn observe(&self) -> Self::Obs {
-        unsafe { Obs::new(self.ref_.clone()) }
+unsafe impl<R: RbRef> Based for Obs<R> {
+    type Rb = R::Target;
+    type RbRef = R;
+
+    #[inline]
+    fn rb(&self) -> &Self::Rb {
+        self.ref_.deref()
+    }
+    #[inline]
+    fn rb_ref(&self) -> &Self::RbRef {
+        &self.ref_
     }
 }
-impl<R: Based + Clone> Observe for Cons<R>
-where
-    R::Base: Consumer,
-{
-    type Obs = Obs<R>;
-    fn observe(&self) -> Self::Obs {
-        unsafe { Obs::new(self.ref_.clone()) }
+unsafe impl<R: RbRef> Based for Prod<R> {
+    type Rb = R::Target;
+    type RbRef = R;
+
+    #[inline]
+    fn rb(&self) -> &Self::Rb {
+        self.ref_.deref()
+    }
+    #[inline]
+    fn rb_ref(&self) -> &Self::RbRef {
+        &self.ref_
+    }
+}
+unsafe impl<R: RbRef> Based for Cons<R> {
+    type Rb = R::Target;
+    type RbRef = R;
+
+    #[inline]
+    fn rb(&self) -> &Self::Rb {
+        self.ref_.deref()
+    }
+    #[inline]
+    fn rb_ref(&self) -> &Self::RbRef {
+        &self.ref_
     }
 }
