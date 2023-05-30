@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     //cached::FrozenCons,
-    delegate_observer_methods,
+    delegate_observer,
     rbs::based::{Based, RbRef},
     traits::{observer::Observe, Consumer, Observer, Producer},
 };
@@ -64,15 +64,15 @@ impl<R: RbRef> Cons<R> {
 }
 
 impl<R: RbRef> Observer for Obs<R> {
-    delegate_observer_methods!(R::Target, Based::rb);
+    delegate_observer!(R::Target, Based::rb);
 }
 
 impl<R: RbRef> Observer for Prod<R> {
-    delegate_observer_methods!(R::Target, Based::rb);
+    delegate_observer!(R::Target, Based::rb);
 }
 
 impl<R: RbRef> Observer for Cons<R> {
-    delegate_observer_methods!(R::Target, Based::rb);
+    delegate_observer!(R::Target, Based::rb);
 }
 
 impl<R: RbRef> Producer for Prod<R> {

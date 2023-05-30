@@ -48,7 +48,7 @@ pub trait Observer: Sized {
 }
 
 #[macro_export]
-macro_rules! delegate_observer_methods {
+macro_rules! delegate_observer {
     ($type:ty, $ref:expr) => {
         type Item = <$type as $crate::traits::Observer>::Item;
 

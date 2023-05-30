@@ -7,7 +7,7 @@ use super::{
 };
 use crate::{
     rbs::based::{Based, RbRef},
-    traits::{Consumer, Observer, Producer},
+    traits::{Consumer, FrozenConsumer, FrozenProducer, Observer, Producer},
 };
 use core::{mem::MaybeUninit, num::NonZeroUsize};
 
@@ -33,10 +33,6 @@ impl<R: RbRef, const AUTO: bool> CachedProd<R, AUTO> {
     pub fn into_base_ref(self) -> R {
         self.frozen.into_base_ref()
     }
-    #[inline]
-    pub fn fetch(&self) {
-        self.frozen.fetch()
-    }
 }
 impl<R: RbRef, const AUTO: bool> CachedCons<R, AUTO> {
     /// # Safety
@@ -49,10 +45,6 @@ impl<R: RbRef, const AUTO: bool> CachedCons<R, AUTO> {
     }
     pub fn into_base_ref(self) -> R {
         self.frozen.into_base_ref()
-    }
-    #[inline]
-    pub fn fetch(&self) {
-        self.frozen.fetch()
     }
 }
 

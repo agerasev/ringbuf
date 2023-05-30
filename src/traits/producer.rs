@@ -140,7 +140,7 @@ pub trait Producer: Observer {
 }
 
 #[macro_export]
-macro_rules! delegate_producer_methods {
+macro_rules! delegate_producer {
     ($ref:expr, $mut:expr) => {
         #[inline]
         unsafe fn set_write_index(&self, value: usize) {
@@ -177,6 +177,47 @@ macro_rules! delegate_producer_methods {
             Self::Item: Copy,
         {
             $mut(self).push_slice(elems)
+        }
+    };
+}
+
+pub trait FrozenProducer: Producer {
+    /// Commit changes to the ring buffer.
+    fn commit(&self);
+    /// Fetch changes from the ring buffer.
+    fn fetch(&self);
+
+    /// Commit changes to and fetch updates from the ring buffer.
+    fn sync(&self) {
+        self.commit();
+        self.fetch();
+    }
+
+    /// Discard new items pushed since last sync.
+    fn discard(&mut self);
+}
+
+#[macro_export]
+macro_rules! delegate_frozen_producer {
+    ($ref:expr, $mut:expr) => {
+        #[inline]
+        fn commit(&self) {
+            $ref(self).commit()
+        }
+
+        #[inline]
+        fn fetch(&self) {
+            $ref(self).fetch()
+        }
+
+        #[inline]
+        fn sync(&self) {
+            $ref(self).sync()
+        }
+
+        #[inline]
+        fn discard(&mut self) {
+            $mut(self).discard()
         }
     };
 }

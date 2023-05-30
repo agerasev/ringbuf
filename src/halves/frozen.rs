@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     rbs::based::{Based, RbRef},
-    traits::{Consumer, Observer, Producer},
+    traits::{Consumer, FrozenConsumer, FrozenProducer, Observer, Producer},
 };
 use core::{
     cell::Cell,
@@ -121,23 +121,17 @@ impl<R: RbRef> FrozenCons<R> {
         let this = ManuallyDrop::new(self);
         unsafe { ptr::read(&this.ref_) }
     }
-
-    /// Commit changes to the ring buffer.
-    pub fn commit(&self) {
-        unsafe { self.rb().set_read_index(self.read.get()) }
-    }
-    /// Fetch changes to the ring buffer.
-    pub fn fetch(&self) {
-        self.write.set(self.rb().write_index());
-    }
-    /// Commit changes and fetch updates from the ring buffer.
-    pub fn sync(&self) {
-        self.commit();
-        self.fetch();
-    }
     /// Commit and destroy `Self` returning underlying consumer.
     pub fn release(self) -> Cons<R> {
         unsafe { Cons::new(self.into_base_ref()) }
+    }
+}
+impl<R: RbRef> FrozenConsumer for FrozenCons<R> {
+    fn commit(&self) {
+        unsafe { self.rb().set_read_index(self.read.get()) }
+    }
+    fn fetch(&self) {
+        self.write.set(self.rb().write_index());
     }
 }
 
@@ -159,33 +153,26 @@ impl<R: RbRef> FrozenProd<R> {
         let this = ManuallyDrop::new(self);
         unsafe { ptr::read(&this.ref_) }
     }
-
-    /// Commit changes to the ring buffer.
-    pub fn commit(&self) {
+    /// Commit and destroy `Self` returning underlying producer.
+    pub fn release(self) -> Prod<R> {
+        unsafe { Prod::new(self.into_base_ref()) }
+    }
+}
+impl<R: RbRef> FrozenProducer for FrozenProd<R> {
+    fn commit(&self) {
         unsafe { self.rb().set_write_index(self.write.get()) }
     }
-    /// Fetch changes to the ring buffer.
-    pub fn fetch(&self) {
+    fn fetch(&self) {
         self.read.set(self.rb().read_index());
     }
-    /// Commit changes and fetch updates from the ring buffer.
-    pub fn sync(&self) {
-        self.commit();
-        self.fetch();
-    }
 
-    /// Discard new items pushed since last sync.
-    pub fn discard(&mut self) {
+    fn discard(&mut self) {
         let last_tail = self.rb().write_index();
         let (first, second) = unsafe { self.rb().unsafe_slices(last_tail, self.write.get()) };
         for item_mut in first.iter_mut().chain(second.iter_mut()) {
             unsafe { item_mut.assume_init_drop() };
         }
         self.write.set(last_tail);
-    }
-    /// Commit and destroy `Self` returning underlying producer.
-    pub fn release(self) -> Prod<R> {
-        unsafe { Prod::new(self.into_base_ref()) }
     }
 }
 

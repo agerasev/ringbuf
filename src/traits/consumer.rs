@@ -287,7 +287,7 @@ pub type Iter<'a, C: Consumer> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a,
 pub type IterMut<'a, C: Consumer> = Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
 
 #[macro_export]
-macro_rules! delegate_consumer_methods {
+macro_rules! delegate_consumer {
     ($ref:expr, $mut:expr) => {
         #[inline]
         unsafe fn set_read_index(&self, value: usize) {
@@ -349,6 +349,39 @@ macro_rules! delegate_consumer_methods {
         #[inline]
         fn clear(&mut self) -> usize {
             $mut(self).clear()
+        }
+    };
+}
+
+pub trait FrozenConsumer: Consumer {
+    /// Commit changes to the ring buffer.
+    fn commit(&self);
+    /// Fetch changes from the ring buffer.
+    fn fetch(&self);
+
+    /// Commit changes to and fetch updates from the ring buffer.
+    fn sync(&self) {
+        self.commit();
+        self.fetch();
+    }
+}
+
+#[macro_export]
+macro_rules! delegate_frozen_consumer {
+    ($ref:expr, $mut:expr) => {
+        #[inline]
+        fn commit(&self) {
+            $ref(self).commit()
+        }
+
+        #[inline]
+        fn fetch(&self) {
+            $ref(self).fetch()
+        }
+
+        #[inline]
+        fn sync(&self) {
+            $ref(self).sync()
         }
     };
 }
