@@ -290,22 +290,21 @@ pub type IterMut<'a, C: Consumer> = Chain<slice::IterMut<'a, C::Item>, slice::It
 macro_rules! delegate_consumer_methods {
     ($ref:expr, $mut:expr) => {
         #[inline]
+        unsafe fn set_read_index(&self, value: usize) {
+            $ref(self).set_read_index(value)
+        }
+        #[inline]
         unsafe fn advance_read_index(&self, count: usize) {
             $ref(self).advance_read_index(count)
         }
 
         #[inline]
-        unsafe fn unsafe_occupied_slices(&self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-            $ref(self).unsafe_occupied_slices()
-        }
-
-        #[inline]
-        fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        fn occupied_slices(&self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
             $ref(self).occupied_slices()
         }
 
         #[inline]
-        unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        unsafe fn occupied_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
             $mut(self).occupied_slices_mut()
         }
 
@@ -316,7 +315,7 @@ macro_rules! delegate_consumer_methods {
 
         #[inline]
         fn as_mut_slices(&mut self) -> (&mut [Self::Item], &mut [Self::Item]) {
-            $mut(self).as_slices_mut()
+            $mut(self).as_mut_slices()
         }
 
         #[inline]
@@ -333,17 +332,12 @@ macro_rules! delegate_consumer_methods {
         }
 
         #[inline]
-        fn pop_iter(&mut self) -> PopIter<'_, Self> {
-            $mut(self).pop_iter()
-        }
-
-        #[inline]
-        fn iter(&self) -> Iter<'_, Self> {
+        fn iter(&self) -> $crate::consumer::Iter<'_, Self> {
             $ref(self).iter()
         }
 
         #[inline]
-        fn iter_mut(&mut self) -> IterMut<'_, Self> {
+        fn iter_mut(&mut self) -> $crate::consumer::IterMut<'_, Self> {
             $mut(self).iter_mut()
         }
 
@@ -355,15 +349,6 @@ macro_rules! delegate_consumer_methods {
         #[inline]
         fn clear(&mut self) -> usize {
             $mut(self).clear()
-        }
-
-        #[inline]
-        #[cfg(feature = "std")]
-        fn write_into<S: Write>(&mut self, writer: &mut S, count: Option<usize>) -> io::Result<usize>
-        where
-            Self: Consumer<Item = u8>,
-        {
-            $mut(self).write_into(writer, count)
         }
     };
 }

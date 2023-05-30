@@ -8,7 +8,6 @@ use crate::{
     rbs::based::{Based, RbRef},
     traits::{observer::Observe, Consumer, Observer, Producer},
 };
-use core::mem::MaybeUninit;
 
 pub struct Obs<R: RbRef> {
     ref_: R,
@@ -65,21 +64,15 @@ impl<R: RbRef> Cons<R> {
 }
 
 impl<R: RbRef> Observer for Obs<R> {
-    type Item = <R::Target as Observer>::Item;
-
-    delegate_observer_methods!(Based::rb);
+    delegate_observer_methods!(R::Target, Based::rb);
 }
 
 impl<R: RbRef> Observer for Prod<R> {
-    type Item = <R::Target as Observer>::Item;
-
-    delegate_observer_methods!(Based::rb);
+    delegate_observer_methods!(R::Target, Based::rb);
 }
 
 impl<R: RbRef> Observer for Cons<R> {
-    type Item = <R::Target as Observer>::Item;
-
-    delegate_observer_methods!(Based::rb);
+    delegate_observer_methods!(R::Target, Based::rb);
 }
 
 impl<R: RbRef> Producer for Prod<R> {

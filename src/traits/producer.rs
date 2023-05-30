@@ -143,22 +143,21 @@ pub trait Producer: Observer {
 macro_rules! delegate_producer_methods {
     ($ref:expr, $mut:expr) => {
         #[inline]
+        unsafe fn set_write_index(&self, value: usize) {
+            $ref(self).set_write_index(value)
+        }
+        #[inline]
         unsafe fn advance_write_index(&self, count: usize) {
             $ref(self).advance_write_index(count)
         }
 
         #[inline]
-        unsafe fn unsafe_vacant_slices(&self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-            $ref(self).unsafe_vacant_slices()
-        }
-
-        #[inline]
-        fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        fn vacant_slices(&self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
             $ref(self).vacant_slices()
         }
 
         #[inline]
-        fn vacant_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        fn vacant_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
             $mut(self).vacant_slices_mut()
         }
 
@@ -168,8 +167,8 @@ macro_rules! delegate_producer_methods {
         }
 
         #[inline]
-        fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, mut iter: I) -> usize {
-            $mut(self).push_iter(elems)
+        fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, iter: I) -> usize {
+            $mut(self).push_iter(iter)
         }
 
         #[inline]
@@ -178,15 +177,6 @@ macro_rules! delegate_producer_methods {
             Self::Item: Copy,
         {
             $mut(self).push_slice(elems)
-        }
-
-        #[inline]
-        #[cfg(feature = "std")]
-        fn read_from<S: Read>(&mut self, reader: &mut S, count: Option<usize>) -> io::Result<usize>
-        where
-            Self: Producer<Item = u8>,
-        {
-            $mut(self).read_from(reader, count)
         }
     };
 }

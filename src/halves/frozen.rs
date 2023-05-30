@@ -13,24 +13,20 @@ use core::{
     ptr,
 };
 
-/// Caching read end of some ring buffer.
+/// Frozen read end of some ring buffer.
 ///
 /// A free space of removed items is not visible for an opposite write end until [`Self::commit`]/[`Self::sync`] is called or `Self` is dropped.
 /// Items inserted by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
-///
-/// Used to implement [`PostponedConsumer`](`crate::consumer::PostponedConsumer`).
 pub struct FrozenCons<R: RbRef> {
     pub(crate) ref_: R,
     read: Cell<usize>,
     write: Cell<usize>,
 }
 
-/// Caching write end of some ring buffer.
+/// Frozen write end of some ring buffer.
 ///
 /// Inserted items is not visible for an opposite write end until [`Self::commit`]/[`Self::sync`] is called or `Self` is dropped.
 /// A free space of items removed by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
-///
-/// Used to implement [`PostponedConsumer`](`crate::consumer::PostponedConsumer`).
 pub struct FrozenProd<R: RbRef> {
     pub(crate) ref_: R,
     read: Cell<usize>,

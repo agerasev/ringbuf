@@ -49,7 +49,9 @@ pub trait Observer: Sized {
 
 #[macro_export]
 macro_rules! delegate_observer_methods {
-    ($ref:expr) => {
+    ($type:ty, $ref:expr) => {
+        type Item = <$type as $crate::traits::Observer>::Item;
+
         #[inline]
         fn capacity(&self) -> core::num::NonZeroUsize {
             $ref(self).capacity()
@@ -65,7 +67,11 @@ macro_rules! delegate_observer_methods {
         }
 
         #[inline]
-        unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        unsafe fn unsafe_slices(
+            &self,
+            start: usize,
+            end: usize,
+        ) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
             $ref(self).unsafe_slices(start, end)
         }
 

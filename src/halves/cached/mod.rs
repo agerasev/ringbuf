@@ -1,3 +1,6 @@
+mod frozen;
+pub use frozen::*;
+
 use super::{
     frozen::{FrozenCons, FrozenProd},
     macros::*,
@@ -9,16 +12,16 @@ use crate::{
 use core::{mem::MaybeUninit, num::NonZeroUsize};
 
 /// Producer wrapper of ring buffer.
-pub struct CachedProd<R: RbRef> {
+pub struct CachedProd<R: RbRef, const AUTO: bool = true> {
     frozen: FrozenProd<R>,
 }
 
 /// Consumer wrapper of ring buffer.
-pub struct CachedCons<R: RbRef> {
+pub struct CachedCons<R: RbRef, const AUTO: bool = true> {
     frozen: FrozenCons<R>,
 }
 
-impl<R: RbRef> CachedProd<R> {
+impl<R: RbRef, const AUTO: bool> CachedProd<R, AUTO> {
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
@@ -30,9 +33,12 @@ impl<R: RbRef> CachedProd<R> {
     pub fn into_base_ref(self) -> R {
         self.frozen.into_base_ref()
     }
+    #[inline]
+    pub fn fetch(&self) {
+        self.frozen.fetch()
+    }
 }
-
-impl<R: RbRef> CachedCons<R> {
+impl<R: RbRef, const AUTO: bool> CachedCons<R, AUTO> {
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
@@ -44,9 +50,13 @@ impl<R: RbRef> CachedCons<R> {
     pub fn into_base_ref(self) -> R {
         self.frozen.into_base_ref()
     }
+    #[inline]
+    pub fn fetch(&self) {
+        self.frozen.fetch()
+    }
 }
 
-impl<R: RbRef> Observer for CachedProd<R> {
+impl<R: RbRef, const AUTO: bool> Observer for CachedProd<R, AUTO> {
     type Item = <R::Target as Observer>::Item;
 
     #[inline]
@@ -56,7 +66,9 @@ impl<R: RbRef> Observer for CachedProd<R> {
 
     #[inline]
     fn read_index(&self) -> usize {
-        self.frozen.fetch();
+        if AUTO {
+            self.frozen.fetch();
+        }
         self.frozen.read_index()
     }
     #[inline]
@@ -69,7 +81,7 @@ impl<R: RbRef> Observer for CachedProd<R> {
     }
 }
 
-impl<R: RbRef> Observer for CachedCons<R> {
+impl<R: RbRef, const AUTO: bool> Observer for CachedCons<R, AUTO> {
     type Item = <R::Target as Observer>::Item;
 
     #[inline]
@@ -83,7 +95,9 @@ impl<R: RbRef> Observer for CachedCons<R> {
     }
     #[inline]
     fn write_index(&self) -> usize {
-        self.frozen.fetch();
+        if AUTO {
+            self.frozen.fetch();
+        }
         self.frozen.write_index()
     }
 
@@ -92,48 +106,53 @@ impl<R: RbRef> Observer for CachedCons<R> {
     }
 }
 
-impl<R: RbRef> Producer for CachedProd<R> {
+impl<R: RbRef, const AUTO: bool> Producer for CachedProd<R, AUTO> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         self.frozen.set_write_index(value);
-        self.frozen.commit();
+        if AUTO {
+            self.frozen.commit();
+        }
     }
 
     fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
-        if self.frozen.is_full() {
+        if AUTO && self.frozen.is_full() {
             self.frozen.fetch();
         }
         let r = self.frozen.try_push(elem);
-        if r.is_ok() {
+        if AUTO && r.is_ok() {
             self.frozen.commit();
         }
         r
     }
 }
 
-impl<R: RbRef> Consumer for CachedCons<R> {
+impl<R: RbRef, const AUTO: bool> Consumer for CachedCons<R, AUTO> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
         self.frozen.set_read_index(value);
-        self.frozen.commit();
+        if AUTO {
+            self.frozen.commit();
+        }
     }
 
     fn try_pop(&mut self) -> Option<<Self as Observer>::Item> {
-        if self.frozen.is_empty() {
+        if AUTO && self.frozen.is_empty() {
             self.frozen.fetch();
         }
         let r = self.frozen.try_pop();
-        if r.is_some() {
+        if AUTO && r.is_some() {
             self.frozen.commit();
         }
         r
     }
 }
 
+// TODO: Handle AUTO
 impl_prod_traits!(CachedProd);
 impl_cons_traits!(CachedCons);
 
-unsafe impl<R: RbRef> Based for CachedProd<R> {
+unsafe impl<R: RbRef, const AUTO: bool> Based for CachedProd<R, AUTO> {
     type Rb = R::Target;
     type RbRef = R;
     fn rb(&self) -> &Self::Rb {
@@ -143,7 +162,7 @@ unsafe impl<R: RbRef> Based for CachedProd<R> {
         self.frozen.rb_ref()
     }
 }
-unsafe impl<R: RbRef> Based for CachedCons<R> {
+unsafe impl<R: RbRef, const AUTO: bool> Based for CachedCons<R, AUTO> {
     type Rb = R::Target;
     type RbRef = R;
     fn rb(&self) -> &Self::Rb {
