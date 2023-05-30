@@ -4,8 +4,8 @@ use crate::storage::Heap;
 use crate::{
     consumer::Consumer,
     halves::{
-        based::BaseRef,
         direct::{Cons, Prod},
+        Based,
     },
     producer::Producer,
     storage::{Shared, Static, Storage},
@@ -127,7 +127,7 @@ impl<S: Storage> LocalRb<S> {
 
 rb_impl_init!(LocalRb);
 
-impl<S: Storage> BaseRef for LocalRb<S> {
+impl<S: Storage> Based for LocalRb<S> {
     type Base = Self;
     fn base_deref(&self) -> &Self::Base {
         self

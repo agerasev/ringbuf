@@ -1,24 +1,31 @@
-use super::{
-    based::{ConsRef, ProdRef},
-    macros::*,
-};
+use super::{macros::*, Based};
 use crate::{
+    direct::Obs,
     frozen::{FrozenCons, FrozenProd},
-    traits::{Consumer, Observer, Producer},
+    traits::{observer::Observe, Consumer, Observer, Producer},
 };
-use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Deref};
+use core::{mem::MaybeUninit, num::NonZeroUsize};
 
 /// Producer wrapper of ring buffer.
-pub struct CachedProd<R: ProdRef> {
+pub struct CachedProd<R: Based>
+where
+    R::Base: Producer,
+{
     frozen: FrozenProd<R>,
 }
 
 /// Consumer wrapper of ring buffer.
-pub struct CachedCons<R: ConsRef> {
+pub struct CachedCons<R: Based>
+where
+    R::Base: Consumer,
+{
     frozen: FrozenCons<R>,
 }
 
-impl<R: ProdRef> CachedProd<R> {
+impl<R: Based> CachedProd<R>
+where
+    R::Base: Producer,
+{
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
@@ -32,7 +39,10 @@ impl<R: ProdRef> CachedProd<R> {
     }
 }
 
-impl<R: ConsRef> CachedCons<R> {
+impl<R: Based> CachedCons<R>
+where
+    R::Base: Consumer,
+{
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
@@ -46,7 +56,10 @@ impl<R: ConsRef> CachedCons<R> {
     }
 }
 
-impl<R: ProdRef> Observer for CachedProd<R> {
+impl<R: Based> Observer for CachedProd<R>
+where
+    R::Base: Producer,
+{
     type Item = <R::Base as Observer>::Item;
 
     #[inline]
@@ -69,7 +82,10 @@ impl<R: ProdRef> Observer for CachedProd<R> {
     }
 }
 
-impl<R: ConsRef> Observer for CachedCons<R> {
+impl<R: Based> Observer for CachedCons<R>
+where
+    R::Base: Consumer,
+{
     type Item = <R::Base as Observer>::Item;
 
     #[inline]
@@ -92,7 +108,10 @@ impl<R: ConsRef> Observer for CachedCons<R> {
     }
 }
 
-impl<R: ProdRef> Producer for CachedProd<R> {
+impl<R: Based> Producer for CachedProd<R>
+where
+    R::Base: Producer,
+{
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         self.frozen.set_write_index(value);
@@ -111,7 +130,10 @@ impl<R: ProdRef> Producer for CachedProd<R> {
     }
 }
 
-impl<R: ConsRef> Consumer for CachedCons<R> {
+impl<R: Based> Consumer for CachedCons<R>
+where
+    R::Base: Consumer,
+{
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
         self.frozen.set_read_index(value);
@@ -136,15 +158,40 @@ impl_cons_traits!(CachedCons);
 impl_prod_freeze!(CachedProd);
 impl_cons_freeze!(CachedCons);
 
-impl<R: ProdRef> ProdRef for CachedProd<R> {
+impl<R: Based> Based for CachedProd<R>
+where
+    R::Base: Producer,
+{
     type Base = Self;
     fn base_deref(&self) -> &Self::Base {
         self
     }
 }
-impl<R: ConsRef> ConsRef for CachedCons<R> {
+impl<R: Based> Based for CachedCons<R>
+where
+    R::Base: Consumer,
+{
     type Base = Self;
     fn base_deref(&self) -> &Self::Base {
         self
+    }
+}
+
+impl<R: Based + Clone> Observe for CachedProd<R>
+where
+    R::Base: Producer,
+{
+    type Obs = Obs<R>;
+    fn observe(&self) -> Self::Obs {
+        unsafe { Obs::new(self.frozen.ref_.clone()) }
+    }
+}
+impl<R: Based + Clone> Observe for CachedCons<R>
+where
+    R::Base: Consumer,
+{
+    type Obs = Obs<R>;
+    fn observe(&self) -> Self::Obs {
+        unsafe { Obs::new(self.frozen.ref_.clone()) }
     }
 }

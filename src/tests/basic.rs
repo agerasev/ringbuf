@@ -1,8 +1,10 @@
 use super::Rb;
-use crate::{storage::Static, traits::*};
-use core::ops::Deref;
+use crate::{
+    storage::Static,
+    traits::{observer::Observe, *},
+};
 
-fn indices(this: &impl Deref<Target = impl RingBuffer>) -> (usize, usize) {
+fn indices(this: impl Observer) -> (usize, usize) {
     (this.read_index(), this.write_index())
 }
 
@@ -27,16 +29,16 @@ fn try_push() {
     let mut rb = Rb::<Static<i32, 2>>::default();
     let (mut prod, _) = rb.split_ref();
 
-    assert_eq!(indices(prod.base_ref()), (0, 0));
+    assert_eq!(indices(prod.observe()), (0, 0));
 
     assert_eq!(prod.try_push(123), Ok(()));
-    assert_eq!(indices(prod.base_ref()), (0, 1));
+    assert_eq!(indices(prod.observe()), (0, 1));
 
     assert_eq!(prod.try_push(234), Ok(()));
-    assert_eq!(indices(prod.base_ref()), (0, 2));
+    assert_eq!(indices(prod.observe()), (0, 2));
 
     assert_eq!(prod.try_push(345), Err(345));
-    assert_eq!(indices(prod.base_ref()), (0, 2));
+    assert_eq!(indices(prod.observe()), (0, 2));
 }
 
 #[test]
@@ -44,10 +46,10 @@ fn pop_empty() {
     let mut rb = Rb::<Static<i32, 2>>::default();
     let (_, mut cons) = rb.split_ref();
 
-    assert_eq!(indices(cons.base_ref()), (0, 0));
+    assert_eq!(indices(cons.observe()), (0, 0));
 
     assert_eq!(cons.try_pop(), None);
-    assert_eq!(indices(cons.base_ref()), (0, 0));
+    assert_eq!(indices(cons.observe()), (0, 0));
 }
 
 #[test]
@@ -58,17 +60,17 @@ fn push_pop_one() {
 
     const MOD: usize = 2 * CAP;
     let values = [12, 34, 56, 78, 90];
-    assert_eq!(indices(cons.base_ref()), (0, 0));
+    assert_eq!(indices(cons.observe()), (0, 0));
 
     for (i, v) in values.iter().enumerate() {
         assert_eq!(prod.try_push(*v), Ok(()));
-        assert_eq!(indices(cons.base_ref()), (i % MOD, (i + 1) % MOD));
+        assert_eq!(indices(cons.observe()), (i % MOD, (i + 1) % MOD));
 
         assert_eq!(cons.try_pop().unwrap(), *v);
-        assert_eq!(indices(cons.base_ref()), ((i + 1) % MOD, (i + 1) % MOD));
+        assert_eq!(indices(cons.observe()), ((i + 1) % MOD, (i + 1) % MOD));
 
         assert_eq!(cons.try_pop(), None);
-        assert_eq!(indices(cons.base_ref()), ((i + 1) % MOD, (i + 1) % MOD));
+        assert_eq!(indices(cons.observe()), ((i + 1) % MOD, (i + 1) % MOD));
     }
 }
 
@@ -80,26 +82,26 @@ fn push_pop_all() {
 
     const MOD: usize = 2 * CAP;
     let values = [(12, 34, 13), (56, 78, 57), (90, 10, 91)];
-    assert_eq!(indices(cons.base_ref()), (0, 0));
+    assert_eq!(indices(cons.observe()), (0, 0));
 
     for (i, v) in values.iter().enumerate() {
         assert_eq!(prod.try_push(v.0), Ok(()));
-        assert_eq!(indices(cons.base_ref()), (CAP * i % MOD, (CAP * i + 1) % MOD));
+        assert_eq!(indices(cons.observe()), (CAP * i % MOD, (CAP * i + 1) % MOD));
 
         assert_eq!(prod.try_push(v.1), Ok(()));
-        assert_eq!(indices(cons.base_ref()), (CAP * i % MOD, (CAP * i + 2) % MOD));
+        assert_eq!(indices(cons.observe()), (CAP * i % MOD, (CAP * i + 2) % MOD));
 
         assert_eq!(prod.try_push(v.2).unwrap_err(), v.2);
-        assert_eq!(indices(cons.base_ref()), (CAP * i % MOD, (CAP * i + 2) % MOD));
+        assert_eq!(indices(cons.observe()), (CAP * i % MOD, (CAP * i + 2) % MOD));
 
         assert_eq!(cons.try_pop().unwrap(), v.0);
-        assert_eq!(indices(cons.base_ref()), ((CAP * i + 1) % MOD, (CAP * i + 2) % MOD));
+        assert_eq!(indices(cons.observe()), ((CAP * i + 1) % MOD, (CAP * i + 2) % MOD));
 
         assert_eq!(cons.try_pop().unwrap(), v.1);
-        assert_eq!(indices(cons.base_ref()), ((CAP * i + 2) % MOD, (CAP * i + 2) % MOD));
+        assert_eq!(indices(cons.observe()), ((CAP * i + 2) % MOD, (CAP * i + 2) % MOD));
 
         assert_eq!(cons.try_pop(), None);
-        assert_eq!(indices(cons.base_ref()), ((CAP * i + 2) % MOD, (CAP * i + 2) % MOD));
+        assert_eq!(indices(cons.observe()), ((CAP * i + 2) % MOD, (CAP * i + 2) % MOD));
     }
 }
 

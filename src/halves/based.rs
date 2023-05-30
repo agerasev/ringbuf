@@ -1,44 +1,28 @@
-use crate::traits::{Consumer, Observer, Producer};
-use core::ops::Deref;
+use crate::traits::Observer;
+#[cfg(feature = "alloc")]
+use alloc::{rc::Rc, sync::Arc};
 
-pub trait BaseRef {
+pub trait Based: Sized {
     type Base: Observer;
     fn base_deref(&self) -> &Self::Base;
 }
-impl<R: Deref> BaseRef for R
-where
-    R::Target: Observer,
-{
-    type Base = R::Target;
+impl<'a, O: Observer> Based for &'a O {
+    type Base = O;
     fn base_deref(&self) -> &Self::Base {
-        self.deref()
+        self
     }
 }
-
-pub trait ProdRef {
-    type Base: Producer;
-    fn base_deref(&self) -> &Self::Base;
-}
-pub trait ConsRef {
-    type Base: Consumer;
-    fn base_deref(&self) -> &Self::Base;
-}
-
-impl<R: BaseRef> ProdRef for R
-where
-    R::Base: Producer,
-{
-    type Base = R::Base;
+#[cfg(feature = "alloc")]
+impl<O: Observer> Based for Rc<O> {
+    type Base = O;
     fn base_deref(&self) -> &Self::Base {
-        self.base_deref()
+        self
     }
 }
-impl<R: BaseRef> ConsRef for R
-where
-    R::Base: Consumer,
-{
-    type Base = R::Base;
+#[cfg(feature = "alloc")]
+impl<O: Observer> Based for Arc<O> {
+    type Base = O;
     fn base_deref(&self) -> &Self::Base {
-        self.base_deref()
+        self
     }
 }

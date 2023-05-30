@@ -90,3 +90,8 @@ macro_rules! delegate_observer_methods {
         }
     };
 }
+
+pub trait Observe {
+    type Obs: Observer;
+    fn observe(&self) -> Self::Obs;
+}

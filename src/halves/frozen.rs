@@ -1,8 +1,5 @@
-use super::{
-    based::{ConsRef, ProdRef},
-    macros::*,
-};
-use crate::traits::{Consumer, Observer, Producer};
+use super::{macros::*, Based};
+use crate::traits::{observer::Observe, Consumer, Observer, Producer};
 use core::{
     cell::Cell,
     mem::{ManuallyDrop, MaybeUninit},
@@ -16,7 +13,10 @@ use core::{
 /// Items inserted by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
 ///
 /// Used to implement [`PostponedConsumer`](`crate::consumer::PostponedConsumer`).
-pub struct FrozenCons<R: ConsRef> {
+pub struct FrozenCons<R: Based>
+where
+    R::Base: Consumer,
+{
     pub(crate) ref_: R,
     read: Cell<usize>,
     write: Cell<usize>,
@@ -28,24 +28,36 @@ pub struct FrozenCons<R: ConsRef> {
 /// A free space of items removed by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
 ///
 /// Used to implement [`PostponedConsumer`](`crate::consumer::PostponedConsumer`).
-pub struct FrozenProd<R: ProdRef> {
+pub struct FrozenProd<R: Based>
+where
+    R::Base: Producer,
+{
     pub(crate) ref_: R,
     read: Cell<usize>,
     write: Cell<usize>,
 }
 
-impl<R: ConsRef> FrozenCons<R> {
+impl<R: Based> FrozenCons<R>
+where
+    R::Base: Consumer,
+{
     fn base(&self) -> &R::Base {
         self.ref_.base_deref()
     }
 }
-impl<R: ProdRef> FrozenProd<R> {
+impl<R: Based> FrozenProd<R>
+where
+    R::Base: Producer,
+{
     fn base(&self) -> &R::Base {
         self.ref_.base_deref()
     }
 }
 
-impl<R: ConsRef> Observer for FrozenCons<R> {
+impl<R: Based> Observer for FrozenCons<R>
+where
+    R::Base: Consumer,
+{
     type Item = <R::Base as Observer>::Item;
 
     #[inline]
@@ -67,7 +79,10 @@ impl<R: ConsRef> Observer for FrozenCons<R> {
     }
 }
 
-impl<R: ProdRef> Observer for FrozenProd<R> {
+impl<R: Based> Observer for FrozenProd<R>
+where
+    R::Base: Producer,
+{
     type Item = <R::Base as Observer>::Item;
 
     #[inline]
@@ -89,33 +104,48 @@ impl<R: ProdRef> Observer for FrozenProd<R> {
     }
 }
 
-impl<R: ConsRef> Consumer for FrozenCons<R> {
+impl<R: Based> Consumer for FrozenCons<R>
+where
+    R::Base: Consumer,
+{
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
         self.read.set(value);
     }
 }
 
-impl<R: ProdRef> Producer for FrozenProd<R> {
+impl<R: Based> Producer for FrozenProd<R>
+where
+    R::Base: Producer,
+{
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         self.write.set(value);
     }
 }
 
-impl<R: ConsRef> Drop for FrozenCons<R> {
+impl<R: Based> Drop for FrozenCons<R>
+where
+    R::Base: Consumer,
+{
     fn drop(&mut self) {
         self.commit();
     }
 }
 
-impl<R: ProdRef> Drop for FrozenProd<R> {
+impl<R: Based> Drop for FrozenProd<R>
+where
+    R::Base: Producer,
+{
     fn drop(&mut self) {
         self.commit();
     }
 }
 
-impl<R: ConsRef> FrozenCons<R> {
+impl<R: Based> FrozenCons<R>
+where
+    R::Base: Consumer,
+{
     /// Create new ring buffer cache.
     ///
     /// # Safety
@@ -150,7 +180,10 @@ impl<R: ConsRef> FrozenCons<R> {
     }
 }
 
-impl<R: ProdRef> FrozenProd<R> {
+impl<R: Based> FrozenProd<R>
+where
+    R::Base: Producer,
+{
     /// Create new ring buffer cache.
     ///
     /// # Safety
@@ -198,15 +231,40 @@ impl<R: ProdRef> FrozenProd<R> {
 impl_prod_traits!(FrozenProd);
 impl_cons_traits!(FrozenCons);
 
-impl<R: ProdRef> ProdRef for FrozenProd<R> {
+impl<R: Based> Based for FrozenCons<R>
+where
+    R::Base: Consumer,
+{
     type Base = Self;
     fn base_deref(&self) -> &Self::Base {
         self
     }
 }
-impl<R: ConsRef> ConsRef for FrozenCons<R> {
+impl<R: Based> Based for FrozenProd<R>
+where
+    R::Base: Producer,
+{
     type Base = Self;
     fn base_deref(&self) -> &Self::Base {
         self
+    }
+}
+
+impl<R: Based + Clone> Observe for FrozenProd<R>
+where
+    R::Base: Producer + Observe,
+{
+    type Obs = <R::Base as Observe>::Obs;
+    fn observe(&self) -> Self::Obs {
+        self.base().observe()
+    }
+}
+impl<R: Based + Clone> Observe for FrozenCons<R>
+where
+    R::Base: Consumer + Observe,
+{
+    type Obs = <R::Base as Observe>::Obs;
+    fn observe(&self) -> Self::Obs {
+        self.base().observe()
     }
 }

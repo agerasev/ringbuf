@@ -4,8 +4,8 @@ use crate::storage::Heap;
 use crate::{
     consumer::Consumer,
     halves::{
-        based::BaseRef,
         cached::{CachedCons, CachedProd},
+        Based,
     },
     producer::Producer,
     storage::{Shared, Static, Storage},
@@ -155,7 +155,7 @@ impl<S: Storage> SharedRb<S> {
 
 rb_impl_init!(SharedRb);
 
-impl<S: Storage> BaseRef for SharedRb<S> {
+impl<S: Storage> Based for SharedRb<S> {
     type Base = Self;
     fn base_deref(&self) -> &Self::Base {
         self
