@@ -5,6 +5,7 @@ use super::{
 };
 use crate::{
     rbs::ref_::RbRef,
+    ref_::AsRb,
     traits::{observer::Observe, Consumer, Observer, Producer},
 };
 use core::{mem::MaybeUninit, num::NonZeroUsize};
@@ -43,6 +44,19 @@ impl<R: RbRef> CachedCons<R> {
     }
     pub fn into_rb_ref(self) -> R {
         self.frozen.into_rb_ref()
+    }
+}
+
+unsafe impl<R: RbRef> AsRb for CachedProd<R> {
+    type Rb = R::Target;
+    fn as_rb(&self) -> &Self::Rb {
+        self.frozen.rb()
+    }
+}
+unsafe impl<R: RbRef> AsRb for CachedCons<R> {
+    type Rb = R::Target;
+    fn as_rb(&self) -> &Self::Rb {
+        self.frozen.rb()
     }
 }
 

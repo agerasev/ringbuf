@@ -18,7 +18,7 @@ use core::{
 /// A free space of removed items is not visible for an opposite write end until [`Self::commit`]/[`Self::sync`] is called or `Self` is dropped.
 /// Items inserted by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
 pub struct FrozenCons<R: RbRef> {
-    pub(crate) ref_: R,
+    rb: R,
     read: Cell<usize>,
     write: Cell<usize>,
 }
@@ -28,7 +28,7 @@ pub struct FrozenCons<R: RbRef> {
 /// Inserted items is not visible for an opposite write end until [`Self::commit`]/[`Self::sync`] is called or `Self` is dropped.
 /// A free space of items removed by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
 pub struct FrozenProd<R: RbRef> {
-    pub(crate) ref_: R,
+    rb: R,
     read: Cell<usize>,
     write: Cell<usize>,
 }
@@ -109,20 +109,20 @@ impl<R: RbRef> FrozenCons<R> {
     /// # Safety
     ///
     /// There must be only one instance containing the same ring buffer reference.
-    pub unsafe fn new(ref_: R) -> Self {
+    pub unsafe fn new(rb: R) -> Self {
         Self {
-            read: Cell::new(ref_.deref().read_index()),
-            write: Cell::new(ref_.deref().write_index()),
-            ref_,
+            read: Cell::new(rb.deref().read_index()),
+            write: Cell::new(rb.deref().write_index()),
+            rb,
         }
     }
     pub fn rb(&self) -> &R::Target {
-        self.ref_.deref()
+        self.rb.deref()
     }
     pub fn into_rb_ref(self) -> R {
         self.commit();
         let this = ManuallyDrop::new(self);
-        unsafe { ptr::read(&this.ref_) }
+        unsafe { ptr::read(&this.rb) }
     }
     /// Commit and destroy `Self` returning underlying consumer.
     pub fn release(self) -> Cons<R> {
@@ -150,20 +150,20 @@ impl<R: RbRef> FrozenProd<R> {
     /// # Safety
     ///
     /// There must be only one instance containing the same ring buffer reference.
-    pub unsafe fn new(ref_: R) -> Self {
+    pub unsafe fn new(rb: R) -> Self {
         Self {
-            read: Cell::new(ref_.deref().read_index()),
-            write: Cell::new(ref_.deref().write_index()),
-            ref_,
+            read: Cell::new(rb.deref().read_index()),
+            write: Cell::new(rb.deref().write_index()),
+            rb,
         }
     }
     pub fn rb(&self) -> &R::Target {
-        self.ref_.deref()
+        self.rb.deref()
     }
     pub fn into_rb_ref(self) -> R {
         self.commit();
         let this = ManuallyDrop::new(self);
-        unsafe { ptr::read(&this.ref_) }
+        unsafe { ptr::read(&this.rb) }
     }
     /// Commit and destroy `Self` returning underlying producer.
     pub fn release(self) -> Prod<R> {
@@ -201,12 +201,12 @@ impl_prod_traits!(FrozenProd);
 impl<R: RbRef> Observe for FrozenProd<R> {
     type Obs = Obs<R>;
     fn observe(&self) -> Self::Obs {
-        Obs::new(self.ref_.clone())
+        Obs::new(self.rb.clone())
     }
 }
 impl<R: RbRef> Observe for FrozenCons<R> {
     type Obs = Obs<R>;
     fn observe(&self) -> Self::Obs {
-        Obs::new(self.ref_.clone())
+        Obs::new(self.rb.clone())
     }
 }

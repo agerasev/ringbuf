@@ -1,15 +1,14 @@
-mod alias;
-pub mod consumer;
-pub mod index;
-pub mod producer;
-mod utils;
+pub mod halves;
+pub mod rb;
+pub mod sync;
+pub mod traits;
 
-pub mod traits {
-    pub use crate::consumer::BlockingConsumer;
-    pub use crate::producer::BlockingProducer;
-}
-
-pub use alias::*;
+//mod alias;
+//pub mod consumer;
+//pub mod index;
+//pub mod producer;
+//pub mod semaphore;
+//mod utils;
 
 #[cfg(test)]
 mod tests;

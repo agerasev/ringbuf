@@ -10,5 +10,9 @@ keywords = ["blocking", "spsc", "ring-buffer", "rb", "fifo"]
 categories = ["concurrency", "data-structures"]
 license.workspace = true
 
+[features]
+default = ["std"]
+std = []
+
 [dependencies]
 ringbuf = { workspace = true }

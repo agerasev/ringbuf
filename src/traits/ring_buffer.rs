@@ -50,6 +50,29 @@ pub trait RingBuffer: Observer + Consumer + Producer {
     }
 }
 
+#[macro_export]
+macro_rules! delegate_ring_buffer {
+    ($ref:expr, $mut:expr) => {
+        #[inline]
+        fn push_overwrite(&mut self, elem: Self::Item) -> Option<Self::Item> {
+            $mut(self).push_overwrite(elem)
+        }
+
+        #[inline]
+        fn push_iter_overwrite<I: Iterator<Item = Self::Item>>(&mut self, iter: I) {
+            $mut(self).push_iter_overwrite(iter)
+        }
+
+        #[inline]
+        fn push_slice_overwrite(&mut self, elems: &[Self::Item])
+        where
+            Self::Item: Copy,
+        {
+            $mut(self).push_slice_overwrite(elems)
+        }
+    };
+}
+
 pub trait Split {
     type Prod: Producer;
     type Cons: Consumer;
