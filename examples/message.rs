@@ -3,7 +3,7 @@ use std::{io::Read, thread, time::Duration};
 
 fn main() {
     let buf = HeapRb::<u8>::new(10);
-    let (mut prod, mut cons) = buf.split_arc();
+    let (mut prod, mut cons) = buf.split();
 
     let smsg = "The quick brown fox jumps over the lazy dog";
 

@@ -30,7 +30,7 @@ use std::thread;
 use ringbuf::{SharedRb, storage::Heap, traits::*};
 
 let rb = SharedRb::<Heap<i32>>::new(256);
-let (mut prod, mut cons) = rb.split_arc();
+let (mut prod, mut cons) = rb.split();
 thread::spawn(move || {
     prod.try_push(123).unwrap();
 })
