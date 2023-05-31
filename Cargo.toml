@@ -29,6 +29,7 @@ default = ["std"]
 alloc = []
 std = ["alloc"]
 bench = []
+test_local = []
 
 [dependencies]
 crossbeam-utils = { version = "0.8", default-features = false }

@@ -1,3 +1,6 @@
+#[cfg(feature = "test_local")]
+use crate::LocalRb as Rb;
+#[cfg(not(feature = "test_local"))]
 use crate::SharedRb as Rb;
 
 mod access;

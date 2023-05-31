@@ -4,17 +4,6 @@ use test::{black_box, Bencher};
 const RB_SIZE: usize = 256;
 
 #[bench]
-fn make_frozen(b: &mut Bencher) {
-    let buf = SharedRb::<Static<u64, RB_SIZE>>::default();
-    let (mut prod, mut cons) = buf.split();
-    prod.push_slice(&[1; RB_SIZE / 2]);
-    b.iter(|| {
-        black_box(prod.freeze());
-        black_box(cons.freeze());
-    });
-}
-
-#[bench]
 fn advance(b: &mut Bencher) {
     let buf = SharedRb::<Static<u64, RB_SIZE>>::default();
     let (mut prod, cons) = buf.split();
@@ -22,17 +11,6 @@ fn advance(b: &mut Bencher) {
     b.iter(|| {
         unsafe { prod.advance_write_index(1) };
         unsafe { cons.advance_read_index(1) };
-    });
-}
-
-#[bench]
-fn advance_frozen(b: &mut Bencher) {
-    let buf = SharedRb::<Static<u64, RB_SIZE>>::default();
-    let (mut prod, mut cons) = buf.split();
-    prod.push_slice(&[1; RB_SIZE / 2]);
-    b.iter(|| {
-        unsafe { prod.freeze().advance_write_index(1) };
-        unsafe { cons.freeze().advance_read_index(1) };
     });
 }
 

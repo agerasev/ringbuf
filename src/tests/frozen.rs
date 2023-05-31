@@ -1,16 +1,19 @@
 use super::Rb;
-use crate::{storage::Static, traits::*};
+use crate::{
+    halves::frozen::{FrozenCons, FrozenProd},
+    storage::Static,
+    traits::{ring_buffer::Split, *},
+};
 
 #[test]
 fn producer() {
-    let mut rb = Rb::<Static<i32, 2>>::default();
-    let (mut prod, mut cons) = rb.split_ref();
-    prod.try_push(0).unwrap();
+    let rb = Rb::<Static<i32, 2>>::default();
+    let (mut frozen_prod, mut cons) = unsafe { (FrozenProd::new(&rb), <&mut Rb<_> as Split>::Cons::new(&rb)) };
+    frozen_prod.try_push(0).unwrap();
+    frozen_prod.sync();
     assert!(cons.iter().cloned().eq(0..1));
 
     {
-        let mut frozen_prod = prod.freeze();
-
         frozen_prod.try_push(1).unwrap();
         assert!(cons.iter().cloned().eq(0..1));
         assert_eq!(cons.occupied_len(), 1);
@@ -31,22 +34,22 @@ fn producer() {
         assert_eq!(cons.occupied_len(), 1);
         assert_eq!(frozen_prod.occupied_len(), 2);
     }
+    frozen_prod.sync();
 
     assert!(cons.iter().cloned().eq(1..3));
     assert_eq!(cons.occupied_len(), 2);
-    assert_eq!(prod.occupied_len(), 2);
+    assert_eq!(frozen_prod.occupied_len(), 2);
 }
 
 #[test]
 fn discard() {
-    let mut rb = Rb::<Static<i32, 10>>::default();
-    let (mut prod, cons) = rb.split_ref();
-    prod.try_push(0).unwrap();
+    let rb = Rb::<Static<i32, 10>>::default();
+    let (mut frozen_prod, cons) = unsafe { (FrozenProd::new(&rb), <&mut Rb<_> as Split>::Cons::new(&rb)) };
+    frozen_prod.try_push(0).unwrap();
+    frozen_prod.sync();
     assert!(cons.iter().cloned().eq(0..1));
 
     {
-        let mut frozen_prod = prod.freeze();
-
         frozen_prod.try_push(1).unwrap();
         assert_eq!(cons.occupied_len(), 1);
         assert_eq!(frozen_prod.occupied_len(), 2);
@@ -68,23 +71,23 @@ fn discard() {
         assert_eq!(cons.occupied_len(), 2);
         assert_eq!(frozen_prod.occupied_len(), 3);
     }
+    frozen_prod.sync();
 
     assert!(cons.iter().cloned().eq(0..3));
     assert_eq!(cons.occupied_len(), 3);
-    assert_eq!(prod.occupied_len(), 3);
+    assert_eq!(frozen_prod.occupied_len(), 3);
 }
 
 #[test]
 fn consumer() {
-    let mut rb = Rb::<Static<i32, 10>>::default();
-    let (mut prod, mut cons) = rb.split_ref();
+    let rb = Rb::<Static<i32, 10>>::default();
+    let (mut prod, mut frozen_cons) = unsafe { (<&mut Rb<_> as Split>::Prod::new(&rb), FrozenCons::new(&rb)) };
     prod.try_push(0).unwrap();
     prod.try_push(1).unwrap();
-    assert!(cons.iter().cloned().eq(0..2));
+    frozen_cons.sync();
+    assert!(frozen_cons.iter().cloned().eq(0..2));
 
     {
-        let mut frozen_cons = cons.freeze();
-
         assert_eq!(frozen_cons.try_pop().unwrap(), 0);
         assert!(frozen_cons.iter().cloned().eq(1..2));
         assert_eq!(frozen_cons.occupied_len(), 1);
@@ -105,8 +108,9 @@ fn consumer() {
         assert_eq!(frozen_cons.occupied_len(), 1);
         assert_eq!(prod.occupied_len(), 2);
     }
+    frozen_cons.sync();
 
-    assert!(cons.iter().cloned().eq(2..3));
-    assert_eq!(cons.occupied_len(), 1);
+    assert!(frozen_cons.iter().cloned().eq(2..3));
+    assert_eq!(frozen_cons.occupied_len(), 1);
     assert_eq!(prod.occupied_len(), 1);
 }

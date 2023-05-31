@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     rbs::ref_::RbRef,
-    traits::{observer::Observe, Consumer, FrozenConsumer, FrozenProducer, Observer, Producer},
+    traits::{observer::Observe, Consumer, Observer, Producer},
 };
 use core::{
     cell::Cell,
@@ -128,13 +128,19 @@ impl<R: RbRef> FrozenCons<R> {
     pub fn release(self) -> Cons<R> {
         unsafe { Cons::new(self.into_rb_ref()) }
     }
-}
-impl<R: RbRef> FrozenConsumer for FrozenCons<R> {
-    fn commit(&self) {
+
+    /// Commit changes to the ring buffer.
+    pub fn commit(&self) {
         unsafe { self.rb().set_read_index(self.read.get()) }
     }
-    fn fetch(&self) {
+    /// Fetch changes from the ring buffer.
+    pub fn fetch(&self) {
         self.write.set(self.rb().write_index());
+    }
+    /// Commit changes to and fetch updates from the ring buffer.
+    pub fn sync(&self) {
+        self.commit();
+        self.fetch();
     }
 }
 
@@ -163,16 +169,23 @@ impl<R: RbRef> FrozenProd<R> {
     pub fn release(self) -> Prod<R> {
         unsafe { Prod::new(self.into_rb_ref()) }
     }
-}
-impl<R: RbRef> FrozenProducer for FrozenProd<R> {
-    fn commit(&self) {
+
+    /// Commit changes to the ring buffer.
+    pub fn commit(&self) {
         unsafe { self.rb().set_write_index(self.write.get()) }
     }
-    fn fetch(&self) {
+    /// Fetch changes from the ring buffer.
+    pub fn fetch(&self) {
         self.read.set(self.rb().read_index());
     }
+    /// Commit changes to and fetch updates from the ring buffer.
+    pub fn sync(&self) {
+        self.commit();
+        self.fetch();
+    }
 
-    fn discard(&mut self) {
+    /// Discard new items pushed since last sync.
+    pub fn discard(&mut self) {
         let last_tail = self.rb().write_index();
         let (first, second) = unsafe { self.rb().unsafe_slices(last_tail, self.write.get()) };
         for item_mut in first.iter_mut().chain(second.iter_mut()) {
