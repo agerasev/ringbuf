@@ -26,10 +26,3 @@ unsafe impl<B: RingBuffer> RbRef for Arc<B> {
         self
     }
 }
-
-pub unsafe trait Based {
-    type Rb: RingBuffer;
-    type RbRef: RbRef<Target = Self::Rb>;
-    fn rb(&self) -> &Self::Rb;
-    fn rb_ref(&self) -> &Self::RbRef;
-}

@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     delegate_consumer, delegate_frozen_consumer, delegate_frozen_producer, delegate_observer, delegate_producer,
-    rbs::based::{Based, RbRef},
+    rbs::ref_::RbRef,
     traits::{Consumer, FrozenConsumer, FrozenProducer, Observer, Producer},
 };
 
@@ -98,26 +98,6 @@ impl<'a, R: RbRef> FrozenCachedConsRef<'a, R> {
         self.frozen
     }
 }
-unsafe impl<'a, R: RbRef> Based for FrozenCachedProdRef<'a, R> {
-    type Rb = R::Target;
-    type RbRef = R;
-    fn rb(&self) -> &Self::Rb {
-        self.frozen.rb()
-    }
-    fn rb_ref(&self) -> &Self::RbRef {
-        self.frozen.rb_ref()
-    }
-}
-unsafe impl<'a, R: RbRef> Based for FrozenCachedConsRef<'a, R> {
-    type Rb = R::Target;
-    type RbRef = R;
-    fn rb(&self) -> &Self::Rb {
-        self.frozen.rb()
-    }
-    fn rb_ref(&self) -> &Self::RbRef {
-        self.frozen.rb_ref()
-    }
-}
 
 impl<'a, R: RbRef> Observer for FrozenCachedProdRef<'a, R> {
     delegate_observer!(FrozenProd<R>, Self::frozen);
@@ -137,31 +117,6 @@ impl<'a, R: RbRef> Consumer for FrozenCachedConsRef<'a, R> {
 }
 impl<'a, R: RbRef> FrozenConsumer for FrozenCachedConsRef<'a, R> {
     delegate_frozen_consumer!(Self::frozen, Self::frozen_mut);
-}
-
-impl<'a, R: RbRef> FrozenCachedProdRef<'a, R> {
-    #[inline]
-    pub fn commit(&self) {
-        self.frozen.commit()
-    }
-    #[inline]
-    pub fn sync(&self) {
-        self.frozen.sync()
-    }
-    #[inline]
-    pub fn discard(&mut self) {
-        self.frozen.discard()
-    }
-}
-impl<'a, R: RbRef> FrozenCachedConsRef<'a, R> {
-    #[inline]
-    pub fn commit(&self) {
-        self.frozen.commit()
-    }
-    #[inline]
-    pub fn sync(&self) {
-        self.frozen.sync();
-    }
 }
 
 impl<'a, R: RbRef> Drop for FrozenCachedProdRef<'a, R> {

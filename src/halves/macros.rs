@@ -1,7 +1,7 @@
 macro_rules! impl_prod_traits {
     ($Prod:ident) => {
         #[cfg(feature = "std")]
-        impl<R: $crate::rbs::based::RbRef> std::io::Write for $Prod<R>
+        impl<R: $crate::rbs::ref_::RbRef> std::io::Write for $Prod<R>
         where
             R::Target: $crate::traits::Producer<Item = u8>,
         {
@@ -19,7 +19,7 @@ macro_rules! impl_prod_traits {
             }
         }
 
-        impl<R: $crate::rbs::based::RbRef> core::fmt::Write for $Prod<R>
+        impl<R: $crate::rbs::ref_::RbRef> core::fmt::Write for $Prod<R>
         where
             R::Target: $crate::traits::Producer<Item = u8>,
         {
@@ -39,7 +39,7 @@ pub(crate) use impl_prod_traits;
 
 macro_rules! impl_cons_traits {
     ($Cons:ident) => {
-        impl<R: $crate::rbs::based::RbRef> IntoIterator for $Cons<R>
+        impl<R: $crate::rbs::ref_::RbRef> IntoIterator for $Cons<R>
         where
             R::Target: $crate::traits::Consumer,
         {
@@ -52,7 +52,7 @@ macro_rules! impl_cons_traits {
         }
 
         #[cfg(feature = "std")]
-        impl<R: $crate::rbs::based::RbRef> std::io::Read for $Cons<R>
+        impl<R: $crate::rbs::ref_::RbRef> std::io::Read for $Cons<R>
         where
             R::Target: $crate::traits::Consumer<Item = u8>,
         {

@@ -2,12 +2,13 @@ mod frozen;
 pub use frozen::*;
 
 use super::{
+    direct::Obs,
     frozen::{FrozenCons, FrozenProd},
     macros::*,
 };
 use crate::{
-    rbs::based::{Based, RbRef},
-    traits::{Consumer, FrozenConsumer, FrozenProducer, Observer, Producer},
+    rbs::ref_::RbRef,
+    traits::{observer::Observe, Consumer, FrozenConsumer, FrozenProducer, Observer, Producer},
 };
 use core::{mem::MaybeUninit, num::NonZeroUsize};
 
@@ -30,8 +31,8 @@ impl<R: RbRef, const AUTO: bool> CachedProd<R, AUTO> {
             frozen: FrozenProd::new(ref_),
         }
     }
-    pub fn into_base_ref(self) -> R {
-        self.frozen.into_base_ref()
+    pub fn into_rb_ref(self) -> R {
+        self.frozen.into_rb_ref()
     }
 }
 impl<R: RbRef, const AUTO: bool> CachedCons<R, AUTO> {
@@ -43,8 +44,8 @@ impl<R: RbRef, const AUTO: bool> CachedCons<R, AUTO> {
             frozen: FrozenCons::new(ref_),
         }
     }
-    pub fn into_base_ref(self) -> R {
-        self.frozen.into_base_ref()
+    pub fn into_rb_ref(self) -> R {
+        self.frozen.into_rb_ref()
     }
 }
 
@@ -144,23 +145,15 @@ impl<R: RbRef, const AUTO: bool> Consumer for CachedCons<R, AUTO> {
 impl_prod_traits!(CachedProd);
 impl_cons_traits!(CachedCons);
 
-unsafe impl<R: RbRef, const AUTO: bool> Based for CachedProd<R, AUTO> {
-    type Rb = R::Target;
-    type RbRef = R;
-    fn rb(&self) -> &Self::Rb {
-        self.frozen.rb()
-    }
-    fn rb_ref(&self) -> &Self::RbRef {
-        self.frozen.rb_ref()
+impl<R: RbRef> Observe for CachedProd<R> {
+    type Obs = Obs<R>;
+    fn observe(&self) -> Self::Obs {
+        self.frozen.observe()
     }
 }
-unsafe impl<R: RbRef, const AUTO: bool> Based for CachedCons<R, AUTO> {
-    type Rb = R::Target;
-    type RbRef = R;
-    fn rb(&self) -> &Self::Rb {
-        self.frozen.rb()
-    }
-    fn rb_ref(&self) -> &Self::RbRef {
-        self.frozen.rb_ref()
+impl<R: RbRef> Observe for CachedCons<R> {
+    type Obs = Obs<R>;
+    fn observe(&self) -> Self::Obs {
+        self.frozen.observe()
     }
 }

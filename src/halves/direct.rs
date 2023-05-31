@@ -5,10 +5,11 @@ use super::{
 use crate::{
     //cached::FrozenCons,
     delegate_observer,
-    rbs::based::{Based, RbRef},
+    rbs::ref_::RbRef,
     traits::{observer::Observe, Consumer, Observer, Producer},
 };
 
+#[derive(Clone)]
 pub struct Obs<R: RbRef> {
     ref_: R,
 }
@@ -30,12 +31,22 @@ impl<R: RbRef> Obs<R> {
     pub fn new(ref_: R) -> Self {
         Self { ref_ }
     }
-}
 
-impl<B: Based> Observe for B {
-    type Obs = Obs<B::RbRef>;
-    fn observe(&self) -> Self::Obs {
-        Obs::new(self.rb_ref().clone())
+    #[inline]
+    fn rb(&self) -> &R::Target {
+        self.ref_.deref()
+    }
+}
+impl<R: RbRef> Prod<R> {
+    #[inline]
+    fn rb(&self) -> &R::Target {
+        self.ref_.deref()
+    }
+}
+impl<R: RbRef> Cons<R> {
+    #[inline]
+    fn rb(&self) -> &R::Target {
+        self.ref_.deref()
     }
 }
 
@@ -64,15 +75,15 @@ impl<R: RbRef> Cons<R> {
 }
 
 impl<R: RbRef> Observer for Obs<R> {
-    delegate_observer!(R::Target, Based::rb);
+    delegate_observer!(R::Target, Self::rb);
 }
 
 impl<R: RbRef> Observer for Prod<R> {
-    delegate_observer!(R::Target, Based::rb);
+    delegate_observer!(R::Target, Self::rb);
 }
 
 impl<R: RbRef> Observer for Cons<R> {
-    delegate_observer!(R::Target, Based::rb);
+    delegate_observer!(R::Target, Self::rb);
 }
 
 impl<R: RbRef> Producer for Prod<R> {
@@ -109,42 +120,21 @@ impl<R: RbRef> Cons<R> {
     }
 }
 
-unsafe impl<R: RbRef> Based for Obs<R> {
-    type Rb = R::Target;
-    type RbRef = R;
-
-    #[inline]
-    fn rb(&self) -> &Self::Rb {
-        self.ref_.deref()
-    }
-    #[inline]
-    fn rb_ref(&self) -> &Self::RbRef {
-        &self.ref_
+impl<R: RbRef> Observe for Obs<R> {
+    type Obs = Self;
+    fn observe(&self) -> Self::Obs {
+        self.clone()
     }
 }
-unsafe impl<R: RbRef> Based for Prod<R> {
-    type Rb = R::Target;
-    type RbRef = R;
-
-    #[inline]
-    fn rb(&self) -> &Self::Rb {
-        self.ref_.deref()
-    }
-    #[inline]
-    fn rb_ref(&self) -> &Self::RbRef {
-        &self.ref_
+impl<R: RbRef> Observe for Prod<R> {
+    type Obs = Obs<R>;
+    fn observe(&self) -> Self::Obs {
+        Obs::new(self.ref_.clone())
     }
 }
-unsafe impl<R: RbRef> Based for Cons<R> {
-    type Rb = R::Target;
-    type RbRef = R;
-
-    #[inline]
-    fn rb(&self) -> &Self::Rb {
-        self.ref_.deref()
-    }
-    #[inline]
-    fn rb_ref(&self) -> &Self::RbRef {
-        &self.ref_
+impl<R: RbRef> Observe for Cons<R> {
+    type Obs = Obs<R>;
+    fn observe(&self) -> Self::Obs {
+        Obs::new(self.ref_.clone())
     }
 }

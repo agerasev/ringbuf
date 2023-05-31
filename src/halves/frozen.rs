@@ -1,10 +1,10 @@
 use super::{
-    direct::{Cons, Prod},
+    direct::{Cons, Obs, Prod},
     macros::*,
 };
 use crate::{
-    rbs::based::{Based, RbRef},
-    traits::{Consumer, FrozenConsumer, FrozenProducer, Observer, Producer},
+    rbs::ref_::RbRef,
+    traits::{observer::Observe, Consumer, FrozenConsumer, FrozenProducer, Observer, Producer},
 };
 use core::{
     cell::Cell,
@@ -116,14 +116,17 @@ impl<R: RbRef> FrozenCons<R> {
             ref_,
         }
     }
-    pub fn into_base_ref(self) -> R {
+    pub fn rb(&self) -> &R::Target {
+        self.ref_.deref()
+    }
+    pub fn into_rb_ref(self) -> R {
         self.commit();
         let this = ManuallyDrop::new(self);
         unsafe { ptr::read(&this.ref_) }
     }
     /// Commit and destroy `Self` returning underlying consumer.
     pub fn release(self) -> Cons<R> {
-        unsafe { Cons::new(self.into_base_ref()) }
+        unsafe { Cons::new(self.into_rb_ref()) }
     }
 }
 impl<R: RbRef> FrozenConsumer for FrozenCons<R> {
@@ -148,14 +151,17 @@ impl<R: RbRef> FrozenProd<R> {
             ref_,
         }
     }
-    pub fn into_base_ref(self) -> R {
+    pub fn rb(&self) -> &R::Target {
+        self.ref_.deref()
+    }
+    pub fn into_rb_ref(self) -> R {
         self.commit();
         let this = ManuallyDrop::new(self);
         unsafe { ptr::read(&this.ref_) }
     }
     /// Commit and destroy `Self` returning underlying producer.
     pub fn release(self) -> Prod<R> {
-        unsafe { Prod::new(self.into_base_ref()) }
+        unsafe { Prod::new(self.into_rb_ref()) }
     }
 }
 impl<R: RbRef> FrozenProducer for FrozenProd<R> {
@@ -179,23 +185,15 @@ impl<R: RbRef> FrozenProducer for FrozenProd<R> {
 impl_cons_traits!(FrozenCons);
 impl_prod_traits!(FrozenProd);
 
-unsafe impl<R: RbRef> Based for FrozenCons<R> {
-    type Rb = R::Target;
-    type RbRef = R;
-    fn rb(&self) -> &Self::Rb {
-        self.ref_.deref()
-    }
-    fn rb_ref(&self) -> &Self::RbRef {
-        &self.ref_
+impl<R: RbRef> Observe for FrozenProd<R> {
+    type Obs = Obs<R>;
+    fn observe(&self) -> Self::Obs {
+        Obs::new(self.ref_.clone())
     }
 }
-unsafe impl<R: RbRef> Based for FrozenProd<R> {
-    type Rb = R::Target;
-    type RbRef = R;
-    fn rb(&self) -> &Self::Rb {
-        self.ref_.deref()
-    }
-    fn rb_ref(&self) -> &Self::RbRef {
-        &self.ref_
+impl<R: RbRef> Observe for FrozenCons<R> {
+    type Obs = Obs<R>;
+    fn observe(&self) -> Self::Obs {
+        Obs::new(self.ref_.clone())
     }
 }
