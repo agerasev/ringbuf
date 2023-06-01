@@ -140,6 +140,46 @@ pub trait Producer: Observer {
 }
 
 #[macro_export]
+macro_rules! impl_producer_traits {
+    ($type:ident $(< $( $par:tt $( : $cbd:tt $(+ $dbd:tt )* )? ),+ >)?) => {
+
+        #[cfg(feature = "std")]
+        impl $(< $( $par $( : $cbd $(+ $dbd )* )? ),+ >)? std::io::Write for $type $(< $( $par ),+ >)?
+        where
+            Self: $crate::traits::Producer<Item = u8>,
+        {
+            fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+                use $crate::producer::Producer;
+                let n = self.push_slice(buffer);
+                if n == 0 && !buffer.is_empty() {
+                    Err(std::io::ErrorKind::WouldBlock.into())
+                } else {
+                    Ok(n)
+                }
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        impl $(< $( $par $( : $cbd $(+ $dbd )* )? ),+ >)? core::fmt::Write for $type $(< $( $par ),+ >)?
+        where
+            Self: $crate::traits::Producer<Item = u8>,
+        {
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                use $crate::producer::Producer;
+                let n = self.push_slice(s.as_bytes());
+                if n != s.len() {
+                    Err(core::fmt::Error::default())
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    };
+}
+
+#[macro_export]
 macro_rules! delegate_producer {
     ($ref:expr, $mut:expr) => {
         #[inline]

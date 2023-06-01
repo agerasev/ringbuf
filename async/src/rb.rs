@@ -1,6 +1,6 @@
 use crate::{
     halves::{AsyncCons, AsyncProd},
-    traits::{AsyncConsumer, AsyncObserver, AsyncProducer},
+    traits::{AsyncConsumer, AsyncObserver, AsyncProducer, AsyncRingBuffer},
 };
 use core::{
     sync::atomic::{AtomicBool, Ordering},
@@ -8,8 +8,11 @@ use core::{
 };
 use futures::task::AtomicWaker;
 use ringbuf::{
-    delegate_observer, delegate_ring_buffer,
-    rb::traits::{GenSplit, GenSplitRef},
+    delegate_observer, delegate_ring_buffer, impl_consumer_traits, impl_producer_traits,
+    rb::{
+        traits::{GenSplit, GenSplitRef},
+        AsRb,
+    },
     traits::{Consumer, Observer, Producer, RingBuffer, Split, SplitRef},
 };
 
@@ -75,6 +78,7 @@ impl<B: RingBuffer> AsyncConsumer for AsyncRb<B> {
         self.write.register(waker);
     }
 }
+impl<B: RingBuffer> AsyncRingBuffer for AsyncRb<B> {}
 
 impl<'a, B: RingBuffer + GenSplitRef<'a, Self> + 'a> SplitRef<'a> for AsyncRb<B> {
     type RefProd = AsyncProd<B::GenRefProd>;
@@ -92,5 +96,22 @@ impl<B: RingBuffer + GenSplit<Self>> Split for AsyncRb<B> {
     fn split(self) -> (Self::Prod, Self::Cons) {
         let (prod, cons) = B::gen_split(self);
         (AsyncProd::new(prod), AsyncCons::new(cons))
+    }
+}
+
+impl_producer_traits!(AsyncRb<B: RingBuffer>);
+impl_consumer_traits!(AsyncRb<B: RingBuffer>);
+
+pub trait AsAsyncRb {
+    type AsyncRb: AsyncRingBuffer;
+    fn as_async_rb(&self) -> &Self::AsyncRb;
+}
+impl<B: AsRb> AsAsyncRb for B
+where
+    B::Rb: AsyncRingBuffer,
+{
+    type AsyncRb = B::Rb;
+    fn as_async_rb(&self) -> &Self::AsyncRb {
+        self.as_rb()
     }
 }

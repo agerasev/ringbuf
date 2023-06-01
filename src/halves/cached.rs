@@ -1,9 +1,9 @@
 use super::{
     direct::Obs,
     frozen::{FrozenCons, FrozenProd},
-    macros::*,
 };
 use crate::{
+    impl_consumer_traits, impl_producer_traits,
     rb::{AsRb, RbRef},
     traits::{Consumer, Observe, Observer, Producer},
 };
@@ -143,8 +143,8 @@ impl<R: RbRef> Consumer for CachedCons<R> {
     }
 }
 
-impl_prod_traits!(CachedProd);
-impl_cons_traits!(CachedCons);
+impl_producer_traits!(CachedProd<R: RbRef>);
+impl_consumer_traits!(CachedCons<R: RbRef>);
 
 impl<R: RbRef> Observe for CachedProd<R> {
     type Obs = Obs<R>;

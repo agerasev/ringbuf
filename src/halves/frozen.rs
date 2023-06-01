@@ -1,7 +1,4 @@
-use super::{
-    direct::{Cons, Obs, Prod},
-    macros::*,
-};
+use super::direct::{Cons, Obs, Prod};
 use crate::{
     rb::RbRef,
     traits::{Consumer, Observe, Observer, Producer},
@@ -194,9 +191,6 @@ impl<R: RbRef> FrozenProd<R> {
         self.write.set(last_tail);
     }
 }
-
-impl_cons_traits!(FrozenCons);
-impl_prod_traits!(FrozenProd);
 
 impl<R: RbRef> Observe for FrozenProd<R> {
     type Obs = Obs<R>;

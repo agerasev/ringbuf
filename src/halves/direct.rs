@@ -1,6 +1,5 @@
-use super::macros::*;
 use crate::{
-    delegate_observer,
+    delegate_observer, impl_consumer_traits, impl_producer_traits,
     rb::{AsRb, RbRef},
     traits::{Consumer, Observe, Observer, Producer},
 };
@@ -96,8 +95,8 @@ impl<R: RbRef> Consumer for Cons<R> {
     }
 }
 
-impl_prod_traits!(Prod);
-impl_cons_traits!(Cons);
+impl_producer_traits!(Prod<R: RbRef>);
+impl_consumer_traits!(Cons<R: RbRef>);
 
 impl<R: RbRef> Observe for Obs<R> {
     type Obs = Self;

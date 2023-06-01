@@ -206,8 +206,11 @@ pub trait Consumer: Observer {
     }
 }
 
-pub struct IntoIter<C: Consumer>(pub(crate) C);
+pub struct IntoIter<C: Consumer>(C);
 impl<C: Consumer> IntoIter<C> {
+    pub fn new(inner: C) -> Self {
+        Self(inner)
+    }
     pub fn into_inner(self) -> C {
         self.0
     }
@@ -285,6 +288,40 @@ pub type Iter<'a, C: Consumer> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a,
 /// *Please do not rely on actual type, it may change in future.*
 #[allow(type_alias_bounds)]
 pub type IterMut<'a, C: Consumer> = Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
+
+#[macro_export]
+macro_rules! impl_consumer_traits {
+    ($type:ident $(< $( $param:tt $( : $first_bound:tt $(+ $next_bound:tt )* )? ),+ >)?) => {
+
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? IntoIterator for $type $(< $( $param ),+ >)?
+        where
+            Self: $crate::traits::Consumer
+        {
+            type Item = <Self as $crate::traits::Observer>::Item;
+            type IntoIter = $crate::consumer::IntoIter<Self>;
+
+            fn into_iter(self) -> Self::IntoIter {
+                $crate::consumer::IntoIter::new(self)
+            }
+        }
+
+        #[cfg(feature = "std")]
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? std::io::Read for $type $(< $( $param ),+ >)?
+        where
+            Self: $crate::traits::Consumer<Item = u8>,
+        {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                use $crate::consumer::Consumer;
+                let n = self.pop_slice(buffer);
+                if n == 0 && !buffer.is_empty() {
+                    Err(std::io::ErrorKind::WouldBlock.into())
+                } else {
+                    Ok(n)
+                }
+            }
+        }
+    };
+}
 
 #[macro_export]
 macro_rules! delegate_consumer {

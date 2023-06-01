@@ -1,27 +1,21 @@
-use crate::traits::{AsyncConsumer, AsyncObserver, AsyncProducer};
+use crate::{
+    rb::AsAsyncRb,
+    traits::{AsyncConsumer, AsyncObserver, AsyncProducer},
+};
 use ringbuf::{
-    delegate_consumer, delegate_observer, delegate_producer,
+    delegate_consumer, delegate_observer, delegate_producer, impl_consumer_traits, impl_producer_traits,
     rb::AsRb,
     traits::{Consumer, Observer, Producer},
 };
 
-pub struct AsyncProd<B: Producer + AsRb>
-where
-    B::Rb: AsyncProducer,
-{
+pub struct AsyncProd<B: Producer + AsAsyncRb> {
     base: B,
 }
-pub struct AsyncCons<B: Consumer + AsRb>
-where
-    B::Rb: AsyncConsumer,
-{
+pub struct AsyncCons<B: Consumer + AsAsyncRb> {
     base: B,
 }
 
-impl<B: Producer + AsRb> AsyncProd<B>
-where
-    B::Rb: AsyncProducer,
-{
+impl<B: Producer + AsAsyncRb> AsyncProd<B> {
     pub fn new(base: B) -> Self {
         Self { base }
     }
@@ -32,10 +26,7 @@ where
         &mut self.base
     }
 }
-impl<B: Consumer + AsRb> AsyncCons<B>
-where
-    B::Rb: AsyncConsumer,
-{
+impl<B: Consumer + AsAsyncRb> AsyncCons<B> {
     pub fn new(base: B) -> Self {
         Self { base }
     }
@@ -47,102 +38,69 @@ where
     }
 }
 
-impl<B: Producer + AsRb> Observer for AsyncProd<B>
-where
-    B::Rb: AsyncProducer,
-{
+impl<B: Producer + AsAsyncRb> Observer for AsyncProd<B> {
     delegate_observer!(B, Self::base);
 }
-impl<B: Producer + AsRb> Producer for AsyncProd<B>
-where
-    B::Rb: AsyncProducer,
-{
+impl<B: Producer + AsAsyncRb> Producer for AsyncProd<B> {
     delegate_producer!(Self::base, Self::base_mut);
 }
-impl<B: Producer + AsRb> AsyncObserver for AsyncProd<B>
-where
-    B::Rb: AsyncProducer,
-{
+impl<B: Producer + AsAsyncRb> AsyncObserver for AsyncProd<B> {
     fn is_closed(&self) -> bool {
-        self.as_rb().is_closed()
+        self.as_async_rb().is_closed()
     }
     fn close(&self) {
-        self.as_rb().close()
+        self.as_async_rb().close()
     }
 }
-impl<B: Producer + AsRb> AsyncProducer for AsyncProd<B>
-where
-    B::Rb: AsyncProducer,
-{
+impl<B: Producer + AsAsyncRb> AsyncProducer for AsyncProd<B> {
     fn register_read_waker(&self, waker: &core::task::Waker) {
-        self.as_rb().register_read_waker(waker)
+        self.as_async_rb().register_read_waker(waker)
     }
 }
 
-impl<B: Consumer + AsRb> Observer for AsyncCons<B>
-where
-    B::Rb: AsyncConsumer,
-{
+impl<B: Consumer + AsAsyncRb> Observer for AsyncCons<B> {
     delegate_observer!(B, Self::base);
 }
-impl<B: Consumer + AsRb> Consumer for AsyncCons<B>
-where
-    B::Rb: AsyncConsumer,
-{
+impl<B: Consumer + AsAsyncRb> Consumer for AsyncCons<B> {
     delegate_consumer!(Self::base, Self::base_mut);
 }
-impl<B: Consumer + AsRb> AsyncObserver for AsyncCons<B>
-where
-    B::Rb: AsyncConsumer,
-{
+impl<B: Consumer + AsAsyncRb> AsyncObserver for AsyncCons<B> {
     fn is_closed(&self) -> bool {
-        self.base.as_rb().is_closed()
+        self.base.as_async_rb().is_closed()
     }
     fn close(&self) {
-        self.as_rb().close()
+        self.as_async_rb().close()
     }
 }
-impl<B: Consumer + AsRb> AsyncConsumer for AsyncCons<B>
-where
-    B::Rb: AsyncConsumer,
-{
+impl<B: Consumer + AsAsyncRb> AsyncConsumer for AsyncCons<B> {
     fn register_write_waker(&self, waker: &core::task::Waker) {
-        self.as_rb().register_write_waker(waker)
+        self.as_async_rb().register_write_waker(waker)
     }
 }
 
-impl<B: Producer + AsRb> Drop for AsyncProd<B>
-where
-    B::Rb: AsyncProducer,
-{
+impl<B: Producer + AsAsyncRb> Drop for AsyncProd<B> {
     fn drop(&mut self) {
         self.close()
     }
 }
-impl<B: Consumer + AsRb> Drop for AsyncCons<B>
-where
-    B::Rb: AsyncConsumer,
-{
+impl<B: Consumer + AsAsyncRb> Drop for AsyncCons<B> {
     fn drop(&mut self) {
         self.close()
     }
 }
 
-unsafe impl<B: Producer + AsRb> AsRb for AsyncProd<B>
-where
-    B::Rb: AsyncProducer,
-{
-    type Rb = B::Rb;
+unsafe impl<B: Producer + AsAsyncRb> AsRb for AsyncProd<B> {
+    type Rb = B::AsyncRb;
     fn as_rb(&self) -> &Self::Rb {
-        self.base.as_rb()
+        self.base.as_async_rb()
     }
 }
-unsafe impl<B: Consumer + AsRb> AsRb for AsyncCons<B>
-where
-    B::Rb: AsyncConsumer,
-{
-    type Rb = B::Rb;
+unsafe impl<B: Consumer + AsAsyncRb> AsRb for AsyncCons<B> {
+    type Rb = B::AsyncRb;
     fn as_rb(&self) -> &Self::Rb {
-        self.base.as_rb()
+        self.base.as_async_rb()
     }
 }
+
+impl_producer_traits!(AsyncProd<B: Producer + AsAsyncRb>);
+impl_consumer_traits!(AsyncCons<B: Consumer + AsAsyncRb>);

@@ -1,15 +1,14 @@
+use super::AsyncObserver;
 use core::{
     future::Future,
     iter::Peekable,
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-use futures::future::FusedFuture;
 //#[cfg(feature = "std")]
 //use futures::io::AsyncWrite;
+use futures::future::FusedFuture;
 use ringbuf::traits::Producer;
-
-use super::AsyncObserver;
 //#[cfg(feature = "std")]
 //use std::io;
 
@@ -196,13 +195,11 @@ impl<'a, A: AsyncProducer> Future for WaitVacantFuture<'a, A> {
         }
     }
 }
-
 /*
 impl<A: AsyncProducer> Sink<A::Item> for A {
     type Error = ();
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-
         self.register_read_waker(cx.waker());
         if self.is_closed() {
             Poll::Ready(Err(()))
@@ -213,20 +210,14 @@ impl<A: AsyncProducer> Sink<A::Item> for A {
         }
     }
     fn start_send(mut self: Pin<&mut Self>, item: A::Item) -> Result<(), Self::Error> {
-
         assert!(self.base.push(item).is_ok());
         Ok(())
     }
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-
         // Don't need to be flushed.
         Poll::Ready(Ok(()))
     }
-    fn poll_close(
-        mut self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<Result<(), Self::Error>> {
-
+    fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.close();
         Poll::Ready(Ok(()))
     }
@@ -234,12 +225,7 @@ impl<A: AsyncProducer> Sink<A::Item> for A {
 
 #[cfg(feature = "std")]
 impl<A: AsyncProducer<Item = u8>> AsyncWrite for A {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         self.register_read_waker(cx.waker());
         if self.is_closed() {
             Poll::Ready(Ok(0))
@@ -253,12 +239,10 @@ impl<A: AsyncProducer<Item = u8>> AsyncWrite for A {
         }
     }
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-
         // Don't need to be flushed.
         Poll::Ready(Ok(()))
     }
     fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-
         self.close();
         Poll::Ready(Ok(()))
     }

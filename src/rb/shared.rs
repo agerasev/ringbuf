@@ -7,6 +7,7 @@ use super::{
 use crate::storage::Heap;
 use crate::{
     halves::{CachedCons, CachedProd},
+    impl_consumer_traits, impl_producer_traits,
     storage::{Shared, Static, Storage},
     traits::{Consumer, Observer, Producer, RingBuffer},
 };
@@ -144,3 +145,6 @@ unsafe impl<'a, S: Storage + 'a, B: RingBuffer + 'a> GenSplitRef<'a, B> for Shar
 }
 
 rb_impl_init!(SharedRb);
+
+impl_producer_traits!(SharedRb<S: Storage>);
+impl_consumer_traits!(SharedRb<S: Storage>);

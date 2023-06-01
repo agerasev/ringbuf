@@ -7,6 +7,7 @@ use super::{
 use crate::storage::Heap;
 use crate::{
     halves::{Cons, Prod},
+    impl_consumer_traits, impl_producer_traits,
     storage::{Shared, Static, Storage},
     traits::{Consumer, Observer, Producer, RingBuffer},
 };
@@ -116,3 +117,6 @@ unsafe impl<'a, S: Storage + 'a, B: RingBuffer + 'a> GenSplitRef<'a, B> for Loca
 }
 
 rb_impl_init!(LocalRb);
+
+impl_producer_traits!(LocalRb<S: Storage>);
+impl_consumer_traits!(LocalRb<S: Storage>);
