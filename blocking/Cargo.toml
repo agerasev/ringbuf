@@ -12,7 +12,8 @@ license.workspace = true
 
 [features]
 default = ["std"]
-std = []
+std = ["alloc"]
+alloc = []
 
 [dependencies]
 ringbuf = { workspace = true }

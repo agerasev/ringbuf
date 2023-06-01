@@ -1,22 +1,30 @@
 use crate::{
-    sync::Semaphore,
+    halves::{BlockingCons, BlockingProd},
+    sync::{Semaphore, StdSemaphore},
     traits::{BlockingConsumer, BlockingProducer},
 };
 use core::time::Duration;
 use ringbuf::{
     delegate_observer, delegate_ring_buffer,
-    traits::{Consumer, Observer, Producer, RingBuffer},
+    rb::traits::{GenSplit, GenSplitRef},
+    traits::{Consumer, Observer, Producer, RingBuffer, Split, SplitRef},
 };
 
-/// Blocking read and write modifier for ring buffer.
+#[cfg(not(feature = "std"))]
 pub struct BlockingRb<B: RingBuffer, S: Semaphore> {
+    base: B,
+    read: S,
+    write: S,
+}
+#[cfg(feature = "std")]
+pub struct BlockingRb<B: RingBuffer, S: Semaphore = StdSemaphore> {
     base: B,
     read: S,
     write: S,
 }
 
 impl<B: RingBuffer, S: Semaphore> BlockingRb<B, S> {
-    pub fn new(base: B) -> Self {
+    pub fn from(base: B) -> Self {
         Self {
             base,
             read: S::new(),
@@ -60,5 +68,24 @@ impl<B: RingBuffer, S: Semaphore> BlockingConsumer for BlockingRb<B, S> {
     fn wait_occupied(&self, count: usize, timeout: Option<Duration>) -> bool {
         debug_assert!(count <= self.capacity().get());
         self.write.wait(|| self.occupied_len() >= count, timeout)
+    }
+}
+
+impl<'a, B: RingBuffer + GenSplitRef<'a, Self> + 'a, S: Semaphore + 'a> SplitRef<'a> for BlockingRb<B, S> {
+    type RefProd = BlockingProd<B::GenRefProd>;
+    type RefCons = BlockingCons<B::GenRefCons>;
+
+    fn split_ref(&'a mut self) -> (Self::RefProd, Self::RefCons) {
+        let (prod, cons) = B::gen_split_ref(self);
+        (BlockingProd::new(prod), BlockingCons::new(cons))
+    }
+}
+impl<B: RingBuffer + GenSplit<Self>, S: Semaphore> Split for BlockingRb<B, S> {
+    type Prod = BlockingProd<B::GenProd>;
+    type Cons = BlockingCons<B::GenCons>;
+
+    fn split(self) -> (Self::Prod, Self::Cons) {
+        let (prod, cons) = B::gen_split(self);
+        (BlockingProd::new(prod), BlockingCons::new(cons))
     }
 }

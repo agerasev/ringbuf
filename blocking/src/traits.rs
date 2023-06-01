@@ -93,7 +93,7 @@ pub trait BlockingConsumer: Consumer {
     }
 
     fn pop_iter_all(&mut self, timeout: Option<Duration>) -> PopAllIter<'_, Self> {
-        unsafe { PopAllIter::new(self, timeout) }
+        PopAllIter::new(self, timeout)
     }
 
     fn pop_slice_all(&mut self, mut slice: &mut [Self::Item], timeout: Option<Duration>) -> usize
@@ -119,16 +119,14 @@ pub struct PopAllIter<'a, C: BlockingConsumer> {
     pub(crate) target: &'a mut C,
     pub(crate) timeout: TimeoutIterator<C::Instant>,
 }
-
 impl<'a, C: BlockingConsumer> PopAllIter<'a, C> {
-    pub unsafe fn new(target: &'a mut C, timeout: Option<Duration>) -> Self {
+    pub fn new(target: &'a mut C, timeout: Option<Duration>) -> Self {
         Self {
             target,
             timeout: TimeoutIterator::new(timeout),
         }
     }
 }
-
 impl<'a, C: BlockingConsumer> Iterator for PopAllIter<'a, C> {
     type Item = C::Item;
     fn next(&mut self) -> Option<Self::Item> {

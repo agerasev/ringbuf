@@ -2,7 +2,7 @@ use crate::traits::{BlockingConsumer, BlockingProducer};
 use core::time::Duration;
 use ringbuf::{
     delegate_consumer, delegate_observer, delegate_producer,
-    ref_::AsRb,
+    rb::AsRb,
     traits::{Consumer, Observer, Producer},
 };
 
@@ -23,7 +23,7 @@ impl<B: Producer + AsRb> BlockingProd<B>
 where
     B::Rb: BlockingProducer,
 {
-    pub unsafe fn new(base: B) -> Self {
+    pub fn new(base: B) -> Self {
         Self { base }
     }
     fn base(&self) -> &B {
@@ -37,7 +37,7 @@ impl<B: Consumer + AsRb> BlockingCons<B>
 where
     B::Rb: BlockingConsumer,
 {
-    pub unsafe fn new(base: B) -> Self {
+    pub fn new(base: B) -> Self {
         Self { base }
     }
     fn base(&self) -> &B {
