@@ -1,12 +1,14 @@
-use super::{macros::rb_impl_init, utils::ranges};
+use super::{
+    macros::rb_impl_init,
+    traits::{GenSplit, GenSplitRef},
+    utils::ranges,
+};
 #[cfg(feature = "alloc")]
 use crate::storage::Heap;
 use crate::{
-    consumer::Consumer,
-    halves::cached::{CachedCons, CachedProd},
-    producer::Producer,
+    halves::{CachedCons, CachedProd},
     storage::{Shared, Static, Storage},
-    traits::{ring_buffer::Split, Observer, RingBuffer},
+    traits::{Consumer, Observer, Producer, RingBuffer},
 };
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
@@ -122,31 +124,22 @@ impl<S: Storage> Drop for SharedRb<S> {
     }
 }
 
-impl<'a, S: Storage + 'a> Split for &'a mut SharedRb<S> {
-    type Prod = CachedProd<&'a SharedRb<S>>;
-    type Cons = CachedCons<&'a SharedRb<S>>;
-
-    fn split(self) -> (Self::Prod, Self::Cons) {
-        unsafe { (CachedProd::new(self), CachedCons::new(self)) }
-    }
-}
 #[cfg(feature = "alloc")]
-impl<S: Storage> Split for SharedRb<S> {
-    type Prod = CachedProd<Arc<Self>>;
-    type Cons = CachedCons<Arc<Self>>;
+unsafe impl<S: Storage, B: RingBuffer> GenSplit<B> for SharedRb<S> {
+    type GenProd = CachedProd<Arc<B>>;
+    type GenCons = CachedCons<Arc<B>>;
 
-    fn split(self) -> (Self::Prod, Self::Cons) {
-        let rc = Arc::new(self);
+    fn gen_split(this: B) -> (Self::GenProd, Self::GenCons) {
+        let rc = Arc::new(this);
         unsafe { (CachedProd::new(rc.clone()), CachedCons::new(rc)) }
     }
 }
-impl<S: Storage> SharedRb<S> {
-    #[cfg(feature = "alloc")]
-    pub fn split(self) -> (CachedProd<Arc<Self>>, CachedCons<Arc<Self>>) {
-        Split::split(self)
-    }
-    pub fn split_ref(&mut self) -> (CachedProd<&Self>, CachedCons<&Self>) {
-        Split::split(self)
+unsafe impl<'a, S: Storage + 'a, B: RingBuffer + 'a> GenSplitRef<'a, B> for SharedRb<S> {
+    type GenRefProd = CachedProd<&'a B>;
+    type GenRefCons = CachedCons<&'a B>;
+
+    fn gen_split_ref(this: &'a mut B) -> (Self::GenRefProd, Self::GenRefCons) {
+        unsafe { (CachedProd::new(this), CachedCons::new(this)) }
     }
 }
 

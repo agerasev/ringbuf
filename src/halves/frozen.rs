@@ -3,8 +3,8 @@ use super::{
     macros::*,
 };
 use crate::{
-    rbs::ref_::RbRef,
-    traits::{observer::Observe, Consumer, Observer, Producer},
+    rb::RbRef,
+    traits::{Consumer, Observe, Observer, Producer},
 };
 use core::{
     cell::Cell,

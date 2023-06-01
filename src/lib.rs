@@ -8,8 +8,8 @@ extern crate alloc;
 extern crate std;
 
 mod alias;
-mod halves;
-mod rbs;
+pub mod halves;
+pub mod rb;
 pub mod storage;
 pub mod traits;
 mod transfer;
@@ -19,8 +19,8 @@ mod utils;
 mod tests;
 
 pub use alias::*;
-pub use halves::*;
-pub use rbs::*;
+pub use halves::{CachedCons, CachedProd, Cons, Obs, Prod};
+pub use rb::{LocalRb, SharedRb};
 pub use traits::consumer;
 pub use traits::producer;
 pub use transfer::transfer;

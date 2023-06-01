@@ -72,10 +72,3 @@ macro_rules! delegate_ring_buffer {
         }
     };
 }
-
-pub trait Split {
-    type Prod: Producer;
-    type Cons: Consumer;
-
-    fn split(self) -> (Self::Prod, Self::Cons);
-}

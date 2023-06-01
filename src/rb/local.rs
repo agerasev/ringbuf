@@ -1,12 +1,14 @@
-use super::{macros::rb_impl_init, utils::ranges};
+use super::{
+    macros::rb_impl_init,
+    traits::{GenSplit, GenSplitRef},
+    utils::ranges,
+};
 #[cfg(feature = "alloc")]
 use crate::storage::Heap;
 use crate::{
-    consumer::Consumer,
-    halves::direct::{Cons, Prod},
-    producer::Producer,
+    halves::{Cons, Prod},
     storage::{Shared, Static, Storage},
-    traits::{ring_buffer::Split, Observer, RingBuffer},
+    traits::{Consumer, Observer, Producer, RingBuffer},
 };
 #[cfg(feature = "alloc")]
 use alloc::rc::Rc;
@@ -94,31 +96,22 @@ impl<S: Storage> Drop for LocalRb<S> {
     }
 }
 
-impl<'a, S: Storage + 'a> Split for &'a mut LocalRb<S> {
-    type Prod = Prod<&'a LocalRb<S>>;
-    type Cons = Cons<&'a LocalRb<S>>;
-
-    fn split(self) -> (Self::Prod, Self::Cons) {
-        unsafe { (Prod::new(self), Cons::new(self)) }
-    }
-}
 #[cfg(feature = "alloc")]
-impl<S: Storage> Split for LocalRb<S> {
-    type Prod = Prod<Rc<Self>>;
-    type Cons = Cons<Rc<Self>>;
+unsafe impl<S: Storage, B: RingBuffer> GenSplit<B> for LocalRb<S> {
+    type GenProd = Prod<Rc<B>>;
+    type GenCons = Cons<Rc<B>>;
 
-    fn split(self) -> (Self::Prod, Self::Cons) {
-        let rc = Rc::new(self);
+    fn gen_split(this: B) -> (Self::GenProd, Self::GenCons) {
+        let rc = Rc::new(this);
         unsafe { (Prod::new(rc.clone()), Cons::new(rc)) }
     }
 }
-impl<S: Storage> LocalRb<S> {
-    #[cfg(feature = "alloc")]
-    pub fn split(self) -> (Prod<Rc<Self>>, Cons<Rc<Self>>) {
-        Split::split(self)
-    }
-    pub fn split_ref(&mut self) -> (Prod<&Self>, Cons<&Self>) {
-        Split::split(self)
+unsafe impl<'a, S: Storage + 'a, B: RingBuffer + 'a> GenSplitRef<'a, B> for LocalRb<S> {
+    type GenRefProd = Prod<&'a B>;
+    type GenRefCons = Cons<&'a B>;
+
+    fn gen_split_ref(this: &'a mut B) -> (Self::GenRefProd, Self::GenRefCons) {
+        unsafe { (Prod::new(this), Cons::new(this)) }
     }
 }
 

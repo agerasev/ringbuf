@@ -1,6 +1,10 @@
 #[cfg(feature = "alloc")]
 use super::storage::Heap;
-use super::{storage::Static, Cons, Prod, SharedRb};
+use super::{
+    halves::{Cons, Prod},
+    rb::SharedRb,
+    storage::Static,
+};
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
 

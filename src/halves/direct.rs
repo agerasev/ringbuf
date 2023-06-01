@@ -1,9 +1,8 @@
 use super::macros::*;
 use crate::{
-    //cached::FrozenCons,
     delegate_observer,
-    rbs::ref_::{AsRb, RbRef},
-    traits::{observer::Observe, Consumer, Observer, Producer},
+    rb::{AsRb, RbRef},
+    traits::{Consumer, Observe, Observer, Producer},
 };
 
 #[derive(Clone)]

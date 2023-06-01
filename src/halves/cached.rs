@@ -4,9 +4,8 @@ use super::{
     macros::*,
 };
 use crate::{
-    rbs::ref_::RbRef,
-    ref_::AsRb,
-    traits::{observer::Observe, Consumer, Observer, Producer},
+    rb::{AsRb, RbRef},
+    traits::{Consumer, Observe, Observer, Producer},
 };
 use core::{mem::MaybeUninit, num::NonZeroUsize};
 

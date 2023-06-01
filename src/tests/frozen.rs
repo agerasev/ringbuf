@@ -1,14 +1,14 @@
 use super::Rb;
 use crate::{
-    halves::frozen::{FrozenCons, FrozenProd},
+    halves::{FrozenCons, FrozenProd},
     storage::Static,
-    traits::{ring_buffer::Split, *},
+    traits::*,
 };
 
 #[test]
 fn producer() {
     let rb = Rb::<Static<i32, 2>>::default();
-    let (mut frozen_prod, mut cons) = unsafe { (FrozenProd::new(&rb), <&mut Rb<_> as Split>::Cons::new(&rb)) };
+    let (mut frozen_prod, mut cons) = unsafe { (FrozenProd::new(&rb), <Rb<_> as SplitRef>::RefCons::new(&rb)) };
     frozen_prod.try_push(0).unwrap();
     frozen_prod.sync();
     assert!(cons.iter().cloned().eq(0..1));
@@ -44,7 +44,7 @@ fn producer() {
 #[test]
 fn discard() {
     let rb = Rb::<Static<i32, 10>>::default();
-    let (mut frozen_prod, cons) = unsafe { (FrozenProd::new(&rb), <&mut Rb<_> as Split>::Cons::new(&rb)) };
+    let (mut frozen_prod, cons) = unsafe { (FrozenProd::new(&rb), <Rb<_> as SplitRef>::RefCons::new(&rb)) };
     frozen_prod.try_push(0).unwrap();
     frozen_prod.sync();
     assert!(cons.iter().cloned().eq(0..1));
@@ -81,7 +81,7 @@ fn discard() {
 #[test]
 fn consumer() {
     let rb = Rb::<Static<i32, 10>>::default();
-    let (mut prod, mut frozen_cons) = unsafe { (<&mut Rb<_> as Split>::Prod::new(&rb), FrozenCons::new(&rb)) };
+    let (mut prod, mut frozen_cons) = unsafe { (<Rb<_> as SplitRef>::RefProd::new(&rb), FrozenCons::new(&rb)) };
     prod.try_push(0).unwrap();
     prod.try_push(1).unwrap();
     frozen_cons.sync();
