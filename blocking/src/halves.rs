@@ -23,7 +23,7 @@ impl<B: Producer + AsRb> BlockingProd<B>
 where
     B::Rb: BlockingProducer,
 {
-    pub(crate) unsafe fn new(base: B) -> Self {
+    pub unsafe fn new(base: B) -> Self {
         Self { base }
     }
     fn base(&self) -> &B {
@@ -37,7 +37,7 @@ impl<B: Consumer + AsRb> BlockingCons<B>
 where
     B::Rb: BlockingConsumer,
 {
-    pub(crate) unsafe fn new(base: B) -> Self {
+    pub unsafe fn new(base: B) -> Self {
         Self { base }
     }
     fn base(&self) -> &B {
