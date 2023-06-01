@@ -1,4 +1,4 @@
-use crate::{traits::*, AsyncHeapRb};
+use crate::{async_transfer, traits::*, AsyncHeapRb};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use futures::task::{noop_waker_ref, AtomicWaker};
 use ringbuf::traits::*;
@@ -69,7 +69,7 @@ fn push_pop_slice() {
         },
     );
 }
-/*
+
 #[test]
 fn sink_stream() {
     use futures::{
@@ -127,7 +127,7 @@ fn transfer() {
     execute!(
         async move {
             let mut prod = src_prod;
-            prod.push_iter(0..COUNT).await.unwrap();
+            assert!(prod.push_iter_all(0..COUNT).await);
         },
         async move {
             let mut src = src_cons;
@@ -147,7 +147,7 @@ fn transfer() {
         },
     );
 }
-*/
+
 #[test]
 fn wait() {
     let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(3).split();

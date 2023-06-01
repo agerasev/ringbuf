@@ -141,10 +141,10 @@ pub trait Producer: Observer {
 
 #[macro_export]
 macro_rules! impl_producer_traits {
-    ($type:ident $(< $( $par:tt $( : $cbd:tt $(+ $dbd:tt )* )? ),+ >)?) => {
+    ($type:ident $(< $( $param:tt $( : $first_bound:tt $(+ $next_bound:tt )* )? ),+ >)?) => {
 
         #[cfg(feature = "std")]
-        impl $(< $( $par $( : $cbd $(+ $dbd )* )? ),+ >)? std::io::Write for $type $(< $( $par ),+ >)?
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? std::io::Write for $type $(< $( $param ),+ >)?
         where
             Self: $crate::traits::Producer<Item = u8>,
         {
@@ -162,7 +162,7 @@ macro_rules! impl_producer_traits {
             }
         }
 
-        impl $(< $( $par $( : $cbd $(+ $dbd )* )? ),+ >)? core::fmt::Write for $type $(< $( $par ),+ >)?
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? core::fmt::Write for $type $(< $( $param ),+ >)?
         where
             Self: $crate::traits::Producer<Item = u8>,
         {

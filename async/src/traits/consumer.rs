@@ -1,15 +1,16 @@
+use super::AsyncObserver;
+use crate::{halves::AsyncCons, rb::AsAsyncRb};
 use core::{
     future::Future,
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-//#[cfg(feature = "std")]
-//use futures::io::AsyncRead;
-use super::AsyncObserver;
-use futures::future::FusedFuture;
+#[cfg(feature = "std")]
+use futures::io::AsyncRead;
+use futures::{future::FusedFuture, Stream};
 use ringbuf::traits::Consumer;
-//#[cfg(feature = "std")]
-//use std::io;
+#[cfg(feature = "std")]
+use std::io;
 
 pub trait AsyncConsumer: AsyncObserver + Consumer {
     fn register_write_waker(&self, waker: &Waker);
@@ -154,12 +155,8 @@ impl<'a, A: AsyncConsumer> Future for WaitOccupiedFuture<'a, A> {
     }
 }
 
-/*
-pub struct ConsStream<'a, A: AsyncConsumer> {
-    owner: &'a mut A,
-}
-impl<A: AsyncConsumer> Stream for ConsStream<'a, A> {
-    type Item = A::Item;
+impl<B: Consumer + AsAsyncRb> Stream for AsyncCons<B> {
+    type Item = B::Item;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.register_write_waker(cx.waker());
@@ -178,15 +175,11 @@ impl<A: AsyncConsumer> Stream for ConsStream<'a, A> {
 }
 
 #[cfg(feature = "std")]
-impl<A: AsyncConsumer<Item = u8>> AsyncRead for A {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
+impl<B: Consumer<Item = u8> + AsAsyncRb> AsyncRead for AsyncCons<B> {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         self.register_write_waker(cx.waker());
         let closed = self.is_closed();
-        let len = self.base.pop_slice(buf);
+        let len = self.pop_slice(buf);
         if len != 0 || closed {
             Poll::Ready(Ok(len))
         } else {
@@ -194,4 +187,3 @@ impl<A: AsyncConsumer<Item = u8>> AsyncRead for A {
         }
     }
 }
-*/

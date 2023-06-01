@@ -38,6 +38,9 @@ impl<B: Consumer + AsAsyncRb> AsyncCons<B> {
     }
 }
 
+impl<B: Producer + AsAsyncRb> Unpin for AsyncProd<B> {}
+impl<B: Consumer + AsAsyncRb> Unpin for AsyncCons<B> {}
+
 impl<B: Producer + AsAsyncRb> Observer for AsyncProd<B> {
     delegate_observer!(B, Self::base);
 }

@@ -41,6 +41,8 @@ impl<B: RingBuffer> AsyncRb<B> {
     }
 }
 
+impl<B: RingBuffer> Unpin for AsyncRb<B> {}
+
 impl<B: RingBuffer> Observer for AsyncRb<B> {
     delegate_observer!(B, Self::base);
 }
@@ -101,6 +103,9 @@ impl<B: RingBuffer + GenSplit<Self>> Split for AsyncRb<B> {
 
 impl_producer_traits!(AsyncRb<B: RingBuffer>);
 impl_consumer_traits!(AsyncRb<B: RingBuffer>);
+
+//impl_async_producer_traits!(AsyncRb<B: RingBuffer>);
+//impl_async_consumer_traits!(AsyncRb<B: RingBuffer>);
 
 pub trait AsAsyncRb {
     type AsyncRb: AsyncRingBuffer;

@@ -1,3 +1,5 @@
+use crate::{halves::AsyncProd, rb::AsAsyncRb};
+
 use super::AsyncObserver;
 use core::{
     future::Future,
@@ -5,12 +7,12 @@ use core::{
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-//#[cfg(feature = "std")]
-//use futures::io::AsyncWrite;
-use futures::future::FusedFuture;
-use ringbuf::traits::Producer;
-//#[cfg(feature = "std")]
-//use std::io;
+#[cfg(feature = "std")]
+use futures::io::AsyncWrite;
+use futures::{future::FusedFuture, Sink};
+use ringbuf::traits::{Observer, Producer};
+#[cfg(feature = "std")]
+use std::io;
 
 pub trait AsyncProducer: AsyncObserver + Producer {
     fn register_read_waker(&self, waker: &Waker);
@@ -195,42 +197,42 @@ impl<'a, A: AsyncProducer> Future for WaitVacantFuture<'a, A> {
         }
     }
 }
-/*
-impl<A: AsyncProducer> Sink<A::Item> for A {
+
+impl<B: Producer + AsAsyncRb> Sink<B::Item> for AsyncProd<B> {
     type Error = ();
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.register_read_waker(cx.waker());
         if self.is_closed() {
             Poll::Ready(Err(()))
-        } else if self.base.is_full() {
+        } else if self.is_full() {
             Poll::Pending
         } else {
             Poll::Ready(Ok(()))
         }
     }
-    fn start_send(mut self: Pin<&mut Self>, item: A::Item) -> Result<(), Self::Error> {
-        assert!(self.base.push(item).is_ok());
+    fn start_send(mut self: Pin<&mut Self>, item: B::Item) -> Result<(), Self::Error> {
+        assert!(self.try_push(item).is_ok());
         Ok(())
     }
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         // Don't need to be flushed.
         Poll::Ready(Ok(()))
     }
-    fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.close();
         Poll::Ready(Ok(()))
     }
 }
 
 #[cfg(feature = "std")]
-impl<A: AsyncProducer<Item = u8>> AsyncWrite for A {
+impl<B: Producer<Item = u8> + AsAsyncRb> AsyncWrite for AsyncProd<B> {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         self.register_read_waker(cx.waker());
         if self.is_closed() {
             Poll::Ready(Ok(0))
         } else {
-            let count = self.base.push_slice(buf);
+            let count = self.push_slice(buf);
             if count == 0 {
                 Poll::Pending
             } else {
@@ -242,9 +244,8 @@ impl<A: AsyncProducer<Item = u8>> AsyncWrite for A {
         // Don't need to be flushed.
         Poll::Ready(Ok(()))
     }
-    fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         self.close();
         Poll::Ready(Ok(()))
     }
 }
-*/

@@ -115,6 +115,10 @@ pub trait Consumer: Observer {
         count
     }
 
+    fn into_iter(self) -> IntoIter<Self> {
+        IntoIter::new(self)
+    }
+
     /// Returns an iterator that removes items one by one from the ring buffer.
     fn pop_iter(&mut self) -> PopIter<'_, Self> {
         PopIter::new(self)
@@ -292,18 +296,6 @@ pub type IterMut<'a, C: Consumer> = Chain<slice::IterMut<'a, C::Item>, slice::It
 #[macro_export]
 macro_rules! impl_consumer_traits {
     ($type:ident $(< $( $param:tt $( : $first_bound:tt $(+ $next_bound:tt )* )? ),+ >)?) => {
-
-        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? IntoIterator for $type $(< $( $param ),+ >)?
-        where
-            Self: $crate::traits::Consumer
-        {
-            type Item = <Self as $crate::traits::Observer>::Item;
-            type IntoIter = $crate::consumer::IntoIter<Self>;
-
-            fn into_iter(self) -> Self::IntoIter {
-                $crate::consumer::IntoIter::new(self)
-            }
-        }
 
         #[cfg(feature = "std")]
         impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? std::io::Read for $type $(< $( $param ),+ >)?
