@@ -1,29 +1,20 @@
 use core::{
     future::Future,
     iter::Peekable,
-    ops::Deref,
     pin::Pin,
     task::{Context, Poll, Waker},
 };
 use futures::future::FusedFuture;
 //#[cfg(feature = "std")]
 //use futures::io::AsyncWrite;
-use ringbuf::{
-    index::Index,
-    storage::Storage,
-    traits::{Producer, RingBuffer},
-    Prod, Rb,
-};
+use ringbuf::traits::Producer;
 
-use crate::index::AsyncIndex;
+use super::AsyncObserver;
 //#[cfg(feature = "std")]
 //use std::io;
 
-pub trait AsyncProducer: Producer {
-    fn register_waker(&self, waker: &Waker);
-
-    /// Check if the corresponding consumer is closed.
-    fn is_closed(&self) -> bool;
+pub trait AsyncProducer: AsyncObserver + Producer {
+    fn register_read_waker(&self, waker: &Waker);
 
     /// Push item to the ring buffer waiting asynchronously if the buffer is full.
     ///
@@ -42,10 +33,7 @@ pub trait AsyncProducer: Producer {
     /// Future returns:
     /// + `Ok` - iterator ended.
     /// + `Err(iter)` - the corresponding consumer was dropped, remaining iterator is returned back.
-    fn push_iter_all<I: Iterator<Item = Self::Item>>(
-        &mut self,
-        iter: I,
-    ) -> PushIterFuture<'_, Self, I> {
+    fn push_iter_all<I: Iterator<Item = Self::Item>>(&mut self, iter: I) -> PushIterFuture<'_, Self, I> {
         PushIterFuture {
             owner: self,
             iter: Some(iter.peekable()),
@@ -69,10 +57,7 @@ pub trait AsyncProducer: Producer {
     /// Future returns:
     /// + `Ok` - all slice contents are copied.
     /// + `Err(count)` - the corresponding consumer was dropped, number of copied items returned.
-    fn push_slice_all<'a: 'b, 'b>(
-        &'a mut self,
-        slice: &'b [Self::Item],
-    ) -> PushSliceFuture<'a, 'b, Self>
+    fn push_slice_all<'a: 'b, 'b>(&'a mut self, slice: &'b [Self::Item]) -> PushSliceFuture<'a, 'b, Self>
     where
         Self::Item: Copy,
     {
@@ -98,7 +83,7 @@ impl<'a, A: AsyncProducer> Future for PushFuture<'a, A> {
     type Output = Result<(), A::Item>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.owner.register_waker(cx.waker());
+        self.owner.register_read_waker(cx.waker());
         let item = self.item.take().unwrap();
         if self.owner.is_closed() {
             Poll::Ready(Err(item))
@@ -138,7 +123,7 @@ where
     type Output = Result<(), usize>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.owner.register_waker(cx.waker());
+        self.owner.register_read_waker(cx.waker());
         let mut slice = self.slice.take().unwrap();
         if self.owner.is_closed() {
             Poll::Ready(Err(self.count))
@@ -170,7 +155,7 @@ impl<'a, A: AsyncProducer, I: Iterator<Item = A::Item>> Future for PushIterFutur
     type Output = bool;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.owner.register_waker(cx.waker());
+        self.owner.register_read_waker(cx.waker());
         let mut iter = self.iter.take().unwrap();
         if self.owner.is_closed() {
             Poll::Ready(false)
@@ -202,7 +187,7 @@ impl<'a, A: AsyncProducer> Future for WaitVacantFuture<'a, A> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         assert!(!self.done);
-        self.owner.register_waker(cx.waker());
+        self.owner.register_read_waker(cx.waker());
         let closed = self.owner.is_closed();
         if self.count <= self.owner.vacant_len() || closed {
             Poll::Ready(())
@@ -212,34 +197,13 @@ impl<'a, A: AsyncProducer> Future for WaitVacantFuture<'a, A> {
     }
 }
 
-impl<S: Storage, R: Index, W: Index> AsyncProducer for Rb<S, AsyncIndex<R>, W> {
-    fn register_waker(&self, waker: &Waker) {
-        unsafe { self.read_index_ref() }.waker.register(waker);
-    }
-    fn is_closed(&self) -> bool {
-        unsafe { self.read_index_ref() }.is_closed()
-    }
-}
-
-impl<R: Deref> AsyncProducer for Prod<R>
-where
-    R::Target: RingBuffer + AsyncProducer,
-{
-    fn register_waker(&self, waker: &Waker) {
-        self.base().register_waker(waker);
-    }
-    fn is_closed(&self) -> bool {
-        self.base().is_closed()
-    }
-}
-
 /*
 impl<A: AsyncProducer> Sink<A::Item> for A {
     type Error = ();
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
 
-        self.register_waker(cx.waker());
+        self.register_read_waker(cx.waker());
         if self.is_closed() {
             Poll::Ready(Err(()))
         } else if self.base.is_full() {
@@ -276,7 +240,7 @@ impl<A: AsyncProducer<Item = u8>> AsyncWrite for A {
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
 
-        self.register_waker(cx.waker());
+        self.register_read_waker(cx.waker());
         if self.is_closed() {
             Poll::Ready(Ok(0))
         } else {

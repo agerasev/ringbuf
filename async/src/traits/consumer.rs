@@ -1,28 +1,18 @@
 use core::{
     future::Future,
-    ops::Deref,
     pin::Pin,
     task::{Context, Poll, Waker},
 };
 //#[cfg(feature = "std")]
 //use futures::io::AsyncRead;
+use super::AsyncObserver;
 use futures::future::FusedFuture;
-use ringbuf::{
-    index::Index,
-    storage::Storage,
-    traits::{Consumer, RingBuffer},
-    Cons, Rb,
-};
+use ringbuf::traits::Consumer;
 //#[cfg(feature = "std")]
 //use std::io;
 
-use crate::index::AsyncIndex;
-
-pub trait AsyncConsumer: Consumer {
-    fn register_waker(&self, waker: &Waker);
-
-    /// Check if the corresponding producer is dropped.
-    fn is_closed(&self) -> bool;
+pub trait AsyncConsumer: AsyncObserver + Consumer {
+    fn register_write_waker(&self, waker: &Waker);
 
     /// Pop item from the ring buffer waiting asynchronously if the buffer is empty.
     ///
@@ -30,10 +20,7 @@ pub trait AsyncConsumer: Consumer {
     /// + `Some(item)` - an item is taken.
     /// + `None` - the buffer is empty and the corresponding producer was dropped.
     fn pop(&mut self) -> PopFuture<'_, Self> {
-        PopFuture {
-            owner: self,
-            done: false,
-        }
+        PopFuture { owner: self, done: false }
     }
 
     /// Wait for the buffer to contain at least `count` items or to close.
@@ -53,10 +40,7 @@ pub trait AsyncConsumer: Consumer {
     /// Future returns:
     /// + `Ok` - the whole slice is filled with the items from the buffer.
     /// + `Err(count)` - the buffer is empty and the corresponding producer was dropped, number of items copied to slice is returned.
-    fn pop_slice_all<'a: 'b, 'b>(
-        &'a mut self,
-        slice: &'b mut [Self::Item],
-    ) -> PopSliceFuture<'a, 'b, Self>
+    fn pop_slice_all<'a: 'b, 'b>(&'a mut self, slice: &'b mut [Self::Item]) -> PopSliceFuture<'a, 'b, Self>
     where
         Self::Item: Copy,
     {
@@ -83,7 +67,7 @@ impl<'a, A: AsyncConsumer> Future for PopFuture<'a, A> {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         assert!(!self.done);
-        self.owner.register_waker(cx.waker());
+        self.owner.register_write_waker(cx.waker());
         let closed = self.owner.is_closed();
         #[cfg(feature = "std")]
         std::println!("PopFuture::poll: closed={}", closed);
@@ -127,7 +111,7 @@ where
     type Output = Result<(), usize>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.owner.register_waker(cx.waker());
+        self.owner.register_write_waker(cx.waker());
         let closed = self.owner.is_closed();
         let mut slice = self.slice.take().unwrap();
         let len = self.owner.pop_slice(slice);
@@ -160,34 +144,13 @@ impl<'a, A: AsyncConsumer> Future for WaitOccupiedFuture<'a, A> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         assert!(!self.done);
-        self.owner.register_waker(cx.waker());
+        self.owner.register_write_waker(cx.waker());
         let closed = self.owner.is_closed();
         if self.count <= self.owner.occupied_len() || closed {
             Poll::Ready(())
         } else {
             Poll::Pending
         }
-    }
-}
-
-impl<S: Storage, R: Index, W: Index> AsyncConsumer for Rb<S, R, AsyncIndex<W>> {
-    fn register_waker(&self, waker: &Waker) {
-        unsafe { self.write_index_ref() }.waker.register(waker);
-    }
-    fn is_closed(&self) -> bool {
-        unsafe { self.write_index_ref() }.is_closed()
-    }
-}
-
-impl<R: Deref> AsyncConsumer for Cons<R>
-where
-    R::Target: RingBuffer + AsyncConsumer,
-{
-    fn register_waker(&self, waker: &Waker) {
-        self.base().register_waker(waker);
-    }
-    fn is_closed(&self) -> bool {
-        self.base().is_closed()
     }
 }
 
@@ -199,7 +162,7 @@ impl<A: AsyncConsumer> Stream for ConsStream<'a, A> {
     type Item = A::Item;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        self.register_waker(cx.waker());
+        self.register_write_waker(cx.waker());
         let closed = self.is_closed();
         match self.try_pop() {
             Some(item) => Poll::Ready(Some(item)),
@@ -221,7 +184,7 @@ impl<A: AsyncConsumer<Item = u8>> AsyncRead for A {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        self.register_waker(cx.waker());
+        self.register_write_waker(cx.waker());
         let closed = self.is_closed();
         let len = self.base.pop_slice(buf);
         if len != 0 || closed {

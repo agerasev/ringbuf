@@ -6,16 +6,15 @@ extern crate alloc;
 extern crate std;
 
 mod alias;
-pub mod consumer;
-pub mod index;
-pub mod producer;
+pub mod halves;
+pub mod rb;
+pub mod traits;
 mod transfer;
 
 pub use alias::*;
-pub use consumer::AsyncConsumer;
-pub use producer::AsyncProducer;
+pub use rb::AsyncRb;
+pub use traits::{consumer, producer};
 pub use transfer::async_transfer;
 
-#[cfg(feature = "std")]
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod tests;

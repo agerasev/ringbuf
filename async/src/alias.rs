@@ -1,4 +1,10 @@
-use crate::index::AsyncIndex;
-use ringbuf::{index::SharedIndex, storage::Heap, Rb};
+use crate::rb::AsyncRb;
+use ringbuf::HeapRb;
 
-pub type AsyncRb<T> = Rb<Heap<T>, AsyncIndex<SharedIndex>, AsyncIndex<SharedIndex>>;
+pub type AsyncHeapRb<T> = AsyncRb<HeapRb<T>>;
+
+impl<T> AsyncHeapRb<T> {
+    pub fn new(cap: usize) -> Self {
+        Self::from(HeapRb::new(cap))
+    }
+}

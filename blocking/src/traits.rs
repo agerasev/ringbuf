@@ -49,36 +49,6 @@ pub trait BlockingProducer: Producer {
     }
 }
 
-#[macro_export]
-macro_rules! delegate_blocking_producer {
-    ($type:ty, $ref:expr, $mut:expr) => {
-        type Instant = <$type as $crate::traits::BlockingProducer>::Instant;
-
-        #[inline]
-        fn wait_vacant(&self, count: usize, timeout: Option<core::time::Duration>) -> bool {
-            $ref(self).wait_vacant(count, timeout)
-        }
-
-        #[inline]
-        fn push(&mut self, item: Self::Item, timeout: Option<core::time::Duration>) -> Result<(), Self::Item> {
-            $mut(self).push(item, timeout)
-        }
-
-        #[inline]
-        fn push_iter_all<I: Iterator<Item = Self::Item>>(&mut self, iter: I, timeout: Option<core::time::Duration>) -> usize {
-            $mut(self).push_iter_all(iter, timeout)
-        }
-
-        #[inline]
-        fn push_slice_all(&mut self, slice: &[Self::Item], timeout: Option<core::time::Duration>) -> usize
-        where
-            Self::Item: Copy,
-        {
-            $mut(self).push_slice_all(slice, timeout)
-        }
-    };
-}
-
 pub trait BlockingConsumer: Consumer {
     type Instant: Instant;
 
@@ -137,34 +107,4 @@ impl<'a, C: BlockingConsumer> Iterator for PopAllIter<'a, C> {
             None
         }
     }
-}
-
-#[macro_export]
-macro_rules! delegate_blocking_consumer {
-    ($type:ty, $ref:expr, $mut:expr) => {
-        type Instant = <$type as $crate::traits::BlockingConsumer>::Instant;
-
-        #[inline]
-        fn wait_occupied(&self, count: usize, timeout: Option<core::time::Duration>) -> bool {
-            $ref(self).wait_occupied(count, timeout)
-        }
-
-        #[inline]
-        fn pop_wait(&mut self, timeout: Option<core::time::Duration>) -> Option<Self::Item> {
-            $mut(self).pop_wait(timeout)
-        }
-
-        #[inline]
-        fn pop_iter_all(&mut self, timeout: Option<core::time::Duration>) -> $crate::traits::PopAllIter<'_, Self> {
-            unsafe { $crate::traits::PopAllIter::new(self, timeout) }
-        }
-
-        #[inline]
-        fn pop_slice_all(&mut self, slice: &mut [Self::Item], timeout: Option<core::time::Duration>) -> usize
-        where
-            Self::Item: Copy,
-        {
-            $mut(self).pop_slice_all(slice, timeout)
-        }
-    };
 }

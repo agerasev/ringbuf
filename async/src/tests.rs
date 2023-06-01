@@ -1,6 +1,7 @@
-use crate::{AsyncConsumer, AsyncProducer, AsyncRb};
+use crate::{traits::*, AsyncHeapRb};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use futures::task::{noop_waker_ref, AtomicWaker};
+use ringbuf::traits::*;
 use std::{vec, vec::Vec};
 
 #[test]
@@ -30,7 +31,7 @@ const COUNT: usize = 16;
 #[test]
 fn push_pop() {
     use std::println;
-    let (prod, cons) = AsyncRb::<usize>::new(2).split_arc();
+    let (prod, cons) = AsyncHeapRb::<usize>::new(2).split();
     execute!(
         async move {
             let mut prod = prod;
@@ -52,7 +53,7 @@ fn push_pop() {
 
 #[test]
 fn push_pop_slice() {
-    let (prod, cons) = AsyncRb::<usize>::new(3).split_arc();
+    let (prod, cons) = AsyncHeapRb::<usize>::new(3).split();
     execute!(
         async move {
             let mut prod = prod;
@@ -75,7 +76,7 @@ fn sink_stream() {
         sink::SinkExt,
         stream::{self, StreamExt},
     };
-    let (prod, cons) = AsyncRb::<usize>::new(2).split_arc();
+    let (prod, cons) = AsyncHeapRb::<usize>::new(2).split();
     execute!(
         async move {
             let mut prod = prod;
@@ -99,7 +100,7 @@ fn sink_stream() {
 #[test]
 fn read_write() {
     use futures::{AsyncReadExt, AsyncWriteExt};
-    let (prod, cons) = AsyncRb::<u8>::new(3).split_arc();
+    let (prod, cons) = AsyncHeapRb::<u8>::new(3).split();
     let input = (0..255).cycle().take(COUNT);
     let output = input.clone();
     execute!(
@@ -121,8 +122,8 @@ fn read_write() {
 #[test]
 fn transfer() {
     use futures::stream::StreamExt;
-    let (src_prod, src_cons) = AsyncRb::<usize>::new(3).split_arc();
-    let (dst_prod, dst_cons) = AsyncRb::<usize>::new(5).split_arc();
+    let (src_prod, src_cons) = AsyncHeapRb::<usize>::new(3).split();
+    let (dst_prod, dst_cons) = AsyncHeapRb::<usize>::new(5).split();
     execute!(
         async move {
             let mut prod = src_prod;
@@ -149,7 +150,7 @@ fn transfer() {
 */
 #[test]
 fn wait() {
-    let (mut prod, mut cons) = AsyncRb::<usize>::new(3).split_arc();
+    let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(3).split();
     let stage = AtomicUsize::new(0);
     execute!(
         async {

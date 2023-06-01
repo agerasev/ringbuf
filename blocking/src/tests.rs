@@ -1,6 +1,6 @@
 use crate::{traits::*, BlockingHeapRb};
 use ringbuf::traits::*;
-use std::{iter::once, thread, time::Duration};
+use std::{iter::once, string::String, thread, time::Duration, vec, vec::Vec};
 
 const THE_BOOK_FOREWORD: &str = r#"
 It wasn't always so clear, but the Rust programming language is fundamentally about empowerment: no matter what kind of code you are writing now, Rust empowers you to reach farther, to program with confidence in a wider variety of domains than you did before.

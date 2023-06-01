@@ -21,8 +21,7 @@ mod tests;
 pub use alias::*;
 pub use halves::{CachedCons, CachedProd, Cons, Obs, Prod};
 pub use rb::{LocalRb, SharedRb};
-pub use traits::consumer;
-pub use traits::producer;
+pub use traits::{consumer, producer};
 pub use transfer::transfer;
 
 #[cfg(feature = "bench")]

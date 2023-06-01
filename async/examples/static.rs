@@ -1,12 +1,11 @@
 #![no_std]
-use async_ringbuf::{index::AsyncIndex, AsyncConsumer, AsyncProducer};
+use async_ringbuf::{traits::*, AsyncRb};
 use futures::{executor::block_on, join};
-use ringbuf::{index::SharedIndex, storage::Static, Rb};
+use ringbuf::{traits::*, StaticRb};
 
 async fn async_main() {
     const RB_SIZE: usize = 1;
-    let mut rb =
-        Rb::<Static<i32, RB_SIZE>, AsyncIndex<SharedIndex>, AsyncIndex<SharedIndex>>::default();
+    let mut rb = AsyncRb::<StaticRb<i32, RB_SIZE>>::default();
     let (prod, cons) = rb.split_ref();
 
     join!(

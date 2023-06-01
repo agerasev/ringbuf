@@ -7,10 +7,9 @@ pub trait Instant {
     fn elapsed(&self) -> Duration;
 }
 
-pub trait Semaphore {
+pub trait Semaphore: Default {
     type Instant: Instant;
 
-    fn new() -> Self;
     fn wait<F: Fn() -> bool>(&self, f: F, timeout: Option<Duration>) -> bool;
     fn notify<F: FnOnce()>(&self, f: F);
 }
@@ -38,12 +37,6 @@ pub struct StdSemaphore {
 impl Semaphore for StdSemaphore {
     type Instant = StdInstant;
 
-    fn new() -> Self {
-        Self {
-            condvar: Condvar::new(),
-            mutex: Mutex::new(()),
-        }
-    }
     fn wait<F: Fn() -> bool>(&self, f: F, timeout: Option<Duration>) -> bool {
         if f() {
             return true;

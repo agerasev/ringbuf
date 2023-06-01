@@ -11,12 +11,14 @@ use ringbuf::{
 };
 
 #[cfg(not(feature = "std"))]
+#[derive(Default)]
 pub struct BlockingRb<B: RingBuffer, S: Semaphore> {
     base: B,
     read: S,
     write: S,
 }
 #[cfg(feature = "std")]
+#[derive(Default)]
 pub struct BlockingRb<B: RingBuffer, S: Semaphore = StdSemaphore> {
     base: B,
     read: S,
@@ -27,8 +29,8 @@ impl<B: RingBuffer, S: Semaphore> BlockingRb<B, S> {
     pub fn from(base: B) -> Self {
         Self {
             base,
-            read: S::new(),
-            write: S::new(),
+            read: S::default(),
+            write: S::default(),
         }
     }
     fn base(&self) -> &B {
