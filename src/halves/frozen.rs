@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::direct::{Cons, Obs, Prod};
 use crate::{
     rb::RbRef,

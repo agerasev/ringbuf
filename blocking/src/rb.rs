@@ -1,6 +1,8 @@
+#[cfg(feature = "std")]
+use crate::sync::StdSemaphore;
 use crate::{
     halves::{BlockingCons, BlockingProd},
-    sync::{Semaphore, StdSemaphore},
+    sync::Semaphore,
     traits::{BlockingConsumer, BlockingProducer},
 };
 use core::time::Duration;

@@ -1,5 +1,6 @@
 #![no_std]
 #![allow(clippy::type_complexity)]
+#![allow(clippy::missing_safety_doc)]
 #![cfg_attr(feature = "bench", feature(test))]
 
 #[cfg(feature = "alloc")]

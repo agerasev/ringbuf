@@ -1,8 +1,6 @@
-use super::{
-    macros::rb_impl_init,
-    traits::{GenSplit, GenSplitRef},
-    utils::ranges,
-};
+#[cfg(feature = "alloc")]
+use super::traits::GenSplit;
+use super::{macros::rb_impl_init, traits::GenSplitRef, utils::ranges};
 #[cfg(feature = "alloc")]
 use crate::storage::Heap;
 use crate::{

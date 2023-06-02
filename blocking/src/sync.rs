@@ -17,6 +17,7 @@ pub trait Semaphore: Default {
 #[cfg(feature = "std")]
 pub use std::time::Instant as StdInstant;
 
+#[cfg(feature = "std")]
 impl Instant for StdInstant {
     fn now() -> Self {
         StdInstant::now()

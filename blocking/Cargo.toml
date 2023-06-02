@@ -11,9 +11,9 @@ categories = ["concurrency", "data-structures"]
 license.workspace = true
 
 [features]
-default = ["std"]
-std = ["alloc"]
-alloc = []
+default = []
+std = ["ringbuf/std", "alloc"]
+alloc = ["ringbuf/alloc"]
 
 [dependencies]
 ringbuf = { workspace = true }

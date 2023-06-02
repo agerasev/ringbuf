@@ -9,7 +9,4 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-      - run: cargo check --no-default-features
-      - run: cargo check --no-default-features --features alloc
-      - run: cargo test
-      - run: cd blocking && cargo test
+      - run: ./test.sh

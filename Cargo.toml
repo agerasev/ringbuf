@@ -26,8 +26,8 @@ license.workspace = true
 
 [features]
 default = ["std"]
-alloc = []
 std = ["alloc"]
+alloc = []
 bench = []
 test_local = []
 
