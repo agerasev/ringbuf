@@ -1,6 +1,6 @@
-use crate::{traits::*, BlockingRb};
+use crate::{traits::*, BlockingHeapRb};
 use ringbuf::traits::*;
-use std::{iter::once, thread, time::Duration};
+use std::{iter::once, string::String, thread, time::Duration, vec, vec::Vec};
 
 const THE_BOOK_FOREWORD: &str = r#"
 It wasn't always so clear, but the Rust programming language is fundamentally about empowerment: no matter what kind of code you are writing now, Rust empowers you to reach farther, to program with confidence in a wider variety of domains than you did before.
@@ -13,13 +13,13 @@ This book fully embraces the potential of Rust to empower its users. It's a frie
 - Nicholas Matsakis and Aaron Turon
 "#;
 
-const TIMEOUT: Option<Duration> = Some(Duration::from_millis(100));
+const TIMEOUT: Option<Duration> = Some(Duration::from_millis(1000));
 
 #[test]
 #[cfg_attr(miri, ignore)]
 fn wait() {
-    let buf = BlockingRb::<u8>::new(7);
-    let (mut prod, mut cons) = buf.split_arc();
+    let rb = BlockingHeapRb::<u8>::new(7);
+    let (mut prod, mut cons) = rb.split();
 
     let smsg = THE_BOOK_FOREWORD;
 
@@ -60,8 +60,8 @@ fn wait() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn slice_all() {
-    let buf = BlockingRb::<u8>::new(7);
-    let (mut prod, mut cons) = buf.split_arc();
+    let rb = BlockingHeapRb::<u8>::new(7);
+    let (mut prod, mut cons) = rb.split();
 
     let smsg = THE_BOOK_FOREWORD;
 
@@ -87,24 +87,18 @@ fn slice_all() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn iter_all() {
-    let buf = BlockingRb::<u8>::new(7);
-    let (mut prod, mut cons) = buf.split_arc();
+    let rb = BlockingHeapRb::<u8>::new(7);
+    let (mut prod, mut cons) = rb.split();
 
     let smsg = THE_BOOK_FOREWORD;
 
     let pjh = thread::spawn(move || {
         let bytes = smsg.as_bytes();
-        assert_eq!(
-            prod.push_iter_all(bytes.iter().copied().chain(once(0)), TIMEOUT),
-            bytes.len() + 1
-        );
+        assert_eq!(prod.push_iter_all(bytes.iter().copied().chain(once(0)), TIMEOUT), bytes.len() + 1);
     });
 
     let cjh = thread::spawn(move || {
-        let bytes = cons
-            .pop_iter_all(TIMEOUT)
-            .take_while(|x| *x != 0)
-            .collect::<Vec<_>>();
+        let bytes = cons.pop_iter_all(TIMEOUT).take_while(|x| *x != 0).collect::<Vec<_>>();
         String::from_utf8(bytes).unwrap()
     });
 

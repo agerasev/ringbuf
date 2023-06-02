@@ -1,5 +1,4 @@
-use crate::{consumer::Consumer, observer::Observer, producer::Producer};
-use core::mem::MaybeUninit;
+use super::{Consumer, Observer, Producer};
 
 /// An abstract ring buffer.
 ///
@@ -14,21 +13,6 @@ use core::mem::MaybeUninit;
 /// without using the space for an extra element in container.
 /// And obviously we cannot store more than `capacity` items in the buffer, so `write - read` modulo `2 * capacity` is not allowed to be greater than `capacity`.
 pub trait RingBuffer: Observer + Consumer + Producer {
-    fn read_index(&self) -> usize;
-    fn write_index(&self) -> usize;
-
-    unsafe fn set_read_index(&self, value: usize);
-    unsafe fn set_write_index(&self, value: usize);
-
-    unsafe fn unsafe_slices(
-        &self,
-        start: usize,
-        end: usize,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    );
-
     /// Pushes an item to the ring buffer overwriting the latest item if the buffer is full.
     ///
     /// Returns overwritten item if overwriting took place.
@@ -56,10 +40,7 @@ pub trait RingBuffer: Observer + Consumer + Producer {
         Self::Item: Copy,
     {
         if elems.len() > self.vacant_len() {
-            self.skip(usize::min(
-                elems.len() - self.vacant_len(),
-                self.occupied_len(),
-            ));
+            self.skip(usize::min(elems.len() - self.vacant_len(), self.occupied_len()));
         }
         self.push_slice(if elems.len() > self.vacant_len() {
             &elems[(elems.len() - self.vacant_len())..]
@@ -67,4 +48,27 @@ pub trait RingBuffer: Observer + Consumer + Producer {
             elems
         });
     }
+}
+
+#[macro_export]
+macro_rules! delegate_ring_buffer {
+    ($ref:expr, $mut:expr) => {
+        #[inline]
+        fn push_overwrite(&mut self, elem: Self::Item) -> Option<Self::Item> {
+            $mut(self).push_overwrite(elem)
+        }
+
+        #[inline]
+        fn push_iter_overwrite<I: Iterator<Item = Self::Item>>(&mut self, iter: I) {
+            $mut(self).push_iter_overwrite(iter)
+        }
+
+        #[inline]
+        fn push_slice_overwrite(&mut self, elems: &[Self::Item])
+        where
+            Self::Item: Copy,
+        {
+            $mut(self).push_slice_overwrite(elems)
+        }
+    };
 }

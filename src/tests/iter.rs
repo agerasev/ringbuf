@@ -1,8 +1,9 @@
-use crate::{storage::Static, traits::*, LocalRb};
+use super::Rb;
+use crate::{storage::Static, traits::*};
 
 #[test]
 fn iter() {
-    let mut rb = LocalRb::<Static<i32, 2>>::default();
+    let mut rb = Rb::<Static<i32, 2>>::default();
     let (mut prod, mut cons) = rb.split_ref();
 
     prod.try_push(10).unwrap();
@@ -18,7 +19,7 @@ fn iter() {
 
 #[test]
 fn iter_mut() {
-    let mut rb = LocalRb::<Static<i32, 2>>::default();
+    let mut rb = Rb::<Static<i32, 2>>::default();
     let (mut prod, mut cons) = rb.split_ref();
 
     prod.try_push(10).unwrap();
@@ -38,7 +39,7 @@ fn iter_mut() {
 
 #[test]
 fn pop_iter() {
-    let mut rb = LocalRb::<Static<i32, 3>>::default();
+    let mut rb = Rb::<Static<i32, 3>>::default();
     let (mut prod, mut cons) = rb.split_ref();
 
     prod.try_push(0).unwrap();
@@ -57,7 +58,7 @@ fn pop_iter() {
 
 #[test]
 fn push_pop_iter_partial() {
-    let mut rb = LocalRb::<Static<i32, 4>>::default();
+    let mut rb = Rb::<Static<i32, 4>>::default();
     let (mut prod, mut cons) = rb.split_ref();
 
     prod.try_push(0).unwrap();

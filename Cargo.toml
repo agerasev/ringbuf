@@ -10,7 +10,7 @@ license = "MIT/Apache-2.0"
 ringbuf = { path = ".", version = "0.4.0" }
 
 [workspace]
-members = ["blocking"]
+members = ["async", "blocking"]
 
 [package]
 name = "ringbuf"
@@ -26,9 +26,10 @@ license.workspace = true
 
 [features]
 default = ["std"]
-alloc = []
 std = ["alloc"]
+alloc = []
 bench = []
+test_local = []
 
 [dependencies]
 crossbeam-utils = { version = "0.8", default-features = false }

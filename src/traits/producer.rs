@@ -1,7 +1,8 @@
+use super::{utils::modulus, Observer};
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
-use crate::{cached::CachedProd, observer::Observer, traits::RingBuffer, utils::write_slice};
-use core::{mem::MaybeUninit, num::NonZeroUsize, ops::Deref};
+use crate::utils::write_slice;
+use core::mem::MaybeUninit;
 #[cfg(feature = "std")]
 use std::{
     cmp,
@@ -19,6 +20,8 @@ use std::{
 /// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
 ///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub trait Producer: Observer {
+    unsafe fn set_write_index(&self, value: usize);
+
     /// Moves `write` pointer by `count` places forward.
     ///
     /// # Safety
@@ -26,20 +29,15 @@ pub trait Producer: Observer {
     /// First `count` items in free space must be initialized.
     ///
     /// Must not be called concurrently.
-    unsafe fn advance_write_index(&self, count: usize);
-
-    unsafe fn unsafe_vacant_slices(
-        &self,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    );
+    unsafe fn advance_write_index(&self, count: usize) {
+        self.set_write_index((self.write_index() + count) % modulus(self));
+    }
 
     /// Provides a direct access to the ring buffer vacant memory.
     ///
     /// Returns a pair of slices of uninitialized memory, the second one may be empty.
     fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let (first, second) = unsafe { self.unsafe_vacant_slices() };
+        let (first, second) = unsafe { self.unsafe_slices(self.write_index(), self.read_index() + self.capacity().get()) };
         (first as &_, second as &_)
     }
 
@@ -50,13 +48,8 @@ pub trait Producer: Observer {
     ///
     /// *This method must be followed by [`Self::advance_write`] call with the number of items being put previously as argument.*
     /// *No other mutating calls allowed before that.*
-    fn vacant_slices_mut(
-        &mut self,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    ) {
-        unsafe { self.unsafe_vacant_slices() }
+    fn vacant_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        unsafe { self.unsafe_slices(self.write_index(), self.read_index() + self.capacity().get()) }
     }
 
     /// Appends an item to the ring buffer.
@@ -146,91 +139,17 @@ pub trait Producer: Observer {
     }
 }
 
-/// Producer wrapper of ring buffer.
-pub struct Prod<R: Deref>
-where
-    R::Target: RingBuffer,
-{
-    base: R,
-}
+#[macro_export]
+macro_rules! impl_producer_traits {
+    ($type:ident $(< $( $param:tt $( : $first_bound:tt $(+ $next_bound:tt )* )? ),+ >)?) => {
 
-impl<R: Deref> Prod<R>
-where
-    R::Target: RingBuffer,
-{
-    /// # Safety
-    ///
-    /// There must be no more than one consumer wrapper.
-    pub unsafe fn new(base: R) -> Self {
-        Self { base }
-    }
-    pub fn base(&self) -> &R {
-        &self.base
-    }
-    pub fn into_base(self) -> R {
-        self.base
-    }
-}
-
-impl<R: Deref> Observer for Prod<R>
-where
-    R::Target: RingBuffer,
-{
-    type Item = <R::Target as Observer>::Item;
-
-    #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.base.capacity()
-    }
-
-    #[inline]
-    fn occupied_len(&self) -> usize {
-        self.base.occupied_len()
-    }
-    #[inline]
-    fn vacant_len(&self) -> usize {
-        self.base.vacant_len()
-    }
-
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.base.is_empty()
-    }
-    #[inline]
-    fn is_full(&self) -> bool {
-        self.base.is_full()
-    }
-}
-
-impl<R: Deref> Producer for Prod<R>
-where
-    R::Target: RingBuffer,
-{
-    #[inline]
-    unsafe fn advance_write_index(&self, count: usize) {
-        self.base.advance_write_index(count);
-    }
-
-    #[inline]
-    unsafe fn unsafe_vacant_slices(
-        &self,
-    ) -> (
-        &mut [MaybeUninit<Self::Item>],
-        &mut [MaybeUninit<Self::Item>],
-    ) {
-        self.base.unsafe_vacant_slices()
-    }
-}
-
-macro_rules! impl_prod_traits {
-    ($Prod:ident) => {
         #[cfg(feature = "std")]
-        impl<R: core::ops::Deref> std::io::Write for $Prod<R>
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? std::io::Write for $type $(< $( $param ),+ >)?
         where
-            R::Target: crate::traits::RingBuffer<Item = u8>,
+            Self: $crate::traits::Producer<Item = u8>,
         {
             fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
-                use crate::producer::Producer;
+                use $crate::producer::Producer;
                 let n = self.push_slice(buffer);
                 if n == 0 && !buffer.is_empty() {
                     Err(std::io::ErrorKind::WouldBlock.into())
@@ -243,12 +162,12 @@ macro_rules! impl_prod_traits {
             }
         }
 
-        impl<R: core::ops::Deref> core::fmt::Write for $Prod<R>
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? core::fmt::Write for $type $(< $( $param ),+ >)?
         where
-            R::Target: crate::traits::RingBuffer<Item = u8>,
+            Self: $crate::traits::Producer<Item = u8>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                use crate::producer::Producer;
+                use $crate::producer::Producer;
                 let n = self.push_slice(s.as_bytes());
                 if n != s.len() {
                     Err(core::fmt::Error::default())
@@ -259,18 +178,45 @@ macro_rules! impl_prod_traits {
         }
     };
 }
-pub(crate) use impl_prod_traits;
 
-impl_prod_traits!(Prod);
+#[macro_export]
+macro_rules! delegate_producer {
+    ($ref:expr, $mut:expr) => {
+        #[inline]
+        unsafe fn set_write_index(&self, value: usize) {
+            $ref(self).set_write_index(value)
+        }
+        #[inline]
+        unsafe fn advance_write_index(&self, count: usize) {
+            $ref(self).advance_write_index(count)
+        }
 
-impl<R: Deref> Prod<R>
-where
-    R::Target: RingBuffer,
-{
-    pub fn cached(&mut self) -> CachedProd<&R::Target> {
-        unsafe { CachedProd::new(&self.base) }
-    }
-    pub fn into_cached(self) -> CachedProd<R> {
-        unsafe { CachedProd::new(self.base) }
-    }
+        #[inline]
+        fn vacant_slices(&self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
+            $ref(self).vacant_slices()
+        }
+
+        #[inline]
+        fn vacant_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
+            $mut(self).vacant_slices_mut()
+        }
+
+        #[inline]
+        fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
+            $mut(self).try_push(elem)
+        }
+
+        #[inline]
+        fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, iter: I) -> usize {
+            $mut(self).push_iter(iter)
+        }
+
+        #[inline]
+        fn push_slice(&mut self, elems: &[Self::Item]) -> usize
+        where
+            Self::Item: Copy,
+        {
+            $mut(self).push_slice(elems)
+        }
+    };
 }

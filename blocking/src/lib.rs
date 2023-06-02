@@ -1,15 +1,19 @@
-mod alias;
-pub mod consumer;
-pub mod index;
-pub mod producer;
-mod utils;
+#![no_std]
 
-pub mod traits {
-    pub use crate::consumer::BlockingConsumer;
-    pub use crate::producer::BlockingProducer;
-}
+#[cfg(feature = "alloc")]
+extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
+
+mod alias;
+pub mod halves;
+pub mod rb;
+pub mod sync;
+pub mod traits;
+
+#[cfg(all(test, feature = "std"))]
+mod tests;
 
 pub use alias::*;
-
-#[cfg(test)]
-mod tests;
+pub use halves::{BlockingCons, BlockingProd};
+pub use rb::BlockingRb;

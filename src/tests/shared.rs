@@ -10,7 +10,7 @@ fn concurrent() {
 
     const MSG: &[u8] = b"The quick brown fox jumps over the lazy dog\0";
     let rb = SharedRb::<Heap<u8>>::new(4);
-    let (mut prod, mut cons) = rb.split_arc();
+    let (mut prod, mut cons) = rb.split();
 
     let pjh = thread::spawn({
         let mut msg = MSG;
@@ -43,7 +43,7 @@ fn concurrent_spin_many() {
     let mut msg = (1..=u8::MAX).cycle().take(COUNT).chain([0]);
 
     let rb = SharedRb::<Heap<u8>>::new(17);
-    let (mut prod, mut cons) = rb.split_arc();
+    let (mut prod, mut cons) = rb.split();
 
     let pjh = thread::spawn(move || {
         #[allow(unused_variables)]

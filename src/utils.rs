@@ -22,10 +22,7 @@ pub fn write_slice<'a, T: Copy>(dst: &'a mut [MaybeUninit<T>], src: &[T]) -> &'a
     unsafe { slice_assume_init_mut(dst) }
 }
 
-pub unsafe fn write_uninit_slice<'a, T: Copy>(
-    dst: &'a mut [T],
-    src: &[MaybeUninit<T>],
-) -> &'a mut [T] {
+pub unsafe fn write_uninit_slice<'a, T: Copy>(dst: &'a mut [T], src: &[MaybeUninit<T>]) -> &'a mut [T] {
     dst.copy_from_slice(slice_assume_init_ref(src));
     dst
 }
