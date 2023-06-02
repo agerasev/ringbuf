@@ -1,22 +1,20 @@
-use crate::HeapRb;
+use super::Rb;
+use crate::{storage::Static, traits::*};
 use std::io;
 
 #[test]
 fn from() {
-    let buf0 = HeapRb::<u8>::new(4);
-    let buf1 = HeapRb::<u8>::new(4);
-    let (mut prod0, mut cons0) = buf0.split();
-    let (mut prod1, mut cons1) = buf1.split();
+    let mut rb0 = Rb::<Static<u8, 4>>::default();
+    let mut rb1 = Rb::<Static<u8, 4>>::default();
+    let (mut prod0, mut cons0) = rb0.split_ref();
+    let (mut prod1, mut cons1) = rb1.split_ref();
 
     let mut tmp = [0; 5];
 
     assert_eq!(prod0.push_slice(&[0, 1, 2]), 3);
 
     assert_eq!(prod1.read_from(&mut cons0, None).unwrap(), 3);
-    assert_eq!(
-        prod1.read_from(&mut cons0, None).unwrap_err().kind(),
-        io::ErrorKind::WouldBlock
-    );
+    assert_eq!(prod1.read_from(&mut cons0, None).unwrap_err().kind(), io::ErrorKind::WouldBlock);
 
     assert_eq!(cons1.pop_slice(&mut tmp), 3);
     assert_eq!(tmp[0..3], [0, 1, 2]);
@@ -43,10 +41,10 @@ fn from() {
 
 #[test]
 fn into() {
-    let buf0 = HeapRb::<u8>::new(4);
-    let buf1 = HeapRb::<u8>::new(4);
-    let (mut prod0, mut cons0) = buf0.split();
-    let (mut prod1, mut cons1) = buf1.split();
+    let mut rb0 = Rb::<Static<u8, 4>>::default();
+    let mut rb1 = Rb::<Static<u8, 4>>::default();
+    let (mut prod0, mut cons0) = rb0.split_ref();
+    let (mut prod1, mut cons1) = rb1.split_ref();
 
     let mut tmp = [0; 5];
 
@@ -72,10 +70,7 @@ fn into() {
     assert_eq!(prod0.push_slice(&[9, 10]), 2);
 
     assert_eq!(cons0.write_into(&mut prod1, None).unwrap(), 1);
-    assert_eq!(
-        cons0.write_into(&mut prod1, None).unwrap_err().kind(),
-        io::ErrorKind::WouldBlock
-    );
+    assert_eq!(cons0.write_into(&mut prod1, None).unwrap_err().kind(), io::ErrorKind::WouldBlock);
 
     assert_eq!(cons1.pop_slice(&mut tmp), 4);
     assert_eq!(tmp[0..4], [6, 7, 8, 9]);
@@ -83,10 +78,10 @@ fn into() {
 
 #[test]
 fn count() {
-    let buf0 = HeapRb::<u8>::new(4);
-    let buf1 = HeapRb::<u8>::new(4);
-    let (mut prod0, mut cons0) = buf0.split();
-    let (mut prod1, mut cons1) = buf1.split();
+    let mut rb0 = Rb::<Static<u8, 4>>::default();
+    let mut rb1 = Rb::<Static<u8, 4>>::default();
+    let (mut prod0, mut cons0) = rb0.split_ref();
+    let (mut prod1, mut cons1) = rb1.split_ref();
 
     let mut tmp = [0; 5];
 

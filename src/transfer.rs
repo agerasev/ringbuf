@@ -1,8 +1,4 @@
-use crate::{
-    consumer::Consumer,
-    producer::Producer,
-    ring_buffer::{RbRead, RbRef, RbWrite},
-};
+use crate::{consumer::Consumer, producer::Producer};
 
 /// Moves at most `count` items from the `src` consumer to the `dst` producer.
 ///
@@ -10,17 +6,13 @@ use crate::{
 /// `count` is the number of items being moved, if `None` - as much as possible items will be moved.
 ///
 /// Returns number of items been moved.
-pub fn transfer<T, Rs: RbRef, Rd: RbRef>(
-    src: &mut Consumer<T, Rs>,
-    dst: &mut Producer<T, Rd>,
+pub fn transfer<T, C: Consumer<Item = T>, P: Producer<Item = T>>(
+    src: &mut C,
+    dst: &mut P,
     count: Option<usize>,
-) -> usize
-where
-    Rs::Rb: RbRead<T>,
-    Rd::Rb: RbWrite<T>,
-{
-    let (src_left, src_right) = unsafe { src.as_uninit_slices() };
-    let (dst_left, dst_right) = unsafe { dst.free_space_as_slices() };
+) -> usize {
+    let (src_left, src_right) = src.occupied_slices();
+    let (dst_left, dst_right) = dst.vacant_slices_mut();
     let src_iter = src_left.iter().chain(src_right.iter());
     let dst_iter = dst_left.iter_mut().chain(dst_right.iter_mut());
 
@@ -34,7 +26,7 @@ where
         unsafe { dst_place.write(src_elem.as_ptr().read()) };
         actual_count += 1;
     }
-    unsafe { src.advance(actual_count) };
-    unsafe { dst.advance(actual_count) };
+    unsafe { src.advance_read_index(actual_count) };
+    unsafe { dst.advance_write_index(actual_count) };
     actual_count
 }

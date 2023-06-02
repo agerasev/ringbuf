@@ -1,0 +1,19 @@
+[package]
+name = "ringbuf-blocking"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+description = "Blocking version of ringbuf"
+documentation = "https://docs.rs/ringbuf-blocking"
+repository.workspace = true
+keywords = ["blocking", "spsc", "ring-buffer", "rb", "fifo"]
+categories = ["concurrency", "data-structures"]
+license.workspace = true
+
+[features]
+default = []
+std = ["ringbuf/std", "alloc"]
+alloc = ["ringbuf/alloc"]
+
+[dependencies]
+ringbuf = { workspace = true }

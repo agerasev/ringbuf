@@ -1,24 +1,32 @@
-use crate::{Consumer, Producer, SharedRb};
-use core::mem::MaybeUninit;
-
 #[cfg(feature = "alloc")]
-use alloc::{sync::Arc, vec::Vec};
+use super::storage::Heap;
+use super::{
+    halves::{Cons, Prod},
+    rb::SharedRb,
+    storage::Static,
+};
+#[cfg(feature = "alloc")]
+use alloc::sync::Arc;
 
 /// Stack-allocated ring buffer with static capacity.
 ///
 /// *Capacity (`N`) must be greater that zero.*
-pub type StaticRb<T, const N: usize> = SharedRb<T, [MaybeUninit<T>; N]>;
-/// Alias for [`StaticRb`] [`Producer`].
-pub type StaticProducer<'a, T, const N: usize> = Producer<T, &'a StaticRb<T, N>>;
-/// Alias for [`StaticRb`] [`Consumer`].
-pub type StaticConsumer<'a, T, const N: usize> = Consumer<T, &'a StaticRb<T, N>>;
+pub type StaticRb<T, const N: usize> = SharedRb<Static<T, N>>;
+
+/// Alias for [`StaticRb`] producer.
+pub type StaticProd<'a, T, const N: usize> = Prod<&'a StaticRb<T, N>>;
+
+/// Alias for [`StaticRb`] consumer.
+pub type StaticCons<'a, T, const N: usize> = Cons<&'a StaticRb<T, N>>;
 
 /// Heap-allocated ring buffer.
 #[cfg(feature = "alloc")]
-pub type HeapRb<T> = SharedRb<T, Vec<MaybeUninit<T>>>;
-/// Alias for [`HeapRb`] [`Producer`].
+pub type HeapRb<T> = SharedRb<Heap<T>>;
+
 #[cfg(feature = "alloc")]
-pub type HeapProducer<T> = Producer<T, Arc<HeapRb<T>>>;
-/// Alias for [`HeapRb`] [`Consumer`].
+/// Alias for [`HeapRb`] producer.
+pub type HeapProd<T> = Prod<Arc<HeapRb<T>>>;
+
 #[cfg(feature = "alloc")]
-pub type HeapConsumer<T> = Consumer<T, Arc<HeapRb<T>>>;
+/// Alias for [`HeapRb`] consumer.
+pub type HeapCons<T> = Cons<Arc<HeapRb<T>>>;

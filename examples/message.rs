@@ -1,6 +1,5 @@
+use ringbuf::{traits::*, HeapRb};
 use std::{io::Read, thread, time::Duration};
-
-use ringbuf::HeapRb;
 
 fn main() {
     let buf = HeapRb::<u8>::new(10);

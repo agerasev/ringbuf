@@ -1,5 +1,4 @@
-use crate::HeapRb;
-
+use crate::{traits::*, HeapRb};
 use test::{black_box, Bencher};
 
 const RB_SIZE: usize = 1024;
@@ -29,6 +28,7 @@ fn slice_x100(b: &mut Bencher) {
         black_box(data);
     });
 }
+
 #[bench]
 fn slice_x1000(b: &mut Bencher) {
     let buf = HeapRb::<u64>::new(RB_SIZE);

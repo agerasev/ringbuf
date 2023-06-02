@@ -1,23 +1,20 @@
-#[cfg(feature = "alloc")]
+#[cfg(feature = "test_local")]
+use crate::LocalRb as Rb;
+#[cfg(not(feature = "test_local"))]
+use crate::SharedRb as Rb;
+
 mod access;
-#[cfg(feature = "alloc")]
 mod basic;
 #[cfg(feature = "alloc")]
-mod cached;
-#[cfg(feature = "alloc")]
 mod drop;
-#[cfg(feature = "alloc")]
+mod fmt_write;
+mod frozen;
 mod iter;
-#[cfg(feature = "alloc")]
 mod overwrite;
-#[cfg(feature = "alloc")]
-mod skip;
-#[cfg(feature = "alloc")]
-mod slice;
-
-#[cfg(feature = "std")]
-mod message;
 #[cfg(feature = "std")]
 mod read_write;
-
-mod fmt_write;
+#[cfg(feature = "std")]
+mod shared;
+#[cfg(feature = "alloc")]
+mod skip;
+mod slice;

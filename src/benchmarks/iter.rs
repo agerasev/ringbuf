@@ -1,5 +1,4 @@
-use crate::HeapRb;
-
+use crate::{traits::*, HeapRb};
 use test::{black_box, Bencher};
 
 const RB_SIZE: usize = 1024;
@@ -13,9 +12,9 @@ fn push_iter_x1000(b: &mut Bencher) {
     cons.skip(RB_SIZE / 2);
 
     b.iter(|| {
-        prod.push_iter(&mut (0..1000).into_iter());
+        prod.push_iter(0..1000);
         black_box(cons.as_slices());
-        unsafe { cons.advance(1000) };
+        unsafe { cons.advance_read_index(1000) };
     });
 }
 
@@ -32,6 +31,6 @@ fn pop_iter_x1000(b: &mut Bencher) {
         for x in cons.pop_iter() {
             black_box(x);
         }
-        unsafe { prod.advance(1000) };
+        unsafe { prod.advance_write_index(1000) };
     });
 }

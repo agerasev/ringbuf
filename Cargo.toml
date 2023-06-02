@@ -1,26 +1,41 @@
-[package]
-name = "ringbuf"
-version = "0.3.3"
-authors = ["Alexey Gerasev <alexey.gerasev@gmail.com>"]
+[workspace.package]
 edition = "2021"
-
-description = "Lock-free SPSC FIFO ring buffer with direct access to inner data"
-documentation = "https://docs.rs/ringbuf"
+authors = ["Alexey Gerasev <alexey.gerasev@gmail.com>"]
 homepage = "https://github.com/agerasev/ringbuf"
 repository = "https://github.com/agerasev/ringbuf.git"
 readme = "README.md"
-keywords = ["lock-free", "spsc", "ring-buffer", "rb", "fifo"]
-categories = ["concurrency", "data-structures", "no-std"]
 license = "MIT/Apache-2.0"
 
+[workspace.dependencies]
+ringbuf = { path = ".", version = "0.4.0" }
+
+[workspace]
+members = ["async", "blocking"]
+
+[package]
+name = "ringbuf"
+version = "0.4.0"
+edition.workspace = true
+authors.workspace = true
+description = "Lock-free SPSC FIFO ring buffer with direct access to inner data"
+documentation = "https://docs.rs/ringbuf"
+repository.workspace = true
+keywords = ["lock-free", "spsc", "ring-buffer", "rb", "fifo"]
+categories = ["concurrency", "data-structures", "no-std"]
+license.workspace = true
+
 [features]
-default = ["alloc", "std"]
-alloc = []
+default = ["std"]
 std = ["alloc"]
+alloc = []
 bench = []
+test_local = []
 
 [dependencies]
 crossbeam-utils = { version = "0.8", default-features = false }
+
+[dev-dependencies]
+once_mut = "0.1.0"
 
 [[example]]
 name = "simple"
