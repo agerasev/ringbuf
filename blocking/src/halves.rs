@@ -3,7 +3,7 @@ use core::time::Duration;
 use ringbuf::{
     delegate_consumer, delegate_observer, delegate_producer, impl_consumer_traits, impl_producer_traits,
     rb::AsRb,
-    traits::{Consumer, Observer, Producer},
+    traits::{Consumer, Observe, Observer, Producer},
 };
 
 pub struct BlockingProd<B: Producer> {
@@ -85,3 +85,16 @@ unsafe impl<B: Consumer + AsRb> AsRb for BlockingCons<B> {
 
 impl_producer_traits!(BlockingProd<B: Producer>);
 impl_consumer_traits!(BlockingCons<B: Consumer>);
+
+impl<R: Producer + Observe> Observe for BlockingProd<R> {
+    type Obs = R::Obs;
+    fn observe(&self) -> Self::Obs {
+        self.base.observe()
+    }
+}
+impl<R: Consumer + Observe> Observe for BlockingCons<R> {
+    type Obs = R::Obs;
+    fn observe(&self) -> Self::Obs {
+        self.base.observe()
+    }
+}

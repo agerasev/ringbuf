@@ -5,9 +5,12 @@ use crate::{
 use ringbuf::{
     delegate_consumer, delegate_observer, delegate_producer, impl_consumer_traits, impl_producer_traits,
     rb::AsRb,
-    traits::{Consumer, Observer, Producer},
+    traits::{Consumer, Observe, Observer, Producer},
 };
 
+pub struct AsyncObs<B: Observer + AsAsyncRb> {
+    base: B,
+}
 pub struct AsyncProd<B: Producer + AsAsyncRb> {
     base: B,
 }
@@ -15,6 +18,14 @@ pub struct AsyncCons<B: Consumer + AsAsyncRb> {
     base: B,
 }
 
+impl<B: Observer + AsAsyncRb> AsyncObs<B> {
+    pub fn new(base: B) -> Self {
+        Self { base }
+    }
+    fn base(&self) -> &B {
+        &self.base
+    }
+}
 impl<B: Producer + AsAsyncRb> AsyncProd<B> {
     pub fn new(base: B) -> Self {
         Self { base }
@@ -38,8 +49,21 @@ impl<B: Consumer + AsAsyncRb> AsyncCons<B> {
     }
 }
 
+impl<B: Producer + AsAsyncRb> Unpin for AsyncObs<B> {}
 impl<B: Producer + AsAsyncRb> Unpin for AsyncProd<B> {}
 impl<B: Consumer + AsAsyncRb> Unpin for AsyncCons<B> {}
+
+impl<B: Observer + AsAsyncRb> Observer for AsyncObs<B> {
+    delegate_observer!(B, Self::base);
+}
+impl<B: Observer + AsAsyncRb> AsyncObserver for AsyncObs<B> {
+    fn is_closed(&self) -> bool {
+        self.as_async_rb().is_closed()
+    }
+    fn close(&self) {
+        self.as_async_rb().close()
+    }
+}
 
 impl<B: Producer + AsAsyncRb> Observer for AsyncProd<B> {
     delegate_observer!(B, Self::base);
@@ -92,6 +116,12 @@ impl<B: Consumer + AsAsyncRb> Drop for AsyncCons<B> {
     }
 }
 
+unsafe impl<B: Observer + AsAsyncRb> AsRb for AsyncObs<B> {
+    type Rb = B::AsyncRb;
+    fn as_rb(&self) -> &Self::Rb {
+        self.base.as_async_rb()
+    }
+}
 unsafe impl<B: Producer + AsAsyncRb> AsRb for AsyncProd<B> {
     type Rb = B::AsyncRb;
     fn as_rb(&self) -> &Self::Rb {
@@ -107,3 +137,31 @@ unsafe impl<B: Consumer + AsAsyncRb> AsRb for AsyncCons<B> {
 
 impl_producer_traits!(AsyncProd<B: Producer + AsAsyncRb>);
 impl_consumer_traits!(AsyncCons<B: Consumer + AsAsyncRb>);
+
+impl<R: Observer + AsAsyncRb + Observe> Observe for AsyncObs<R>
+where
+    R::Obs: AsAsyncRb,
+{
+    type Obs = AsyncObs<R::Obs>;
+    fn observe(&self) -> Self::Obs {
+        AsyncObs::new(self.base.observe())
+    }
+}
+impl<R: Producer + AsAsyncRb + Observe> Observe for AsyncProd<R>
+where
+    R::Obs: AsAsyncRb,
+{
+    type Obs = AsyncObs<R::Obs>;
+    fn observe(&self) -> Self::Obs {
+        AsyncObs::new(self.base.observe())
+    }
+}
+impl<R: Consumer + AsAsyncRb + Observe> Observe for AsyncCons<R>
+where
+    R::Obs: AsAsyncRb,
+{
+    type Obs = AsyncObs<R::Obs>;
+    fn observe(&self) -> Self::Obs {
+        AsyncObs::new(self.base.observe())
+    }
+}
