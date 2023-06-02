@@ -34,6 +34,9 @@ test_local = []
 [dependencies]
 crossbeam-utils = { version = "0.8", default-features = false }
 
+[dev-dependencies]
+once_mut = "0.1.0"
+
 [[example]]
 name = "simple"
 required-features = ["alloc"]
