@@ -1,28 +1,19 @@
 use crate::traits::{BlockingConsumer, BlockingProducer};
 use core::time::Duration;
 use ringbuf::{
-    delegate_consumer, delegate_observer, delegate_producer,
+    delegate_consumer, delegate_observer, delegate_producer, impl_consumer_traits, impl_producer_traits,
     rb::AsRb,
     traits::{Consumer, Observer, Producer},
 };
 
-pub struct BlockingProd<B: Producer + AsRb>
-where
-    B::Rb: BlockingProducer,
-{
+pub struct BlockingProd<B: Producer> {
     base: B,
 }
-pub struct BlockingCons<B: Consumer + AsRb>
-where
-    B::Rb: BlockingConsumer,
-{
+pub struct BlockingCons<B: Consumer> {
     base: B,
 }
 
-impl<B: Producer + AsRb> BlockingProd<B>
-where
-    B::Rb: BlockingProducer,
-{
+impl<B: Producer> BlockingProd<B> {
     pub fn new(base: B) -> Self {
         Self { base }
     }
@@ -33,10 +24,7 @@ where
         &mut self.base
     }
 }
-impl<B: Consumer + AsRb> BlockingCons<B>
-where
-    B::Rb: BlockingConsumer,
-{
+impl<B: Consumer> BlockingCons<B> {
     pub fn new(base: B) -> Self {
         Self { base }
     }
@@ -48,16 +36,10 @@ where
     }
 }
 
-impl<B: Producer + AsRb> Observer for BlockingProd<B>
-where
-    B::Rb: BlockingProducer,
-{
+impl<B: Producer> Observer for BlockingProd<B> {
     delegate_observer!(B, Self::base);
 }
-impl<B: Producer + AsRb> Producer for BlockingProd<B>
-where
-    B::Rb: BlockingProducer,
-{
+impl<B: Producer> Producer for BlockingProd<B> {
     delegate_producer!(Self::base, Self::base_mut);
 }
 impl<B: Producer + AsRb> BlockingProducer for BlockingProd<B>
@@ -71,16 +53,10 @@ where
     }
 }
 
-impl<B: Consumer + AsRb> Observer for BlockingCons<B>
-where
-    B::Rb: BlockingConsumer,
-{
+impl<B: Consumer> Observer for BlockingCons<B> {
     delegate_observer!(B, Self::base);
 }
-impl<B: Consumer + AsRb> Consumer for BlockingCons<B>
-where
-    B::Rb: BlockingConsumer,
-{
+impl<B: Consumer> Consumer for BlockingCons<B> {
     delegate_consumer!(Self::base, Self::base_mut);
 }
 impl<B: Consumer + AsRb> BlockingConsumer for BlockingCons<B>
@@ -94,21 +70,18 @@ where
     }
 }
 
-unsafe impl<B: Producer + AsRb> AsRb for BlockingProd<B>
-where
-    B::Rb: BlockingProducer,
-{
+unsafe impl<B: Producer + AsRb> AsRb for BlockingProd<B> {
     type Rb = B::Rb;
     fn as_rb(&self) -> &Self::Rb {
         self.base.as_rb()
     }
 }
-unsafe impl<B: Consumer + AsRb> AsRb for BlockingCons<B>
-where
-    B::Rb: BlockingConsumer,
-{
+unsafe impl<B: Consumer + AsRb> AsRb for BlockingCons<B> {
     type Rb = B::Rb;
     fn as_rb(&self) -> &Self::Rb {
         self.base.as_rb()
     }
 }
+
+impl_producer_traits!(BlockingProd<B: Producer>);
+impl_consumer_traits!(BlockingCons<B: Consumer>);
