@@ -131,11 +131,11 @@ impl<S: Storage> Split for SharedRb<S> {
         unsafe { (CachedProd::new(rc.clone()), CachedCons::new(rc)) }
     }
 }
-impl<'a, S: Storage + 'a> SplitRef<'a> for SharedRb<S> {
-    type RefProd = CachedProd<&'a Self>;
-    type RefCons = CachedCons<&'a Self>;
+impl<S: Storage> SplitRef for SharedRb<S> {
+    type RefProd<'a> = CachedProd<&'a Self> where Self: 'a;
+    type RefCons<'a> = CachedCons<&'a Self> where Self: 'a;
 
-    fn split_ref(&'a mut self) -> (Self::RefProd, Self::RefCons) {
+    fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
         unsafe { (CachedProd::new(self), CachedCons::new(self)) }
     }
 }

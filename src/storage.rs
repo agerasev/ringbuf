@@ -1,8 +1,6 @@
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
-use core::{
-    cell::UnsafeCell, marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize, ops::Range, slice,
-};
+use core::{cell::UnsafeCell, mem::MaybeUninit, num::NonZeroUsize, ops::Range, slice};
 
 /// Abstract storage for the ring buffer.
 ///
@@ -108,7 +106,6 @@ unsafe impl<T> Storage for Vec<MaybeUninit<T>> {
 /// Wrapper for storage that provides multiple write access to it.
 pub(crate) struct Shared<S: Storage> {
     internal: S::Internal,
-    _p: PhantomData<S::Item>,
 }
 
 unsafe impl<S: Storage> Sync for Shared<S> where S::Item: Send {}
@@ -120,10 +117,7 @@ impl<S: Storage> Shared<S> {
     pub fn new(storage: S) -> Self {
         let internal = storage.into_internal();
         assert!(S::len(&internal) > 0);
-        Self {
-            internal,
-            _p: PhantomData,
-        }
+        Self { internal }
     }
 
     /// Get total length of the storage.

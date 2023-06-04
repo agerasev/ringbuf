@@ -103,11 +103,11 @@ impl<S: Storage> Split for LocalRb<S> {
         unsafe { (Prod::new(rc.clone()), Cons::new(rc)) }
     }
 }
-impl<'a, S: Storage + 'a> SplitRef<'a> for LocalRb<S> {
-    type RefProd = Prod<&'a Self>;
-    type RefCons = Cons<&'a Self>;
+impl<S: Storage> SplitRef for LocalRb<S> {
+    type RefProd<'a> = Prod<&'a Self> where Self: 'a;
+    type RefCons<'a> = Cons<&'a Self> where Self: 'a;
 
-    fn split_ref(&'a mut self) -> (Self::RefProd, Self::RefCons) {
+    fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
         unsafe { (Prod::new(self), Cons::new(self)) }
     }
 }

@@ -83,11 +83,11 @@ impl<S: Storage> AsyncConsumer for AsyncRb<S> {
 }
 impl<S: Storage> AsyncRingBuffer for AsyncRb<S> {}
 
-impl<'a, S: Storage + 'a> SplitRef<'a> for AsyncRb<S> {
-    type RefProd = AsyncProd<&'a Self>;
-    type RefCons = AsyncCons<&'a Self>;
+impl<S: Storage> SplitRef for AsyncRb<S> {
+    type RefProd<'a> = AsyncProd<&'a Self> where Self:  'a;
+    type RefCons<'a> = AsyncCons<&'a Self> where Self:  'a;
 
-    fn split_ref(&'a mut self) -> (Self::RefProd, Self::RefCons) {
+    fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
         unsafe { (AsyncProd::new(self), AsyncCons::new(self)) }
     }
 }

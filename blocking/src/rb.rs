@@ -78,11 +78,11 @@ impl<S: Storage, X: Semaphore> BlockingConsumer for BlockingRb<S, X> {
     }
 }
 
-impl<'a, S: Storage + 'a, X: Semaphore + 'a> SplitRef<'a> for BlockingRb<S, X> {
-    type RefProd = BlockingProd<&'a Self>;
-    type RefCons = BlockingCons<&'a Self>;
+impl<S: Storage, X: Semaphore> SplitRef for BlockingRb<S, X> {
+    type RefProd<'a> = BlockingProd<&'a Self> where Self: 'a;
+    type RefCons<'a> = BlockingCons<&'a Self> where Self: 'a;
 
-    fn split_ref(&'a mut self) -> (Self::RefProd, Self::RefCons) {
+    fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
         unsafe { (BlockingProd::new(self), BlockingCons::new(self)) }
     }
 }

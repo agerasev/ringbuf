@@ -7,9 +7,13 @@ pub trait Split: RingBuffer {
     fn split(self) -> (Self::Prod, Self::Cons);
 }
 
-pub trait SplitRef<'a>: RingBuffer + 'a {
-    type RefProd: Producer + 'a;
-    type RefCons: Consumer + 'a;
+pub trait SplitRef: RingBuffer {
+    type RefProd<'a>: Producer + 'a
+    where
+        Self: 'a;
+    type RefCons<'a>: Consumer + 'a
+    where
+        Self: 'a;
 
-    fn split_ref(&'a mut self) -> (Self::RefProd, Self::RefCons);
+    fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>);
 }
