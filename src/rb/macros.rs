@@ -7,7 +7,7 @@ macro_rules! rb_impl_init {
         }
 
         #[cfg(feature = "alloc")]
-        impl<T> $type<Heap<T>> {
+        impl<T> $type<crate::storage::Heap<T>> {
             /// Creates a new instance of a ring buffer.
             ///
             /// *Panics if allocation failed or `capacity` is zero.*

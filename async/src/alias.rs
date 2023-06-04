@@ -1,17 +1,22 @@
-use crate::{
-    halves::{AsyncCons, AsyncProd},
-    rb::AsyncRb,
-};
-use alloc::sync::Arc;
-use ringbuf::{CachedCons, CachedProd, HeapRb};
+use crate::rb::AsyncRb;
+#[cfg(feature = "alloc")]
+use ringbuf::{storage::Heap, HeapRb};
+use ringbuf::{storage::Static, SharedRb};
 
-pub type AsyncHeapRb<T> = AsyncRb<HeapRb<T>>;
+#[cfg(feature = "alloc")]
+pub type AsyncHeapRb<T> = AsyncRb<Heap<T>>;
 
+#[cfg(feature = "alloc")]
 impl<T> AsyncHeapRb<T> {
     pub fn new(cap: usize) -> Self {
         Self::from(HeapRb::new(cap))
     }
 }
 
-pub type AsyncHeapProd<T> = AsyncProd<CachedProd<Arc<AsyncHeapRb<T>>>>;
-pub type AsyncHeapCons<T> = AsyncCons<CachedCons<Arc<AsyncHeapRb<T>>>>;
+pub type AsyncStaticRb<T, const N: usize> = AsyncRb<Static<T, N>>;
+
+impl<T, const N: usize> Default for AsyncRb<Static<T, N>> {
+    fn default() -> Self {
+        AsyncRb::from(SharedRb::default())
+    }
+}

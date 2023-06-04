@@ -1,11 +1,11 @@
 #![no_std]
-use async_ringbuf::{traits::*, AsyncRb};
+use async_ringbuf::{traits::*, AsyncStaticRb};
 use futures::{executor::block_on, join};
-use ringbuf::{traits::*, StaticRb};
+use ringbuf::traits::*;
 
 async fn async_main() {
     const RB_SIZE: usize = 1;
-    let mut rb = AsyncRb::<StaticRb<i32, RB_SIZE>>::default();
+    let mut rb = AsyncStaticRb::<i32, RB_SIZE>::default();
     let (prod, cons) = rb.split_ref();
 
     join!(

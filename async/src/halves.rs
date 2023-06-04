@@ -1,167 +1,227 @@
-use crate::{
-    rb::AsAsyncRb,
-    traits::{AsyncConsumer, AsyncObserver, AsyncProducer},
-};
+use crate::traits::{AsyncConsumer, AsyncObserver, AsyncProducer, AsyncRingBuffer};
 use ringbuf::{
-    delegate_consumer, delegate_observer, delegate_producer, impl_consumer_traits, impl_producer_traits,
-    rb::AsRb,
+    delegate_consumer, delegate_observer, delegate_producer,
+    rb::RbRef,
     traits::{Consumer, Observe, Observer, Producer},
+    Cons, Obs, Prod,
 };
 
-pub struct AsyncObs<B: Observer + AsAsyncRb> {
-    base: B,
+pub struct AsyncObs<R: RbRef>
+where
+    R::Target: AsyncRingBuffer,
+{
+    base: Obs<R>,
 }
-pub struct AsyncProd<B: Producer + AsAsyncRb> {
-    base: B,
+pub struct AsyncProd<R: RbRef>
+where
+    R::Target: AsyncRingBuffer,
+{
+    base: Prod<R>,
 }
-pub struct AsyncCons<B: Consumer + AsAsyncRb> {
-    base: B,
+pub struct AsyncCons<R: RbRef>
+where
+    R::Target: AsyncRingBuffer,
+{
+    base: Cons<R>,
 }
 
-impl<B: Observer + AsAsyncRb> AsyncObs<B> {
-    pub fn new(base: B) -> Self {
-        Self { base }
+impl<R: RbRef> AsyncObs<R>
+where
+    R::Target: AsyncRingBuffer,
+{
+    pub fn new(rb: R) -> Self {
+        Self { base: Obs::new(rb) }
     }
-    fn base(&self) -> &B {
+    fn base(&self) -> &Obs<R> {
         &self.base
+    }
+    pub fn rb(&self) -> &R::Target {
+        self.base.rb()
+    }
+    pub fn rb_ref(&self) -> &R {
+        self.base.rb_ref()
+    }
+    pub fn into_rb_ref(self) -> R {
+        self.base.into_rb_ref()
     }
 }
-impl<B: Producer + AsAsyncRb> AsyncProd<B> {
-    pub fn new(base: B) -> Self {
-        Self { base }
+impl<R: RbRef> AsyncProd<R>
+where
+    R::Target: AsyncRingBuffer,
+{
+    pub unsafe fn new(rb: R) -> Self {
+        Self { base: Prod::new(rb) }
     }
-    fn base(&self) -> &B {
+    fn base(&self) -> &Prod<R> {
         &self.base
     }
-    fn base_mut(&mut self) -> &mut B {
+    fn base_mut(&mut self) -> &mut Prod<R> {
         &mut self.base
     }
-}
-impl<B: Consumer + AsAsyncRb> AsyncCons<B> {
-    pub fn new(base: B) -> Self {
-        Self { base }
+    pub fn rb(&self) -> &R::Target {
+        self.base.rb()
     }
-    fn base(&self) -> &B {
+    pub fn rb_ref(&self) -> &R {
+        self.base.rb_ref()
+    }
+    //pub fn into_rb_ref(self) -> R {
+    //    self.base.into_rb_ref()
+    //}
+}
+impl<R: RbRef> AsyncCons<R>
+where
+    R::Target: AsyncRingBuffer,
+{
+    pub unsafe fn new(rb: R) -> Self {
+        Self { base: Cons::new(rb) }
+    }
+    fn base(&self) -> &Cons<R> {
         &self.base
     }
-    fn base_mut(&mut self) -> &mut B {
+    fn base_mut(&mut self) -> &mut Cons<R> {
         &mut self.base
     }
+    pub fn rb(&self) -> &R::Target {
+        self.base.rb()
+    }
+    pub fn rb_ref(&self) -> &R {
+        self.base.rb_ref()
+    }
+    //pub fn into_rb_ref(self) -> R {
+    //    self.base.into_rb_ref()
+    //}
 }
 
-impl<B: Producer + AsAsyncRb> Unpin for AsyncObs<B> {}
-impl<B: Producer + AsAsyncRb> Unpin for AsyncProd<B> {}
-impl<B: Consumer + AsAsyncRb> Unpin for AsyncCons<B> {}
+impl<R: RbRef> Unpin for AsyncObs<R> where R::Target: AsyncRingBuffer {}
+impl<R: RbRef> Unpin for AsyncProd<R> where R::Target: AsyncRingBuffer {}
+impl<R: RbRef> Unpin for AsyncCons<R> where R::Target: AsyncRingBuffer {}
 
-impl<B: Observer + AsAsyncRb> Observer for AsyncObs<B> {
-    delegate_observer!(B, Self::base);
+impl<R: RbRef> Observer for AsyncObs<R>
+where
+    R::Target: AsyncRingBuffer,
+{
+    delegate_observer!(Obs<R>, Self::base);
 }
-impl<B: Observer + AsAsyncRb> AsyncObserver for AsyncObs<B> {
+impl<R: RbRef> AsyncObserver for AsyncObs<R>
+where
+    R::Target: AsyncRingBuffer,
+{
     fn is_closed(&self) -> bool {
-        self.as_async_rb().is_closed()
+        self.base.rb().is_closed()
     }
     fn close(&self) {
-        self.as_async_rb().close()
+        self.base.rb().close()
     }
 }
 
-impl<B: Producer + AsAsyncRb> Observer for AsyncProd<B> {
-    delegate_observer!(B, Self::base);
+impl<R: RbRef> Observer for AsyncProd<R>
+where
+    R::Target: AsyncRingBuffer,
+{
+    delegate_observer!(Prod<R>, Self::base);
 }
-impl<B: Producer + AsAsyncRb> Producer for AsyncProd<B> {
+impl<R: RbRef> Producer for AsyncProd<R>
+where
+    R::Target: AsyncRingBuffer,
+{
     delegate_producer!(Self::base, Self::base_mut);
 }
-impl<B: Producer + AsAsyncRb> AsyncObserver for AsyncProd<B> {
+impl<R: RbRef> AsyncObserver for AsyncProd<R>
+where
+    R::Target: AsyncRingBuffer,
+{
     fn is_closed(&self) -> bool {
-        self.as_async_rb().is_closed()
+        self.base.rb().is_closed()
     }
     fn close(&self) {
-        self.as_async_rb().close()
+        self.base.rb().close()
     }
 }
-impl<B: Producer + AsAsyncRb> AsyncProducer for AsyncProd<B> {
+impl<R: RbRef> AsyncProducer for AsyncProd<R>
+where
+    R::Target: AsyncRingBuffer,
+{
     fn register_read_waker(&self, waker: &core::task::Waker) {
-        self.as_async_rb().register_read_waker(waker)
+        self.base.rb().register_read_waker(waker)
     }
 }
 
-impl<B: Consumer + AsAsyncRb> Observer for AsyncCons<B> {
-    delegate_observer!(B, Self::base);
+impl<R: RbRef> Observer for AsyncCons<R>
+where
+    R::Target: AsyncRingBuffer,
+{
+    delegate_observer!(Cons<R>, Self::base);
 }
-impl<B: Consumer + AsAsyncRb> Consumer for AsyncCons<B> {
+impl<R: RbRef> Consumer for AsyncCons<R>
+where
+    R::Target: AsyncRingBuffer,
+{
     delegate_consumer!(Self::base, Self::base_mut);
 }
-impl<B: Consumer + AsAsyncRb> AsyncObserver for AsyncCons<B> {
+impl<R: RbRef> AsyncObserver for AsyncCons<R>
+where
+    R::Target: AsyncRingBuffer,
+{
     fn is_closed(&self) -> bool {
-        self.base.as_async_rb().is_closed()
+        self.base.rb().is_closed()
     }
     fn close(&self) {
-        self.as_async_rb().close()
+        self.base.rb().close()
     }
 }
-impl<B: Consumer + AsAsyncRb> AsyncConsumer for AsyncCons<B> {
+impl<R: RbRef> AsyncConsumer for AsyncCons<R>
+where
+    R::Target: AsyncRingBuffer,
+{
     fn register_write_waker(&self, waker: &core::task::Waker) {
-        self.as_async_rb().register_write_waker(waker)
+        self.base.rb().register_write_waker(waker)
     }
 }
 
-impl<B: Producer + AsAsyncRb> Drop for AsyncProd<B> {
+impl<R: RbRef> Drop for AsyncProd<R>
+where
+    R::Target: AsyncRingBuffer,
+{
     fn drop(&mut self) {
         self.close()
     }
 }
-impl<B: Consumer + AsAsyncRb> Drop for AsyncCons<B> {
+impl<R: RbRef> Drop for AsyncCons<R>
+where
+    R::Target: AsyncRingBuffer,
+{
     fn drop(&mut self) {
         self.close()
     }
 }
 
-unsafe impl<B: Observer + AsAsyncRb> AsRb for AsyncObs<B> {
-    type Rb = B::AsyncRb;
-    fn as_rb(&self) -> &Self::Rb {
-        self.base.as_async_rb()
-    }
-}
-unsafe impl<B: Producer + AsAsyncRb> AsRb for AsyncProd<B> {
-    type Rb = B::AsyncRb;
-    fn as_rb(&self) -> &Self::Rb {
-        self.base.as_async_rb()
-    }
-}
-unsafe impl<B: Consumer + AsAsyncRb> AsRb for AsyncCons<B> {
-    type Rb = B::AsyncRb;
-    fn as_rb(&self) -> &Self::Rb {
-        self.base.as_async_rb()
-    }
-}
+//impl_producer_traits!(AsyncProd<R: RbRef> where R::Target: AsyncRingBuffer);
+//impl_consumer_traits!(AsyncCons<R: RbRef> where R::Target: AsyncRingBuffer);
 
-impl_producer_traits!(AsyncProd<B: Producer + AsAsyncRb>);
-impl_consumer_traits!(AsyncCons<B: Consumer + AsAsyncRb>);
-
-impl<R: Observer + AsAsyncRb + Observe> Observe for AsyncObs<R>
+impl<R: RbRef> Observe for AsyncObs<R>
 where
-    R::Obs: AsAsyncRb,
+    R::Target: AsyncRingBuffer,
 {
-    type Obs = AsyncObs<R::Obs>;
+    type Obs = AsyncObs<R>;
     fn observe(&self) -> Self::Obs {
-        AsyncObs::new(self.base.observe())
+        AsyncObs::new(self.base.rb_ref().clone())
     }
 }
-impl<R: Producer + AsAsyncRb + Observe> Observe for AsyncProd<R>
+impl<R: RbRef> Observe for AsyncProd<R>
 where
-    R::Obs: AsAsyncRb,
+    R::Target: AsyncRingBuffer,
 {
-    type Obs = AsyncObs<R::Obs>;
+    type Obs = AsyncObs<R>;
     fn observe(&self) -> Self::Obs {
-        AsyncObs::new(self.base.observe())
+        AsyncObs::new(self.base.rb_ref().clone())
     }
 }
-impl<R: Consumer + AsAsyncRb + Observe> Observe for AsyncCons<R>
+impl<R: RbRef + Observe> Observe for AsyncCons<R>
 where
-    R::Obs: AsAsyncRb,
+    R::Target: AsyncRingBuffer,
 {
-    type Obs = AsyncObs<R::Obs>;
+    type Obs = AsyncObs<R>;
     fn observe(&self) -> Self::Obs {
-        AsyncObs::new(self.base.observe())
+        AsyncObs::new(self.base.rb_ref().clone())
     }
 }

@@ -1,5 +1,5 @@
-use super::AsyncObserver;
-use crate::{halves::AsyncCons, rb::AsAsyncRb};
+use super::{AsyncObserver, AsyncRingBuffer};
+use crate::halves::AsyncCons;
 use core::{
     future::Future,
     pin::Pin,
@@ -8,7 +8,10 @@ use core::{
 #[cfg(feature = "std")]
 use futures::io::AsyncRead;
 use futures::{future::FusedFuture, Stream};
-use ringbuf::traits::Consumer;
+use ringbuf::{
+    rb::RbRef,
+    traits::{Consumer, Observer},
+};
 #[cfg(feature = "std")]
 use std::io;
 
@@ -155,8 +158,11 @@ impl<'a, A: AsyncConsumer> Future for WaitOccupiedFuture<'a, A> {
     }
 }
 
-impl<B: Consumer + AsAsyncRb> Stream for AsyncCons<B> {
-    type Item = B::Item;
+impl<R: RbRef> Stream for AsyncCons<R>
+where
+    R::Target: AsyncRingBuffer,
+{
+    type Item = <R::Target as Observer>::Item;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.register_write_waker(cx.waker());
@@ -175,7 +181,10 @@ impl<B: Consumer + AsAsyncRb> Stream for AsyncCons<B> {
 }
 
 #[cfg(feature = "std")]
-impl<B: Consumer<Item = u8> + AsAsyncRb> AsyncRead for AsyncCons<B> {
+impl<R: RbRef> AsyncRead for AsyncCons<R>
+where
+    R::Target: AsyncRingBuffer<Item = u8>,
+{
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         self.register_write_waker(cx.waker());
         let closed = self.is_closed();

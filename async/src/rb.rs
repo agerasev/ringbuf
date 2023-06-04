@@ -2,30 +2,31 @@ use crate::{
     halves::{AsyncCons, AsyncProd},
     traits::{AsyncConsumer, AsyncObserver, AsyncProducer, AsyncRingBuffer},
 };
+#[cfg(feature = "alloc")]
+use alloc::sync::Arc;
 use core::{
     sync::atomic::{AtomicBool, Ordering},
     task::Waker,
 };
 use futures::task::AtomicWaker;
+#[cfg(feature = "alloc")]
+use ringbuf::traits::Split;
 use ringbuf::{
     delegate_observer, delegate_ring_buffer, impl_consumer_traits, impl_producer_traits,
-    rb::{
-        traits::{GenSplit, GenSplitRef},
-        AsRb,
-    },
-    traits::{Consumer, Observer, Producer, RingBuffer, Split, SplitRef},
+    storage::Storage,
+    traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
+    SharedRb,
 };
 
-#[derive(Default)]
-pub struct AsyncRb<B: RingBuffer> {
-    base: B,
+pub struct AsyncRb<S: Storage> {
+    base: SharedRb<S>,
     read: AtomicWaker,
     write: AtomicWaker,
     closed: AtomicBool,
 }
 
-impl<B: RingBuffer> AsyncRb<B> {
-    pub fn from(base: B) -> Self {
+impl<S: Storage> AsyncRb<S> {
+    pub fn from(base: SharedRb<S>) -> Self {
         Self {
             base,
             read: AtomicWaker::default(),
@@ -33,36 +34,36 @@ impl<B: RingBuffer> AsyncRb<B> {
             closed: AtomicBool::new(false),
         }
     }
-    fn base(&self) -> &B {
+    fn base(&self) -> &SharedRb<S> {
         &self.base
     }
-    fn base_mut(&mut self) -> &mut B {
+    fn base_mut(&mut self) -> &mut SharedRb<S> {
         &mut self.base
     }
 }
 
-impl<B: RingBuffer> Unpin for AsyncRb<B> {}
+impl<S: Storage> Unpin for AsyncRb<S> {}
 
-impl<B: RingBuffer> Observer for AsyncRb<B> {
-    delegate_observer!(B, Self::base);
+impl<S: Storage> Observer for AsyncRb<S> {
+    delegate_observer!(SharedRb<S>, Self::base);
 }
-impl<B: RingBuffer> Producer for AsyncRb<B> {
+impl<S: Storage> Producer for AsyncRb<S> {
     unsafe fn set_write_index(&self, value: usize) {
         self.base.set_write_index(value);
         self.write.wake();
     }
 }
-impl<B: RingBuffer> Consumer for AsyncRb<B> {
+impl<S: Storage> Consumer for AsyncRb<S> {
     unsafe fn set_read_index(&self, value: usize) {
         self.base.set_read_index(value);
         self.read.wake();
     }
 }
-impl<B: RingBuffer> RingBuffer for AsyncRb<B> {
+impl<S: Storage> RingBuffer for AsyncRb<S> {
     delegate_ring_buffer!(Self::base, Self::base_mut);
 }
 
-impl<B: RingBuffer> AsyncObserver for AsyncRb<B> {
+impl<S: Storage> AsyncObserver for AsyncRb<S> {
     fn is_closed(&self) -> bool {
         self.closed.load(Ordering::Relaxed)
     }
@@ -70,50 +71,36 @@ impl<B: RingBuffer> AsyncObserver for AsyncRb<B> {
         self.closed.store(true, Ordering::Relaxed);
     }
 }
-impl<B: RingBuffer> AsyncProducer for AsyncRb<B> {
+impl<S: Storage> AsyncProducer for AsyncRb<S> {
     fn register_read_waker(&self, waker: &Waker) {
         self.read.register(waker);
     }
 }
-impl<B: RingBuffer> AsyncConsumer for AsyncRb<B> {
+impl<S: Storage> AsyncConsumer for AsyncRb<S> {
     fn register_write_waker(&self, waker: &Waker) {
         self.write.register(waker);
     }
 }
-impl<B: RingBuffer> AsyncRingBuffer for AsyncRb<B> {}
+impl<S: Storage> AsyncRingBuffer for AsyncRb<S> {}
 
-impl<'a, B: RingBuffer + GenSplitRef<'a, Self> + 'a> SplitRef<'a> for AsyncRb<B> {
-    type RefProd = AsyncProd<B::GenRefProd>;
-    type RefCons = AsyncCons<B::GenRefCons>;
+impl<'a, S: Storage + 'a> SplitRef<'a> for AsyncRb<S> {
+    type RefProd = AsyncProd<&'a Self>;
+    type RefCons = AsyncCons<&'a Self>;
 
     fn split_ref(&'a mut self) -> (Self::RefProd, Self::RefCons) {
-        let (prod, cons) = B::gen_split_ref(self);
-        (AsyncProd::new(prod), AsyncCons::new(cons))
+        unsafe { (AsyncProd::new(self), AsyncCons::new(self)) }
     }
 }
-impl<B: RingBuffer + GenSplit<Self>> Split for AsyncRb<B> {
-    type Prod = AsyncProd<B::GenProd>;
-    type Cons = AsyncCons<B::GenCons>;
+#[cfg(feature = "alloc")]
+impl<S: Storage> Split for AsyncRb<S> {
+    type Prod = AsyncProd<Arc<Self>>;
+    type Cons = AsyncCons<Arc<Self>>;
 
     fn split(self) -> (Self::Prod, Self::Cons) {
-        let (prod, cons) = B::gen_split(self);
-        (AsyncProd::new(prod), AsyncCons::new(cons))
+        let arc = Arc::new(self);
+        unsafe { (AsyncProd::new(arc.clone()), AsyncCons::new(arc)) }
     }
 }
 
-impl_producer_traits!(AsyncRb<B: RingBuffer>);
-impl_consumer_traits!(AsyncRb<B: RingBuffer>);
-
-pub trait AsAsyncRb {
-    type AsyncRb: AsyncRingBuffer;
-    fn as_async_rb(&self) -> &Self::AsyncRb;
-}
-impl<B: AsRb> AsAsyncRb for B
-where
-    B::Rb: AsyncRingBuffer,
-{
-    type AsyncRb = B::Rb;
-    fn as_async_rb(&self) -> &Self::AsyncRb {
-        self.as_rb()
-    }
-}
+impl_producer_traits!(AsyncRb<S: Storage>);
+impl_consumer_traits!(AsyncRb<S: Storage>);

@@ -1,30 +1,29 @@
 #[cfg(feature = "std")]
 use crate::sync::StdSemaphore;
-use crate::{rb::BlockingRb, sync::Semaphore, BlockingCons, BlockingProd};
+use crate::{rb::BlockingRb, sync::Semaphore};
 #[cfg(feature = "alloc")]
-use alloc::sync::Arc;
-#[cfg(feature = "alloc")]
-use ringbuf::HeapRb;
-use ringbuf::{CachedCons, CachedProd};
+use ringbuf::{storage::Heap, HeapRb};
+use ringbuf::{storage::Static, SharedRb};
 
 #[cfg(feature = "std")]
-pub type BlockingHeapRb<T, S = StdSemaphore> = BlockingRb<HeapRb<T>, S>;
+pub type BlockingHeapRb<T, X = StdSemaphore> = BlockingRb<Heap<T>, X>;
 #[cfg(all(feature = "alloc", not(feature = "std")))]
-pub type BlockingHeapRb<T, S> = BlockingRb<HeapRb<T>, S>;
+pub type BlockingHeapRb<T, X> = BlockingRb<Heap<T>, X>;
 
 #[cfg(feature = "alloc")]
-impl<T, S: Semaphore> BlockingHeapRb<T, S> {
+impl<T, X: Semaphore> BlockingHeapRb<T, X> {
     pub fn new(cap: usize) -> Self {
         Self::from(HeapRb::new(cap))
     }
 }
 
 #[cfg(feature = "std")]
-pub type BlockingHeapProd<T, S = StdSemaphore> = BlockingProd<CachedProd<Arc<BlockingHeapRb<T, S>>>>;
-#[cfg(feature = "std")]
-pub type BlockingHeapCons<T, S = StdSemaphore> = BlockingCons<CachedCons<Arc<BlockingHeapRb<T, S>>>>;
+pub type BlockingStaticRb<T, const N: usize, X = StdSemaphore> = BlockingRb<Static<T, N>, X>;
+#[cfg(all(feature = "alloc", not(feature = "std")))]
+pub type BlockingStaticRb<T, const N: usize, X> = BlockingRb<Static<T, N>, X>;
 
-#[cfg(all(feature = "alloc", not(feature = "std")))]
-pub type BlockingHeapProd<T, S> = BlockingProd<CachedProd<Arc<BlockingHeapRb<T, S>>>>;
-#[cfg(all(feature = "alloc", not(feature = "std")))]
-pub type BlockingHeapCons<T, S> = BlockingCons<CachedCons<Arc<BlockingHeapRb<T, S>>>>;
+impl<T, const N: usize, X: Semaphore> Default for BlockingRb<Static<T, N>, X> {
+    fn default() -> Self {
+        BlockingRb::from(SharedRb::default())
+    }
+}

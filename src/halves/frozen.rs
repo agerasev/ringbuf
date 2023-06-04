@@ -118,6 +118,9 @@ impl<R: RbRef> FrozenCons<R> {
     pub fn rb(&self) -> &R::Target {
         self.rb.deref()
     }
+    pub fn rb_ref(&self) -> &R {
+        &self.rb
+    }
     pub fn into_rb_ref(self) -> R {
         self.commit();
         let this = ManuallyDrop::new(self);
@@ -158,6 +161,9 @@ impl<R: RbRef> FrozenProd<R> {
     }
     pub fn rb(&self) -> &R::Target {
         self.rb.deref()
+    }
+    pub fn rb_ref(&self) -> &R {
+        &self.rb
     }
     pub fn into_rb_ref(self) -> R {
         self.commit();

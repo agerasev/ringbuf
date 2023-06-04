@@ -1,6 +1,6 @@
 use crate::{
     delegate_observer, impl_consumer_traits, impl_producer_traits,
-    rb::{AsRb, RbRef},
+    rb::RbRef,
     traits::{Consumer, Observe, Observer, Producer},
 };
 
@@ -26,6 +26,15 @@ impl<R: RbRef> Obs<R> {
     pub fn new(rb: R) -> Self {
         Self { rb }
     }
+    pub fn rb(&self) -> &R::Target {
+        self.rb.deref()
+    }
+    pub fn rb_ref(&self) -> &R {
+        &self.rb
+    }
+    pub fn into_rb_ref(self) -> R {
+        self.rb
+    }
 }
 impl<R: RbRef> Prod<R> {
     /// # Safety
@@ -34,7 +43,13 @@ impl<R: RbRef> Prod<R> {
     pub unsafe fn new(rb: R) -> Self {
         Self { rb }
     }
-    pub fn into_base_ref(self) -> R {
+    pub fn rb(&self) -> &R::Target {
+        self.rb.deref()
+    }
+    pub fn rb_ref(&self) -> &R {
+        &self.rb
+    }
+    pub fn into_rb_ref(self) -> R {
         self.rb
     }
 }
@@ -45,53 +60,40 @@ impl<R: RbRef> Cons<R> {
     pub unsafe fn new(rb: R) -> Self {
         Self { rb }
     }
-    pub fn into_base_ref(self) -> R {
+    pub fn rb(&self) -> &R::Target {
+        self.rb.deref()
+    }
+    pub fn rb_ref(&self) -> &R {
+        &self.rb
+    }
+    pub fn into_rb_ref(self) -> R {
         self.rb
     }
 }
 
-unsafe impl<R: RbRef> AsRb for Obs<R> {
-    type Rb = R::Target;
-    fn as_rb(&self) -> &Self::Rb {
-        self.rb.deref()
-    }
-}
-unsafe impl<R: RbRef> AsRb for Prod<R> {
-    type Rb = R::Target;
-    fn as_rb(&self) -> &Self::Rb {
-        self.rb.deref()
-    }
-}
-unsafe impl<R: RbRef> AsRb for Cons<R> {
-    type Rb = R::Target;
-    fn as_rb(&self) -> &Self::Rb {
-        self.rb.deref()
-    }
-}
-
 impl<R: RbRef> Observer for Obs<R> {
-    delegate_observer!(R::Target, AsRb::as_rb);
+    delegate_observer!(R::Target, Self::rb);
 }
 
 impl<R: RbRef> Observer for Prod<R> {
-    delegate_observer!(R::Target, AsRb::as_rb);
+    delegate_observer!(R::Target, Self::rb);
 }
 
 impl<R: RbRef> Observer for Cons<R> {
-    delegate_observer!(R::Target, AsRb::as_rb);
+    delegate_observer!(R::Target, Self::rb);
 }
 
 impl<R: RbRef> Producer for Prod<R> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
-        self.as_rb().set_write_index(value)
+        self.rb().set_write_index(value)
     }
 }
 
 impl<R: RbRef> Consumer for Cons<R> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
-        self.as_rb().set_read_index(value)
+        self.rb().set_read_index(value)
     }
 }
 

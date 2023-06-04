@@ -1,13 +1,11 @@
+use super::{macros::rb_impl_init, utils::ranges};
 #[cfg(feature = "alloc")]
-use super::traits::GenSplit;
-use super::{macros::rb_impl_init, traits::GenSplitRef, utils::ranges};
-#[cfg(feature = "alloc")]
-use crate::storage::Heap;
+use crate::traits::Split;
 use crate::{
     halves::{CachedCons, CachedProd},
     impl_consumer_traits, impl_producer_traits,
     storage::{Shared, Static, Storage},
-    traits::{Consumer, Observer, Producer, RingBuffer},
+    traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
 };
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
@@ -124,21 +122,21 @@ impl<S: Storage> Drop for SharedRb<S> {
 }
 
 #[cfg(feature = "alloc")]
-unsafe impl<S: Storage, B: RingBuffer> GenSplit<B> for SharedRb<S> {
-    type GenProd = CachedProd<Arc<B>>;
-    type GenCons = CachedCons<Arc<B>>;
+impl<S: Storage> Split for SharedRb<S> {
+    type Prod = CachedProd<Arc<Self>>;
+    type Cons = CachedCons<Arc<Self>>;
 
-    fn gen_split(this: B) -> (Self::GenProd, Self::GenCons) {
-        let rc = Arc::new(this);
+    fn split(self) -> (Self::Prod, Self::Cons) {
+        let rc = Arc::new(self);
         unsafe { (CachedProd::new(rc.clone()), CachedCons::new(rc)) }
     }
 }
-unsafe impl<'a, S: Storage + 'a, B: RingBuffer + 'a> GenSplitRef<'a, B> for SharedRb<S> {
-    type GenRefProd = CachedProd<&'a B>;
-    type GenRefCons = CachedCons<&'a B>;
+impl<'a, S: Storage + 'a> SplitRef<'a> for SharedRb<S> {
+    type RefProd = CachedProd<&'a Self>;
+    type RefCons = CachedCons<&'a Self>;
 
-    fn gen_split_ref(this: &'a mut B) -> (Self::GenRefProd, Self::GenRefCons) {
-        unsafe { (CachedProd::new(this), CachedCons::new(this)) }
+    fn split_ref(&'a mut self) -> (Self::RefProd, Self::RefCons) {
+        unsafe { (CachedProd::new(self), CachedCons::new(self)) }
     }
 }
 

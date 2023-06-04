@@ -2,98 +2,86 @@ use crate::traits::{BlockingConsumer, BlockingProducer};
 use core::time::Duration;
 use ringbuf::{
     delegate_consumer, delegate_observer, delegate_producer, impl_consumer_traits, impl_producer_traits,
-    rb::AsRb,
+    rb::RbRef,
     traits::{Consumer, Observe, Observer, Producer},
+    CachedCons, CachedProd, Obs,
 };
 
-pub struct BlockingProd<B: Producer> {
-    base: B,
+pub struct BlockingProd<R: RbRef> {
+    base: CachedProd<R>,
 }
-pub struct BlockingCons<B: Consumer> {
-    base: B,
+pub struct BlockingCons<R: RbRef> {
+    base: CachedCons<R>,
 }
 
-impl<B: Producer> BlockingProd<B> {
-    pub fn from(base: B) -> Self {
-        Self { base }
+impl<R: RbRef> BlockingProd<R> {
+    pub unsafe fn new(rb: R) -> Self {
+        Self { base: CachedProd::new(rb) }
     }
-    fn base(&self) -> &B {
+    fn base(&self) -> &CachedProd<R> {
         &self.base
     }
-    fn base_mut(&mut self) -> &mut B {
+    fn base_mut(&mut self) -> &mut CachedProd<R> {
         &mut self.base
     }
 }
-impl<B: Consumer> BlockingCons<B> {
-    pub fn from(base: B) -> Self {
-        Self { base }
+impl<R: RbRef> BlockingCons<R> {
+    pub unsafe fn new(rb: R) -> Self {
+        Self { base: CachedCons::new(rb) }
     }
-    fn base(&self) -> &B {
+    fn base(&self) -> &CachedCons<R> {
         &self.base
     }
-    fn base_mut(&mut self) -> &mut B {
+    fn base_mut(&mut self) -> &mut CachedCons<R> {
         &mut self.base
     }
 }
 
-impl<B: Producer> Observer for BlockingProd<B> {
-    delegate_observer!(B, Self::base);
+impl<R: RbRef> Observer for BlockingProd<R> {
+    delegate_observer!(CachedProd<R>, Self::base);
 }
-impl<B: Producer> Producer for BlockingProd<B> {
+impl<R: RbRef> Producer for BlockingProd<R> {
     delegate_producer!(Self::base, Self::base_mut);
 }
-impl<B: Producer + AsRb> BlockingProducer for BlockingProd<B>
+impl<R: RbRef> BlockingProducer for BlockingProd<R>
 where
-    B::Rb: BlockingProducer,
+    R::Target: BlockingProducer,
 {
-    type Instant = <B::Rb as BlockingProducer>::Instant;
+    type Instant = <R::Target as BlockingProducer>::Instant;
 
     fn wait_vacant(&self, count: usize, timeout: Option<Duration>) -> bool {
-        self.base.as_rb().wait_vacant(count, timeout)
+        self.base.rb().wait_vacant(count, timeout)
     }
 }
 
-impl<B: Consumer> Observer for BlockingCons<B> {
-    delegate_observer!(B, Self::base);
+impl<R: RbRef> Observer for BlockingCons<R> {
+    delegate_observer!(CachedCons<R>, Self::base);
 }
-impl<B: Consumer> Consumer for BlockingCons<B> {
+impl<R: RbRef> Consumer for BlockingCons<R> {
     delegate_consumer!(Self::base, Self::base_mut);
 }
-impl<B: Consumer + AsRb> BlockingConsumer for BlockingCons<B>
+impl<R: RbRef> BlockingConsumer for BlockingCons<R>
 where
-    B::Rb: BlockingConsumer,
+    R::Target: BlockingConsumer,
 {
-    type Instant = <B::Rb as BlockingConsumer>::Instant;
+    type Instant = <R::Target as BlockingConsumer>::Instant;
 
     fn wait_occupied(&self, count: usize, timeout: Option<Duration>) -> bool {
-        self.base.as_rb().wait_occupied(count, timeout)
+        self.base.rb().wait_occupied(count, timeout)
     }
 }
 
-unsafe impl<B: Producer + AsRb> AsRb for BlockingProd<B> {
-    type Rb = B::Rb;
-    fn as_rb(&self) -> &Self::Rb {
-        self.base.as_rb()
-    }
-}
-unsafe impl<B: Consumer + AsRb> AsRb for BlockingCons<B> {
-    type Rb = B::Rb;
-    fn as_rb(&self) -> &Self::Rb {
-        self.base.as_rb()
-    }
-}
+impl_producer_traits!(BlockingProd<R: RbRef>);
+impl_consumer_traits!(BlockingCons<R: RbRef>);
 
-impl_producer_traits!(BlockingProd<B: Producer>);
-impl_consumer_traits!(BlockingCons<B: Consumer>);
-
-impl<R: Producer + Observe> Observe for BlockingProd<R> {
-    type Obs = R::Obs;
+impl<R: RbRef> Observe for BlockingProd<R> {
+    type Obs = Obs<R>;
     fn observe(&self) -> Self::Obs {
         self.base.observe()
     }
 }
-impl<R: Consumer + Observe> Observe for BlockingCons<R> {
-    type Obs = R::Obs;
+impl<R: RbRef> Observe for BlockingCons<R> {
+    type Obs = Obs<R>;
     fn observe(&self) -> Self::Obs {
         self.base.observe()
     }

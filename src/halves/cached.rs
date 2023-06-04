@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     impl_consumer_traits, impl_producer_traits,
-    rb::{AsRb, RbRef},
+    rb::RbRef,
     traits::{Consumer, Observe, Observer, Producer},
 };
 use core::{mem::MaybeUninit, num::NonZeroUsize};
@@ -28,6 +28,12 @@ impl<R: RbRef> CachedProd<R> {
             frozen: FrozenProd::new(ref_),
         }
     }
+    pub fn rb(&self) -> &R::Target {
+        self.frozen.rb()
+    }
+    pub fn rb_ref(&self) -> &R {
+        self.frozen.rb_ref()
+    }
     pub fn into_rb_ref(self) -> R {
         self.frozen.into_rb_ref()
     }
@@ -41,21 +47,14 @@ impl<R: RbRef> CachedCons<R> {
             frozen: FrozenCons::new(ref_),
         }
     }
+    pub fn rb(&self) -> &R::Target {
+        self.frozen.rb()
+    }
+    pub fn rb_ref(&self) -> &R {
+        self.frozen.rb_ref()
+    }
     pub fn into_rb_ref(self) -> R {
         self.frozen.into_rb_ref()
-    }
-}
-
-unsafe impl<R: RbRef> AsRb for CachedProd<R> {
-    type Rb = R::Target;
-    fn as_rb(&self) -> &Self::Rb {
-        self.frozen.rb()
-    }
-}
-unsafe impl<R: RbRef> AsRb for CachedCons<R> {
-    type Rb = R::Target;
-    fn as_rb(&self) -> &Self::Rb {
-        self.frozen.rb()
     }
 }
 

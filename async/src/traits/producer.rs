@@ -1,6 +1,6 @@
-use crate::{halves::AsyncProd, rb::AsAsyncRb};
+use crate::halves::AsyncProd;
 
-use super::AsyncObserver;
+use super::{AsyncObserver, AsyncRingBuffer};
 use core::{
     future::Future,
     iter::Peekable,
@@ -10,7 +10,10 @@ use core::{
 #[cfg(feature = "std")]
 use futures::io::AsyncWrite;
 use futures::{future::FusedFuture, Sink};
-use ringbuf::traits::{Observer, Producer};
+use ringbuf::{
+    rb::RbRef,
+    traits::{Observer, Producer},
+};
 #[cfg(feature = "std")]
 use std::io;
 
@@ -198,7 +201,10 @@ impl<'a, A: AsyncProducer> Future for WaitVacantFuture<'a, A> {
     }
 }
 
-impl<B: Producer + AsAsyncRb> Sink<B::Item> for AsyncProd<B> {
+impl<R: RbRef> Sink<<R::Target as Observer>::Item> for AsyncProd<R>
+where
+    R::Target: AsyncRingBuffer,
+{
     type Error = ();
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -211,7 +217,7 @@ impl<B: Producer + AsAsyncRb> Sink<B::Item> for AsyncProd<B> {
             Poll::Ready(Ok(()))
         }
     }
-    fn start_send(mut self: Pin<&mut Self>, item: B::Item) -> Result<(), Self::Error> {
+    fn start_send(mut self: Pin<&mut Self>, item: <R::Target as Observer>::Item) -> Result<(), Self::Error> {
         assert!(self.try_push(item).is_ok());
         Ok(())
     }
@@ -226,7 +232,10 @@ impl<B: Producer + AsAsyncRb> Sink<B::Item> for AsyncProd<B> {
 }
 
 #[cfg(feature = "std")]
-impl<B: Producer<Item = u8> + AsAsyncRb> AsyncWrite for AsyncProd<B> {
+impl<R: RbRef> AsyncWrite for AsyncProd<R>
+where
+    R::Target: AsyncRingBuffer<Item = u8>,
+{
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         self.register_read_waker(cx.waker());
         if self.is_closed() {
