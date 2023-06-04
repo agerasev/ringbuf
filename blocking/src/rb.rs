@@ -81,7 +81,7 @@ impl<'a, B: RingBuffer + GenSplitRef<'a, Self> + 'a, S: Semaphore + 'a> SplitRef
 
     fn split_ref(&'a mut self) -> (Self::RefProd, Self::RefCons) {
         let (prod, cons) = B::gen_split_ref(self);
-        (BlockingProd::new(prod), BlockingCons::new(cons))
+        (BlockingProd::from(prod), BlockingCons::from(cons))
     }
 }
 impl<B: RingBuffer + GenSplit<Self>, S: Semaphore> Split for BlockingRb<B, S> {
@@ -90,6 +90,6 @@ impl<B: RingBuffer + GenSplit<Self>, S: Semaphore> Split for BlockingRb<B, S> {
 
     fn split(self) -> (Self::Prod, Self::Cons) {
         let (prod, cons) = B::gen_split(self);
-        (BlockingProd::new(prod), BlockingCons::new(cons))
+        (BlockingProd::from(prod), BlockingCons::from(cons))
     }
 }

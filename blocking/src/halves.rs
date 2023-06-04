@@ -14,7 +14,7 @@ pub struct BlockingCons<B: Consumer> {
 }
 
 impl<B: Producer> BlockingProd<B> {
-    pub fn new(base: B) -> Self {
+    pub fn from(base: B) -> Self {
         Self { base }
     }
     fn base(&self) -> &B {
@@ -25,7 +25,7 @@ impl<B: Producer> BlockingProd<B> {
     }
 }
 impl<B: Consumer> BlockingCons<B> {
-    pub fn new(base: B) -> Self {
+    pub fn from(base: B) -> Self {
         Self { base }
     }
     fn base(&self) -> &B {

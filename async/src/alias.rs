@@ -1,5 +1,9 @@
-use crate::rb::AsyncRb;
-use ringbuf::HeapRb;
+use crate::{
+    halves::{AsyncCons, AsyncProd},
+    rb::AsyncRb,
+};
+use alloc::sync::Arc;
+use ringbuf::{CachedCons, CachedProd, HeapRb};
 
 pub type AsyncHeapRb<T> = AsyncRb<HeapRb<T>>;
 
@@ -8,3 +12,6 @@ impl<T> AsyncHeapRb<T> {
         Self::from(HeapRb::new(cap))
     }
 }
+
+pub type AsyncHeapProd<T> = AsyncProd<CachedProd<Arc<AsyncHeapRb<T>>>>;
+pub type AsyncHeapCons<T> = AsyncCons<CachedCons<Arc<AsyncHeapRb<T>>>>;
