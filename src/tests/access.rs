@@ -72,7 +72,7 @@ fn pop_full() {
 #[test]
 fn pop_empty() {
     let mut rb = Rb::<Static<i32, 2>>::default();
-    let (_, cons) = rb.split_ref();
+    let (_, mut cons) = rb.split_ref();
 
     {
         let (left, right) = cons.occupied_slices();
@@ -167,7 +167,7 @@ fn push_return() {
 #[test]
 fn pop_return() {
     let mut rb = Rb::<Static<i32, 2>>::default();
-    let (mut prod, cons) = rb.split_ref();
+    let (mut prod, mut cons) = rb.split_ref();
 
     assert_eq!(prod.try_push(12), Ok(()));
     assert_eq!(prod.try_push(34), Ok(()));
@@ -202,7 +202,7 @@ fn pop_return() {
 #[test]
 fn push_pop() {
     let mut rb = Rb::<Static<i32, 3>>::default();
-    let (mut prod, cons) = rb.split_ref();
+    let (mut prod, mut cons) = rb.split_ref();
 
     let vs_20 = (123, 456);
     {

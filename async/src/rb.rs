@@ -8,7 +8,7 @@ use core::{
 };
 use futures::task::AtomicWaker;
 use ringbuf::{
-    delegate_observer, delegate_ring_buffer, impl_consumer_traits, impl_producer_traits,
+    delegate_consumer, delegate_observer, delegate_producer, impl_consumer_traits, impl_producer_traits,
     rb::{
         traits::{GenSplit, GenSplitRef},
         AsRb,
@@ -47,19 +47,20 @@ impl<B: RingBuffer> Observer for AsyncRb<B> {
     delegate_observer!(B, Self::base);
 }
 impl<B: RingBuffer> Producer for AsyncRb<B> {
-    unsafe fn set_write_index(&self, value: usize) {
-        self.base.set_write_index(value);
-        self.write.wake();
-    }
+    delegate_producer!(Self::base, Self::base_mut);
 }
 impl<B: RingBuffer> Consumer for AsyncRb<B> {
-    unsafe fn set_read_index(&self, value: usize) {
-        self.base.set_read_index(value);
-        self.read.wake();
-    }
+    delegate_consumer!(Self::base, Self::base_mut);
 }
 impl<B: RingBuffer> RingBuffer for AsyncRb<B> {
-    delegate_ring_buffer!(Self::base, Self::base_mut);
+    unsafe fn unsafe_set_write_index(&self, value: usize) {
+        self.base.unsafe_set_write_index(value);
+        self.write.wake();
+    }
+    unsafe fn unsafe_set_read_index(&self, value: usize) {
+        self.base.unsafe_set_read_index(value);
+        self.read.wake();
+    }
 }
 
 impl<B: RingBuffer> AsyncObserver for AsyncRb<B> {

@@ -3,10 +3,9 @@
 use super::direct::{Cons, Obs, Prod};
 use crate::{
     rb::RbRef,
-    traits::{Consumer, Observe, Observer, Producer},
+    traits::{Consumer, Observe, Observer, Producer, RingBuffer},
 };
 use core::{
-    cell::Cell,
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
     ptr,
@@ -18,8 +17,8 @@ use core::{
 /// Items inserted by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
 pub struct FrozenCons<R: RbRef> {
     rb: R,
-    read: Cell<usize>,
-    write: Cell<usize>,
+    read: usize,
+    write: usize,
 }
 
 /// Frozen write end of some ring buffer.
@@ -28,8 +27,8 @@ pub struct FrozenCons<R: RbRef> {
 /// A free space of items removed by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
 pub struct FrozenProd<R: RbRef> {
     rb: R,
-    read: Cell<usize>,
-    write: Cell<usize>,
+    read: usize,
+    write: usize,
 }
 
 impl<R: RbRef> Observer for FrozenCons<R> {
@@ -42,11 +41,11 @@ impl<R: RbRef> Observer for FrozenCons<R> {
 
     #[inline]
     fn read_index(&self) -> usize {
-        self.read.get()
+        self.read
     }
     #[inline]
     fn write_index(&self) -> usize {
-        self.write.get()
+        self.write
     }
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
@@ -64,11 +63,11 @@ impl<R: RbRef> Observer for FrozenProd<R> {
 
     #[inline]
     fn read_index(&self) -> usize {
-        self.read.get()
+        self.read
     }
     #[inline]
     fn write_index(&self) -> usize {
-        self.write.get()
+        self.write
     }
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
@@ -78,15 +77,15 @@ impl<R: RbRef> Observer for FrozenProd<R> {
 
 impl<R: RbRef> Consumer for FrozenCons<R> {
     #[inline]
-    unsafe fn set_read_index(&self, value: usize) {
-        self.read.set(value);
+    unsafe fn set_read_index(&mut self, value: usize) {
+        self.read = value;
     }
 }
 
 impl<R: RbRef> Producer for FrozenProd<R> {
     #[inline]
-    unsafe fn set_write_index(&self, value: usize) {
-        self.write.set(value);
+    unsafe fn set_write_index(&mut self, value: usize) {
+        self.write = value;
     }
 }
 
@@ -110,8 +109,8 @@ impl<R: RbRef> FrozenCons<R> {
     /// There must be only one instance containing the same ring buffer reference.
     pub unsafe fn new(rb: R) -> Self {
         Self {
-            read: Cell::new(rb.deref().read_index()),
-            write: Cell::new(rb.deref().write_index()),
+            read: rb.deref().read_index(),
+            write: rb.deref().write_index(),
             rb,
         }
     }
@@ -130,14 +129,14 @@ impl<R: RbRef> FrozenCons<R> {
 
     /// Commit changes to the ring buffer.
     pub fn commit(&self) {
-        unsafe { self.rb().set_read_index(self.read.get()) }
+        unsafe { self.rb().unsafe_set_read_index(self.read) }
     }
     /// Fetch changes from the ring buffer.
-    pub fn fetch(&self) {
-        self.write.set(self.rb().write_index());
+    pub fn fetch(&mut self) {
+        self.write = self.rb().write_index();
     }
     /// Commit changes to and fetch updates from the ring buffer.
-    pub fn sync(&self) {
+    pub fn sync(&mut self) {
         self.commit();
         self.fetch();
     }
@@ -151,8 +150,8 @@ impl<R: RbRef> FrozenProd<R> {
     /// There must be only one instance containing the same ring buffer reference.
     pub unsafe fn new(rb: R) -> Self {
         Self {
-            read: Cell::new(rb.deref().read_index()),
-            write: Cell::new(rb.deref().write_index()),
+            read: rb.deref().read_index(),
+            write: rb.deref().write_index(),
             rb,
         }
     }
@@ -171,14 +170,14 @@ impl<R: RbRef> FrozenProd<R> {
 
     /// Commit changes to the ring buffer.
     pub fn commit(&self) {
-        unsafe { self.rb().set_write_index(self.write.get()) }
+        unsafe { self.rb().unsafe_set_write_index(self.write) }
     }
     /// Fetch changes from the ring buffer.
-    pub fn fetch(&self) {
-        self.read.set(self.rb().read_index());
+    pub fn fetch(&mut self) {
+        self.read = self.rb().read_index();
     }
     /// Commit changes to and fetch updates from the ring buffer.
-    pub fn sync(&self) {
+    pub fn sync(&mut self) {
         self.commit();
         self.fetch();
     }
@@ -186,11 +185,11 @@ impl<R: RbRef> FrozenProd<R> {
     /// Discard new items pushed since last sync.
     pub fn discard(&mut self) {
         let last_tail = self.rb().write_index();
-        let (first, second) = unsafe { self.rb().unsafe_slices(last_tail, self.write.get()) };
+        let (first, second) = unsafe { self.rb().unsafe_slices(last_tail, self.write) };
         for item_mut in first.iter_mut().chain(second.iter_mut()) {
             unsafe { item_mut.assume_init_drop() };
         }
-        self.write.set(last_tail);
+        self.write = last_tail;
     }
 }
 

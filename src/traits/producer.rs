@@ -20,7 +20,7 @@ use std::{
 /// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
 ///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub trait Producer: Observer {
-    unsafe fn set_write_index(&self, value: usize);
+    unsafe fn set_write_index(&mut self, value: usize);
 
     /// Moves `write` pointer by `count` places forward.
     ///
@@ -29,7 +29,7 @@ pub trait Producer: Observer {
     /// First `count` items in free space must be initialized.
     ///
     /// Must not be called concurrently.
-    unsafe fn advance_write_index(&self, count: usize) {
+    unsafe fn advance_write_index(&mut self, count: usize) {
         self.set_write_index((self.write_index() + count) % modulus(self));
     }
 
@@ -183,19 +183,18 @@ macro_rules! impl_producer_traits {
 macro_rules! delegate_producer {
     ($ref:expr, $mut:expr) => {
         #[inline]
-        unsafe fn set_write_index(&self, value: usize) {
-            $ref(self).set_write_index(value)
+        unsafe fn set_write_index(&mut self, value: usize) {
+            $mut(self).set_write_index(value)
         }
         #[inline]
-        unsafe fn advance_write_index(&self, count: usize) {
-            $ref(self).advance_write_index(count)
+        unsafe fn advance_write_index(&mut self, count: usize) {
+            $mut(self).advance_write_index(count)
         }
 
         #[inline]
         fn vacant_slices(&self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
             $ref(self).vacant_slices()
         }
-
         #[inline]
         fn vacant_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
             $mut(self).vacant_slices_mut()

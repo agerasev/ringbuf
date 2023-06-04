@@ -103,19 +103,28 @@ impl<S: Storage> Observer for SharedRb<S> {
 
 impl<S: Storage> Producer for SharedRb<S> {
     #[inline]
-    unsafe fn set_write_index(&self, value: usize) {
-        self.write.store(value, Ordering::Release);
+    unsafe fn set_write_index(&mut self, value: usize) {
+        self.unsafe_set_write_index(value)
     }
 }
 
 impl<S: Storage> Consumer for SharedRb<S> {
     #[inline]
-    unsafe fn set_read_index(&self, value: usize) {
-        self.read.store(value, Ordering::Release);
+    unsafe fn set_read_index(&mut self, value: usize) {
+        self.unsafe_set_read_index(value)
     }
 }
 
-impl<S: Storage> RingBuffer for SharedRb<S> {}
+impl<S: Storage> RingBuffer for SharedRb<S> {
+    #[inline]
+    unsafe fn unsafe_set_write_index(&self, value: usize) {
+        self.write.store(value, Ordering::Release);
+    }
+    #[inline]
+    unsafe fn unsafe_set_read_index(&self, value: usize) {
+        self.read.store(value, Ordering::Release);
+    }
+}
 
 impl<S: Storage> Drop for SharedRb<S> {
     fn drop(&mut self) {

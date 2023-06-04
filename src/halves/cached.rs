@@ -31,6 +31,9 @@ impl<R: RbRef> CachedProd<R> {
     pub fn into_rb_ref(self) -> R {
         self.frozen.into_rb_ref()
     }
+    pub fn fetch(&mut self) {
+        self.frozen.fetch()
+    }
 }
 impl<R: RbRef> CachedCons<R> {
     /// # Safety
@@ -43,6 +46,9 @@ impl<R: RbRef> CachedCons<R> {
     }
     pub fn into_rb_ref(self) -> R {
         self.frozen.into_rb_ref()
+    }
+    pub fn fetch(&mut self) {
+        self.frozen.fetch()
     }
 }
 
@@ -69,12 +75,15 @@ impl<R: RbRef> Observer for CachedProd<R> {
 
     #[inline]
     fn read_index(&self) -> usize {
-        self.frozen.fetch();
-        self.frozen.read_index()
+        self.as_rb().read_index()
     }
     #[inline]
     fn write_index(&self) -> usize {
         self.frozen.write_index()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.frozen.is_empty()
     }
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
@@ -96,8 +105,11 @@ impl<R: RbRef> Observer for CachedCons<R> {
     }
     #[inline]
     fn write_index(&self) -> usize {
-        self.frozen.fetch();
-        self.frozen.write_index()
+        self.as_rb().write_index()
+    }
+
+    fn is_full(&self) -> bool {
+        self.frozen.is_full()
     }
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
@@ -107,7 +119,7 @@ impl<R: RbRef> Observer for CachedCons<R> {
 
 impl<R: RbRef> Producer for CachedProd<R> {
     #[inline]
-    unsafe fn set_write_index(&self, value: usize) {
+    unsafe fn set_write_index(&mut self, value: usize) {
         self.frozen.set_write_index(value);
         self.frozen.commit();
     }
@@ -125,8 +137,7 @@ impl<R: RbRef> Producer for CachedProd<R> {
 }
 
 impl<R: RbRef> Consumer for CachedCons<R> {
-    #[inline]
-    unsafe fn set_read_index(&self, value: usize) {
+    unsafe fn set_read_index(&mut self, value: usize) {
         self.frozen.set_read_index(value);
         self.frozen.commit();
     }

@@ -1,7 +1,7 @@
 use crate::{
     delegate_observer, impl_consumer_traits, impl_producer_traits,
     rb::{AsRb, RbRef},
-    traits::{Consumer, Observe, Observer, Producer},
+    traits::{Consumer, Observe, Observer, Producer, RingBuffer},
 };
 
 #[derive(Clone)]
@@ -83,15 +83,15 @@ impl<R: RbRef> Observer for Cons<R> {
 
 impl<R: RbRef> Producer for Prod<R> {
     #[inline]
-    unsafe fn set_write_index(&self, value: usize) {
-        self.as_rb().set_write_index(value)
+    unsafe fn set_write_index(&mut self, value: usize) {
+        self.as_rb().unsafe_set_write_index(value)
     }
 }
 
 impl<R: RbRef> Consumer for Cons<R> {
     #[inline]
-    unsafe fn set_read_index(&self, value: usize) {
-        self.as_rb().set_read_index(value)
+    unsafe fn set_read_index(&mut self, value: usize) {
+        self.as_rb().unsafe_set_read_index(value)
     }
 }
 

@@ -13,6 +13,9 @@ use super::{Consumer, Observer, Producer};
 /// without using the space for an extra element in container.
 /// And obviously we cannot store more than `capacity` items in the buffer, so `write - read` modulo `2 * capacity` is not allowed to be greater than `capacity`.
 pub trait RingBuffer: Observer + Consumer + Producer {
+    unsafe fn unsafe_set_read_index(&self, value: usize);
+    unsafe fn unsafe_set_write_index(&self, value: usize);
+
     /// Pushes an item to the ring buffer overwriting the latest item if the buffer is full.
     ///
     /// Returns overwritten item if overwriting took place.
@@ -53,6 +56,15 @@ pub trait RingBuffer: Observer + Consumer + Producer {
 #[macro_export]
 macro_rules! delegate_ring_buffer {
     ($ref:expr, $mut:expr) => {
+        #[inline]
+        unsafe fn unsafe_set_read_index(&self, value: usize) {
+            $ref(self).unsafe_set_read_index(value)
+        }
+        #[inline]
+        unsafe fn unsafe_set_write_index(&self, value: usize) {
+            $ref(self).unsafe_set_write_index(value)
+        }
+
         #[inline]
         fn push_overwrite(&mut self, elem: Self::Item) -> Option<Self::Item> {
             $mut(self).push_overwrite(elem)

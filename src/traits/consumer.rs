@@ -15,7 +15,7 @@ use std::io::{self, Write};
 /// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
 ///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub trait Consumer: Observer {
-    unsafe fn set_read_index(&self, value: usize);
+    unsafe fn set_read_index(&mut self, value: usize);
 
     /// Moves `read` pointer by `count` places forward.
     ///
@@ -24,7 +24,7 @@ pub trait Consumer: Observer {
     /// First `count` items in occupied memory must be moved out or dropped.
     ///
     /// Must not be called concurrently.
-    unsafe fn advance_read_index(&self, count: usize) {
+    unsafe fn advance_read_index(&mut self, count: usize) {
         self.set_read_index((self.read_index() + count) % modulus(self));
     }
 
@@ -234,7 +234,7 @@ impl<C: Consumer> Iterator for IntoIter<C> {
 
 /// An iterator that removes items from the ring buffer.
 pub struct PopIter<'a, C: Consumer> {
-    target: &'a C,
+    target: &'a mut C,
     slices: (&'a [MaybeUninit<C::Item>], &'a [MaybeUninit<C::Item>]),
     len: usize,
 }
@@ -243,7 +243,7 @@ impl<'a, C: Consumer> PopIter<'a, C> {
         let slices = target.occupied_slices();
         Self {
             len: slices.0.len() + slices.1.len(),
-            slices,
+            slices: unsafe { (&*(slices.0 as *const _), &*(slices.1 as *const _)) },
             target,
         }
     }
@@ -319,19 +319,18 @@ macro_rules! impl_consumer_traits {
 macro_rules! delegate_consumer {
     ($ref:expr, $mut:expr) => {
         #[inline]
-        unsafe fn set_read_index(&self, value: usize) {
-            $ref(self).set_read_index(value)
+        unsafe fn set_read_index(&mut self, value: usize) {
+            $mut(self).set_read_index(value)
         }
         #[inline]
-        unsafe fn advance_read_index(&self, count: usize) {
-            $ref(self).advance_read_index(count)
+        unsafe fn advance_read_index(&mut self, count: usize) {
+            $mut(self).advance_read_index(count)
         }
 
         #[inline]
         fn occupied_slices(&self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
             $ref(self).occupied_slices()
         }
-
         #[inline]
         unsafe fn occupied_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
             $mut(self).occupied_slices_mut()

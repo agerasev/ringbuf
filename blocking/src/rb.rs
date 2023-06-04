@@ -7,7 +7,7 @@ use crate::{
 };
 use core::time::Duration;
 use ringbuf::{
-    delegate_observer, delegate_ring_buffer,
+    delegate_consumer, delegate_observer, delegate_producer,
     rb::traits::{GenSplit, GenSplitRef},
     traits::{Consumer, Observer, Producer, RingBuffer, Split, SplitRef},
 };
@@ -47,17 +47,18 @@ impl<B: RingBuffer, S: Semaphore> Observer for BlockingRb<B, S> {
     delegate_observer!(B, Self::base);
 }
 impl<B: RingBuffer, S: Semaphore> Producer for BlockingRb<B, S> {
-    unsafe fn set_write_index(&self, value: usize) {
-        self.write.notify(|| self.base.set_write_index(value));
-    }
+    delegate_producer!(Self::base, Self::base_mut);
 }
 impl<B: RingBuffer, S: Semaphore> Consumer for BlockingRb<B, S> {
-    unsafe fn set_read_index(&self, value: usize) {
-        self.read.notify(|| self.base.set_read_index(value));
-    }
+    delegate_consumer!(Self::base, Self::base_mut);
 }
 impl<B: RingBuffer, S: Semaphore> RingBuffer for BlockingRb<B, S> {
-    delegate_ring_buffer!(Self::base, Self::base_mut);
+    unsafe fn unsafe_set_write_index(&self, value: usize) {
+        self.write.notify(|| self.base.unsafe_set_write_index(value));
+    }
+    unsafe fn unsafe_set_read_index(&self, value: usize) {
+        self.read.notify(|| self.base.unsafe_set_read_index(value));
+    }
 }
 
 impl<B: RingBuffer, S: Semaphore> BlockingProducer for BlockingRb<B, S> {
