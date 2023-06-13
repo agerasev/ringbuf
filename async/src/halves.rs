@@ -1,7 +1,8 @@
 use crate::traits::{AsyncConsumer, AsyncObserver, AsyncProducer, AsyncRingBuffer};
+use core::{mem::ManuallyDrop, ptr};
 use ringbuf::{
     delegate_consumer, delegate_observer, delegate_producer,
-    rb::RbRef,
+    rb::traits::{RbRef, ToRbRef},
     traits::{Consumer, Observe, Observer, Producer},
     Cons, Obs, Prod,
 };
@@ -35,15 +36,6 @@ where
     fn base(&self) -> &Obs<R> {
         &self.base
     }
-    pub fn rb(&self) -> &R::Target {
-        self.base.rb()
-    }
-    pub fn rb_ref(&self) -> &R {
-        self.base.rb_ref()
-    }
-    pub fn into_rb_ref(self) -> R {
-        self.base.into_rb_ref()
-    }
 }
 impl<R: RbRef> AsyncProd<R>
 where
@@ -58,15 +50,6 @@ where
     fn base_mut(&mut self) -> &mut Prod<R> {
         &mut self.base
     }
-    pub fn rb(&self) -> &R::Target {
-        self.base.rb()
-    }
-    pub fn rb_ref(&self) -> &R {
-        self.base.rb_ref()
-    }
-    //pub fn into_rb_ref(self) -> R {
-    //    self.base.into_rb_ref()
-    //}
 }
 impl<R: RbRef> AsyncCons<R>
 where
@@ -81,15 +64,47 @@ where
     fn base_mut(&mut self) -> &mut Cons<R> {
         &mut self.base
     }
-    pub fn rb(&self) -> &R::Target {
-        self.base.rb()
-    }
-    pub fn rb_ref(&self) -> &R {
+}
+
+impl<R: RbRef> ToRbRef for AsyncObs<R>
+where
+    R::Target: AsyncRingBuffer,
+{
+    type RbRef = R;
+    fn rb_ref(&self) -> &R {
         self.base.rb_ref()
     }
-    //pub fn into_rb_ref(self) -> R {
-    //    self.base.into_rb_ref()
-    //}
+    fn into_rb_ref(self) -> R {
+        self.base.into_rb_ref()
+    }
+}
+impl<R: RbRef> ToRbRef for AsyncProd<R>
+where
+    R::Target: AsyncRingBuffer,
+{
+    type RbRef = R;
+    fn rb_ref(&self) -> &R {
+        self.base.rb_ref()
+    }
+    fn into_rb_ref(self) -> R {
+        let this = ManuallyDrop::new(self);
+        this.close();
+        unsafe { ptr::read(&this.base) }.into_rb_ref()
+    }
+}
+impl<R: RbRef> ToRbRef for AsyncCons<R>
+where
+    R::Target: AsyncRingBuffer,
+{
+    type RbRef = R;
+    fn rb_ref(&self) -> &R {
+        self.base.rb_ref()
+    }
+    fn into_rb_ref(self) -> R {
+        let this = ManuallyDrop::new(self);
+        this.close();
+        unsafe { ptr::read(&this.base) }.into_rb_ref()
+    }
 }
 
 impl<R: RbRef> Unpin for AsyncObs<R> where R::Target: AsyncRingBuffer {}

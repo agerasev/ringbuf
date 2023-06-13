@@ -2,7 +2,7 @@ use super::{macros::rb_impl_init, utils::ranges};
 #[cfg(feature = "alloc")]
 use crate::traits::Split;
 use crate::{
-    halves::{CachedCons, CachedProd},
+    halves::{CachingCons, CachingProd},
     impl_consumer_traits, impl_producer_traits,
     storage::{Shared, Static, Storage},
     traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
@@ -123,20 +123,20 @@ impl<S: Storage> Drop for SharedRb<S> {
 
 #[cfg(feature = "alloc")]
 impl<S: Storage> Split for SharedRb<S> {
-    type Prod = CachedProd<Arc<Self>>;
-    type Cons = CachedCons<Arc<Self>>;
+    type Prod = CachingProd<Arc<Self>>;
+    type Cons = CachingCons<Arc<Self>>;
 
     fn split(self) -> (Self::Prod, Self::Cons) {
         let rc = Arc::new(self);
-        unsafe { (CachedProd::new(rc.clone()), CachedCons::new(rc)) }
+        unsafe { (CachingProd::new(rc.clone()), CachingCons::new(rc)) }
     }
 }
 impl<S: Storage> SplitRef for SharedRb<S> {
-    type RefProd<'a> = CachedProd<&'a Self> where Self: 'a;
-    type RefCons<'a> = CachedCons<&'a Self> where Self: 'a;
+    type RefProd<'a> = CachingProd<&'a Self> where Self: 'a;
+    type RefCons<'a> = CachingCons<&'a Self> where Self: 'a;
 
     fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
-        unsafe { (CachedProd::new(self), CachedCons::new(self)) }
+        unsafe { (CachingProd::new(self), CachingCons::new(self)) }
     }
 }
 

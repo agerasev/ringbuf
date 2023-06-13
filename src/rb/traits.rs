@@ -27,3 +27,17 @@ unsafe impl<B: RingBuffer> RbRef for Arc<B> {
         self
     }
 }
+
+pub trait ToRbRef {
+    /// Ring buffer reference type.
+    type RbRef: RbRef;
+
+    /// Underlying ring buffer.
+    fn rb(&self) -> &<Self::RbRef as RbRef>::Target {
+        self.rb_ref().deref()
+    }
+    /// Underlying ring buffer reference.
+    fn rb_ref(&self) -> &Self::RbRef;
+    /// Destructure into underlying ring buffer reference.
+    fn into_rb_ref(self) -> Self::RbRef;
+}

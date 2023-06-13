@@ -8,19 +8,26 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+/// Shortcuts for frequently used types.
 mod alias;
+/// Producer and consumer implementations.
 pub mod halves;
+/// Ring buffer implementations.
 pub mod rb;
+/// Storage types.
 pub mod storage;
+/// Ring buffer traits.
 pub mod traits;
+/// Items transfer between ring buffers.
 mod transfer;
+/// Internal utilities.
 mod utils;
 
 #[cfg(test)]
 mod tests;
 
 pub use alias::*;
-pub use halves::{CachedCons, CachedProd, Cons, Obs, Prod};
+pub use halves::{CachingCons, CachingProd, Cons, Obs, Prod};
 pub use rb::{LocalRb, SharedRb};
 pub use traits::{consumer, producer};
 pub use transfer::transfer;

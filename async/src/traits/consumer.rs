@@ -9,7 +9,7 @@ use core::{
 use futures::io::AsyncRead;
 use futures::{future::FusedFuture, Stream};
 use ringbuf::{
-    rb::RbRef,
+    rb::traits::RbRef,
     traits::{Consumer, Observer},
 };
 #[cfg(feature = "std")]

@@ -1,39 +1,26 @@
 use crate::{
     delegate_observer, impl_consumer_traits, impl_producer_traits,
-    rb::RbRef,
+    rb::traits::{RbRef, ToRbRef},
     traits::{Consumer, Observe, Observer, Producer},
 };
 
+/// Observer of ring buffer.
 #[derive(Clone)]
 pub struct Obs<R: RbRef> {
     rb: R,
 }
-
-/// Producer wrapper of ring buffer.
+/// Producer of ring buffer.
 pub struct Prod<R: RbRef> {
     rb: R,
 }
-
-/// Consumer wrapper of ring buffer.
+/// Consumer of ring buffer.
 pub struct Cons<R: RbRef> {
     rb: R,
 }
 
 impl<R: RbRef> Obs<R> {
-    /// # Safety
-    ///
-    /// There must be no more than one consumer wrapper.
     pub fn new(rb: R) -> Self {
         Self { rb }
-    }
-    pub fn rb(&self) -> &R::Target {
-        self.rb.deref()
-    }
-    pub fn rb_ref(&self) -> &R {
-        &self.rb
-    }
-    pub fn into_rb_ref(self) -> R {
-        self.rb
     }
 }
 impl<R: RbRef> Prod<R> {
@@ -43,15 +30,6 @@ impl<R: RbRef> Prod<R> {
     pub unsafe fn new(rb: R) -> Self {
         Self { rb }
     }
-    pub fn rb(&self) -> &R::Target {
-        self.rb.deref()
-    }
-    pub fn rb_ref(&self) -> &R {
-        &self.rb
-    }
-    pub fn into_rb_ref(self) -> R {
-        self.rb
-    }
 }
 impl<R: RbRef> Cons<R> {
     /// # Safety
@@ -60,13 +38,31 @@ impl<R: RbRef> Cons<R> {
     pub unsafe fn new(rb: R) -> Self {
         Self { rb }
     }
-    pub fn rb(&self) -> &R::Target {
-        self.rb.deref()
-    }
-    pub fn rb_ref(&self) -> &R {
+}
+impl<R: RbRef> ToRbRef for Obs<R> {
+    type RbRef = R;
+    fn rb_ref(&self) -> &R {
         &self.rb
     }
-    pub fn into_rb_ref(self) -> R {
+    fn into_rb_ref(self) -> R {
+        self.rb
+    }
+}
+impl<R: RbRef> ToRbRef for Prod<R> {
+    type RbRef = R;
+    fn rb_ref(&self) -> &R {
+        &self.rb
+    }
+    fn into_rb_ref(self) -> R {
+        self.rb
+    }
+}
+impl<R: RbRef> ToRbRef for Cons<R> {
+    type RbRef = R;
+    fn rb_ref(&self) -> &R {
+        &self.rb
+    }
+    fn into_rb_ref(self) -> R {
         self.rb
     }
 }

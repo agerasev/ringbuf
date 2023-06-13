@@ -2,7 +2,7 @@
 
 use super::direct::{Cons, Obs, Prod};
 use crate::{
-    rb::RbRef,
+    rb::traits::{RbRef, ToRbRef},
     traits::{Consumer, Observe, Observer, Producer},
 };
 use core::{
@@ -115,17 +115,6 @@ impl<R: RbRef> FrozenCons<R> {
             rb,
         }
     }
-    pub fn rb(&self) -> &R::Target {
-        self.rb.deref()
-    }
-    pub fn rb_ref(&self) -> &R {
-        &self.rb
-    }
-    pub fn into_rb_ref(self) -> R {
-        self.commit();
-        let this = ManuallyDrop::new(self);
-        unsafe { ptr::read(&this.rb) }
-    }
     /// Commit and destroy `Self` returning underlying consumer.
     pub fn release(self) -> Cons<R> {
         unsafe { Cons::new(self.into_rb_ref()) }
@@ -145,6 +134,18 @@ impl<R: RbRef> FrozenCons<R> {
         self.fetch();
     }
 }
+impl<R: RbRef> ToRbRef for FrozenCons<R> {
+    type RbRef = R;
+
+    fn rb_ref(&self) -> &R {
+        &self.rb
+    }
+    fn into_rb_ref(self) -> R {
+        self.commit();
+        let this = ManuallyDrop::new(self);
+        unsafe { ptr::read(&this.rb) }
+    }
+}
 
 impl<R: RbRef> FrozenProd<R> {
     /// Create new ring buffer cache.
@@ -158,17 +159,6 @@ impl<R: RbRef> FrozenProd<R> {
             write: Cell::new(rb.deref().write_index()),
             rb,
         }
-    }
-    pub fn rb(&self) -> &R::Target {
-        self.rb.deref()
-    }
-    pub fn rb_ref(&self) -> &R {
-        &self.rb
-    }
-    pub fn into_rb_ref(self) -> R {
-        self.commit();
-        let this = ManuallyDrop::new(self);
-        unsafe { ptr::read(&this.rb) }
     }
     /// Commit and destroy `Self` returning underlying producer.
     pub fn release(self) -> Prod<R> {
@@ -199,14 +189,26 @@ impl<R: RbRef> FrozenProd<R> {
         self.write.set(last_tail);
     }
 }
+impl<R: RbRef> ToRbRef for FrozenProd<R> {
+    type RbRef = R;
 
-impl<R: RbRef> Observe for FrozenProd<R> {
+    fn rb_ref(&self) -> &R {
+        &self.rb
+    }
+    fn into_rb_ref(self) -> R {
+        self.commit();
+        let this = ManuallyDrop::new(self);
+        unsafe { ptr::read(&this.rb) }
+    }
+}
+
+impl<R: RbRef> Observe for FrozenCons<R> {
     type Obs = Obs<R>;
     fn observe(&self) -> Self::Obs {
         Obs::new(self.rb.clone())
     }
 }
-impl<R: RbRef> Observe for FrozenCons<R> {
+impl<R: RbRef> Observe for FrozenProd<R> {
     type Obs = Obs<R>;
     fn observe(&self) -> Self::Obs {
         Obs::new(self.rb.clone())

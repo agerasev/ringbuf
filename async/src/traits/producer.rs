@@ -11,7 +11,7 @@ use core::{
 use futures::io::AsyncWrite;
 use futures::{future::FusedFuture, Sink};
 use ringbuf::{
-    rb::RbRef,
+    rb::traits::RbRef,
     traits::{Observer, Producer},
 };
 #[cfg(feature = "std")]

@@ -6,4 +6,3 @@ mod utils;
 
 pub use local::LocalRb;
 pub use shared::SharedRb;
-pub use traits::RbRef;
