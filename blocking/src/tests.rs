@@ -1,5 +1,4 @@
 use crate::{traits::*, BlockingHeapRb};
-use ringbuf::traits::*;
 use std::{iter::once, string::String, thread, time::Duration, vec, vec::Vec};
 
 const THE_BOOK_FOREWORD: &str = r#"

@@ -1,6 +1,5 @@
 use async_ringbuf::{traits::*, AsyncHeapRb};
 use futures::{executor::block_on, join};
-use ringbuf::traits::*;
 
 async fn async_main() {
     let rb = AsyncHeapRb::<i32>::new(2);

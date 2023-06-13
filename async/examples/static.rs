@@ -1,7 +1,6 @@
 #![no_std]
 use async_ringbuf::{traits::*, AsyncStaticRb};
 use futures::{executor::block_on, join};
-use ringbuf::traits::*;
 
 async fn async_main() {
     const RB_SIZE: usize = 1;

@@ -1,6 +1,7 @@
 use crate::sync::{Instant, TimeoutIterator};
 use core::time::Duration;
-use ringbuf::traits::{Consumer, Producer};
+
+pub use ringbuf::traits::*;
 
 pub trait BlockingProducer: Producer {
     type Instant: Instant;

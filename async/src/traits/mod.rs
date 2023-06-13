@@ -7,3 +7,5 @@ pub use observer::AsyncObserver;
 pub use producer::AsyncProducer;
 
 pub trait AsyncRingBuffer: ringbuf::traits::RingBuffer + AsyncProducer + AsyncConsumer {}
+
+pub use ringbuf::traits::*;

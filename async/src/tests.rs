@@ -1,7 +1,6 @@
 use crate::{async_transfer, traits::*, AsyncHeapRb};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use futures::task::{noop_waker_ref, AtomicWaker};
-use ringbuf::traits::*;
 use std::{vec, vec::Vec};
 
 #[test]
