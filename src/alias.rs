@@ -10,7 +10,7 @@ use alloc::sync::Arc;
 
 /// Stack-allocated ring buffer with static capacity.
 ///
-/// *Capacity (`N`) must be greater that zero.*
+/// *Capacity (`N`) must be greater than zero.*
 pub type StaticRb<T, const N: usize> = SharedRb<Static<T, N>>;
 
 /// Alias for [`StaticRb`] producer.
