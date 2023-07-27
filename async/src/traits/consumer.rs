@@ -71,7 +71,6 @@ impl<'a, A: AsyncConsumer> Future for PopFuture<'a, A> {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         assert!(!self.done);
-        self.owner.register_write_waker(cx.waker());
         let closed = self.owner.is_closed();
         #[cfg(feature = "std")]
         std::println!("PopFuture::poll: closed={}", closed);
@@ -84,6 +83,7 @@ impl<'a, A: AsyncConsumer> Future for PopFuture<'a, A> {
                 if closed {
                     Poll::Ready(None)
                 } else {
+                    self.owner.register_write_waker(cx.waker());
                     Poll::Pending
                 }
             }
@@ -115,7 +115,6 @@ where
     type Output = Result<(), usize>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.owner.register_write_waker(cx.waker());
         let closed = self.owner.is_closed();
         let mut slice = self.slice.take().unwrap();
         let len = self.owner.pop_slice(slice);
@@ -127,6 +126,7 @@ where
             Poll::Ready(Err(self.count))
         } else {
             self.slice.replace(slice);
+            self.owner.register_write_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -148,11 +148,11 @@ impl<'a, A: AsyncConsumer> Future for WaitOccupiedFuture<'a, A> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         assert!(!self.done);
-        self.owner.register_write_waker(cx.waker());
         let closed = self.owner.is_closed();
         if self.count <= self.owner.occupied_len() || closed {
             Poll::Ready(())
         } else {
+            self.owner.register_write_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -165,7 +165,6 @@ where
     type Item = <R::Target as Observer>::Item;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        self.register_write_waker(cx.waker());
         let closed = self.is_closed();
         match self.try_pop() {
             Some(item) => Poll::Ready(Some(item)),
@@ -173,6 +172,7 @@ where
                 if closed {
                     Poll::Ready(None)
                 } else {
+                    self.register_write_waker(cx.waker());
                     Poll::Pending
                 }
             }
@@ -186,12 +186,12 @@ where
     R::Target: AsyncRingBuffer<Item = u8>,
 {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        self.register_write_waker(cx.waker());
         let closed = self.is_closed();
         let len = self.pop_slice(buf);
         if len != 0 || closed {
             Poll::Ready(Ok(len))
         } else {
+            self.register_write_waker(cx.waker());
             Poll::Pending
         }
     }
