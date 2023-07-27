@@ -70,21 +70,26 @@ impl<'a, A: AsyncConsumer> Future for PopFuture<'a, A> {
     type Output = Option<A::Item>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        assert!(!self.done);
-        let closed = self.owner.is_closed();
-        #[cfg(feature = "std")]
-        std::println!("PopFuture::poll: closed={}", closed);
-        match self.owner.try_pop() {
-            Some(item) => {
-                self.done = true;
-                Poll::Ready(Some(item))
-            }
-            None => {
-                if closed {
-                    Poll::Ready(None)
-                } else {
-                    self.owner.register_write_waker(cx.waker());
-                    Poll::Pending
+        loop {
+            assert!(!self.done);
+            let closed = self.owner.is_closed();
+            #[cfg(feature = "std")]
+            std::println!("PopFuture::poll: closed={}", closed);
+            match self.owner.try_pop() {
+                Some(item) => {
+                    self.done = true;
+                    break Poll::Ready(Some(item));
+                }
+                None => {
+                    if closed {
+                        break Poll::Ready(None);
+                    } else {
+                        self.owner.register_write_waker(cx.waker());
+                        if self.owner.is_full() {
+                            continue;
+                        }
+                        break Poll::Pending;
+                    }
                 }
             }
         }
@@ -115,19 +120,24 @@ where
     type Output = Result<(), usize>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let closed = self.owner.is_closed();
-        let mut slice = self.slice.take().unwrap();
-        let len = self.owner.pop_slice(slice);
-        slice = &mut slice[len..];
-        self.count += len;
-        if slice.is_empty() {
-            Poll::Ready(Ok(()))
-        } else if closed {
-            Poll::Ready(Err(self.count))
-        } else {
-            self.slice.replace(slice);
-            self.owner.register_write_waker(cx.waker());
-            Poll::Pending
+        loop {
+            let closed = self.owner.is_closed();
+            let mut slice = self.slice.take().unwrap();
+            let len = self.owner.pop_slice(slice);
+            slice = &mut slice[len..];
+            self.count += len;
+            if slice.is_empty() {
+                break Poll::Ready(Ok(()));
+            } else if closed {
+                break Poll::Ready(Err(self.count));
+            } else {
+                self.slice.replace(slice);
+                self.owner.register_write_waker(cx.waker());
+                if self.owner.is_full() {
+                    continue;
+                }
+                break Poll::Pending;
+            }
         }
     }
 }
@@ -147,13 +157,18 @@ impl<'a, A: AsyncConsumer> Future for WaitOccupiedFuture<'a, A> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        assert!(!self.done);
-        let closed = self.owner.is_closed();
-        if self.count <= self.owner.occupied_len() || closed {
-            Poll::Ready(())
-        } else {
-            self.owner.register_write_waker(cx.waker());
-            Poll::Pending
+        loop {
+            assert!(!self.done);
+            let closed = self.owner.is_closed();
+            if self.count <= self.owner.occupied_len() || closed {
+                break Poll::Ready(());
+            } else {
+                self.owner.register_write_waker(cx.waker());
+                if self.owner.is_full() {
+                    continue;
+                }
+                break Poll::Pending;
+            }
         }
     }
 }
@@ -165,15 +180,20 @@ where
     type Item = <R::Target as Observer>::Item;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let closed = self.is_closed();
-        match self.try_pop() {
-            Some(item) => Poll::Ready(Some(item)),
-            None => {
-                if closed {
-                    Poll::Ready(None)
-                } else {
-                    self.register_write_waker(cx.waker());
-                    Poll::Pending
+        loop {
+            let closed = self.is_closed();
+            match self.try_pop() {
+                Some(item) => break Poll::Ready(Some(item)),
+                None => {
+                    if closed {
+                        break Poll::Ready(None);
+                    } else {
+                        self.register_write_waker(cx.waker());
+                        if self.is_full() {
+                            continue;
+                        }
+                        break Poll::Pending;
+                    }
                 }
             }
         }
@@ -186,13 +206,18 @@ where
     R::Target: AsyncRingBuffer<Item = u8>,
 {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        let closed = self.is_closed();
-        let len = self.pop_slice(buf);
-        if len != 0 || closed {
-            Poll::Ready(Ok(len))
-        } else {
-            self.register_write_waker(cx.waker());
-            Poll::Pending
+        loop {
+            let closed = self.is_closed();
+            let len = self.pop_slice(buf);
+            if len != 0 || closed {
+                break Poll::Ready(Ok(len));
+            } else {
+                self.register_write_waker(cx.waker());
+                if self.is_full() {
+                    continue;
+                }
+                break Poll::Pending;
+            }
         }
     }
 }

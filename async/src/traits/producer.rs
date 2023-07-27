@@ -87,17 +87,22 @@ impl<'a, A: AsyncProducer> Future for PushFuture<'a, A> {
     type Output = Result<(), A::Item>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let item = self.item.take().unwrap();
-        if self.owner.is_closed() {
-            Poll::Ready(Err(item))
-        } else {
-            match self.owner.try_push(item) {
-                Err(item) => {
-                    self.item.replace(item);
-                    self.owner.register_read_waker(cx.waker());
-                    Poll::Pending
+        loop {
+            let item = self.item.take().unwrap();
+            if self.owner.is_closed() {
+                break Poll::Ready(Err(item));
+            } else {
+                match self.owner.try_push(item) {
+                    Err(item) => {
+                        self.item.replace(item);
+                        self.owner.register_read_waker(cx.waker());
+                        if self.owner.is_empty() {
+                            continue;
+                        }
+                        break Poll::Pending;
+                    }
+                    Ok(()) => break Poll::Ready(Ok(())),
                 }
-                Ok(()) => Poll::Ready(Ok(())),
             }
         }
     }
@@ -127,19 +132,24 @@ where
     type Output = Result<(), usize>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut slice = self.slice.take().unwrap();
-        if self.owner.is_closed() {
-            Poll::Ready(Err(self.count))
-        } else {
-            let len = self.owner.push_slice(slice);
-            slice = &slice[len..];
-            self.count += len;
-            if slice.is_empty() {
-                Poll::Ready(Ok(()))
+        loop {
+            let mut slice = self.slice.take().unwrap();
+            if self.owner.is_closed() {
+                break Poll::Ready(Err(self.count));
             } else {
-                self.slice.replace(slice);
-                self.owner.register_read_waker(cx.waker());
-                Poll::Pending
+                let len = self.owner.push_slice(slice);
+                slice = &slice[len..];
+                self.count += len;
+                if slice.is_empty() {
+                    break Poll::Ready(Ok(()));
+                } else {
+                    self.slice.replace(slice);
+                    self.owner.register_read_waker(cx.waker());
+                    if self.owner.is_empty() {
+                        continue;
+                    }
+                    break Poll::Pending;
+                }
             }
         }
     }
@@ -159,17 +169,22 @@ impl<'a, A: AsyncProducer, I: Iterator<Item = A::Item>> Future for PushIterFutur
     type Output = bool;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut iter = self.iter.take().unwrap();
-        if self.owner.is_closed() {
-            Poll::Ready(false)
-        } else {
-            self.owner.push_iter(&mut iter);
-            if iter.peek().is_none() {
-                Poll::Ready(true)
+        loop {
+            let mut iter = self.iter.take().unwrap();
+            if self.owner.is_closed() {
+                break Poll::Ready(false);
             } else {
-                self.iter.replace(iter);
-                self.owner.register_read_waker(cx.waker());
-                Poll::Pending
+                self.owner.push_iter(&mut iter);
+                if iter.peek().is_none() {
+                    break Poll::Ready(true);
+                } else {
+                    self.iter.replace(iter);
+                    self.owner.register_read_waker(cx.waker());
+                    if self.owner.is_empty() {
+                        continue;
+                    }
+                    break Poll::Pending;
+                }
             }
         }
     }
@@ -190,13 +205,18 @@ impl<'a, A: AsyncProducer> Future for WaitVacantFuture<'a, A> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        assert!(!self.done);
-        let closed = self.owner.is_closed();
-        if self.count <= self.owner.vacant_len() || closed {
-            Poll::Ready(())
-        } else {
-            self.owner.register_read_waker(cx.waker());
-            Poll::Pending
+        loop {
+            assert!(!self.done);
+            let closed = self.owner.is_closed();
+            if self.count <= self.owner.vacant_len() || closed {
+                break Poll::Ready(());
+            } else {
+                self.owner.register_read_waker(cx.waker());
+                if self.owner.is_empty() {
+                    continue;
+                }
+                break Poll::Pending;
+            }
         }
     }
 }
@@ -208,13 +228,18 @@ where
     type Error = ();
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        if self.is_closed() {
-            Poll::Ready(Err(()))
-        } else if self.is_full() {
-            self.register_read_waker(cx.waker());
-            Poll::Pending
-        } else {
-            Poll::Ready(Ok(()))
+        loop {
+            if self.is_closed() {
+                break Poll::Ready(Err(()));
+            } else if self.is_full() {
+                self.register_read_waker(cx.waker());
+                if self.is_empty() {
+                    continue;
+                }
+                break Poll::Pending;
+            } else {
+                break Poll::Ready(Ok(()));
+            }
         }
     }
     fn start_send(mut self: Pin<&mut Self>, item: <R::Target as Observer>::Item) -> Result<(), Self::Error> {
@@ -237,15 +262,20 @@ where
     R::Target: AsyncRingBuffer<Item = u8>,
 {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        if self.is_closed() {
-            Poll::Ready(Ok(0))
-        } else {
-            let count = self.push_slice(buf);
-            if count == 0 {
-                self.register_read_waker(cx.waker());
-                Poll::Pending
+        loop {
+            if self.is_closed() {
+                break Poll::Ready(Ok(0));
             } else {
-                Poll::Ready(Ok(count))
+                let count = self.push_slice(buf);
+                if count == 0 {
+                    self.register_read_waker(cx.waker());
+                    if self.is_empty() {
+                        continue;
+                    }
+                    break Poll::Pending;
+                } else {
+                    break Poll::Ready(Ok(count));
+                }
             }
         }
     }
