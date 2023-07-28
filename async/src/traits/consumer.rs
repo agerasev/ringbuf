@@ -85,10 +85,9 @@ impl<'a, A: AsyncConsumer> Future for PopFuture<'a, A> {
                         break Poll::Ready(None);
                     } else {
                         self.owner.register_write_waker(cx.waker());
-                        if self.owner.is_full() {
-                            continue;
+                        if self.owner.is_empty() && !self.owner.is_closed() {
+                            break Poll::Pending;
                         }
-                        break Poll::Pending;
                     }
                 }
             }
@@ -133,10 +132,9 @@ where
             } else {
                 self.slice.replace(slice);
                 self.owner.register_write_waker(cx.waker());
-                if self.owner.is_full() {
-                    continue;
+                if self.owner.is_empty() && !self.owner.is_closed() {
+                    break Poll::Pending;
                 }
-                break Poll::Pending;
             }
         }
     }
@@ -164,10 +162,9 @@ impl<'a, A: AsyncConsumer> Future for WaitOccupiedFuture<'a, A> {
                 break Poll::Ready(());
             } else {
                 self.owner.register_write_waker(cx.waker());
-                if self.owner.is_full() {
-                    continue;
+                if self.count > self.owner.occupied_len() && !self.owner.is_closed() {
+                    break Poll::Pending;
                 }
-                break Poll::Pending;
             }
         }
     }
@@ -189,10 +186,9 @@ where
                         break Poll::Ready(None);
                     } else {
                         self.register_write_waker(cx.waker());
-                        if self.is_full() {
-                            continue;
+                        if self.is_empty() && !self.is_closed() {
+                            break Poll::Pending;
                         }
-                        break Poll::Pending;
                     }
                 }
             }
@@ -213,10 +209,9 @@ where
                 break Poll::Ready(Ok(len));
             } else {
                 self.register_write_waker(cx.waker());
-                if self.is_full() {
-                    continue;
+                if self.is_empty() && !self.is_closed() {
+                    break Poll::Pending;
                 }
-                break Poll::Pending;
             }
         }
     }

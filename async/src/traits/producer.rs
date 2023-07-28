@@ -96,10 +96,9 @@ impl<'a, A: AsyncProducer> Future for PushFuture<'a, A> {
                     Err(item) => {
                         self.item.replace(item);
                         self.owner.register_read_waker(cx.waker());
-                        if self.owner.is_empty() {
-                            continue;
+                        if self.owner.is_full() && !self.owner.is_closed() {
+                            break Poll::Pending;
                         }
-                        break Poll::Pending;
                     }
                     Ok(()) => break Poll::Ready(Ok(())),
                 }
@@ -145,10 +144,11 @@ where
                 } else {
                     self.slice.replace(slice);
                     self.owner.register_read_waker(cx.waker());
-                    if self.owner.is_empty() {
-                        continue;
+                    if self.owner.is_full() && !self.owner.is_closed() {
+                        // should be full here, because `push_slice_all`
+                        // has not been able to push all of the slice.
+                        break Poll::Pending;
                     }
-                    break Poll::Pending;
                 }
             }
         }
@@ -180,10 +180,11 @@ impl<'a, A: AsyncProducer, I: Iterator<Item = A::Item>> Future for PushIterFutur
                 } else {
                     self.iter.replace(iter);
                     self.owner.register_read_waker(cx.waker());
-                    if self.owner.is_empty() {
-                        continue;
+                    if self.owner.is_full() && !self.owner.is_closed() {
+                        // should be full here, because `push_iter_all`
+                        // has not been able to push all of the iterator.
+                        break Poll::Pending;
                     }
-                    break Poll::Pending;
                 }
             }
         }
@@ -212,10 +213,9 @@ impl<'a, A: AsyncProducer> Future for WaitVacantFuture<'a, A> {
                 break Poll::Ready(());
             } else {
                 self.owner.register_read_waker(cx.waker());
-                if self.owner.is_empty() {
-                    continue;
+                if self.count > self.owner.vacant_len() && !self.owner.is_closed() {
+                    break Poll::Pending;
                 }
-                break Poll::Pending;
             }
         }
     }
@@ -231,14 +231,16 @@ where
         loop {
             if self.is_closed() {
                 break Poll::Ready(Err(()));
-            } else if self.is_full() {
-                self.register_read_waker(cx.waker());
-                if self.is_empty() {
-                    continue;
-                }
-                break Poll::Pending;
-            } else {
+            } else if !self.is_full() {
                 break Poll::Ready(Ok(()));
+            } else {
+                self.register_read_waker(cx.waker());
+                if self.is_full() && !self.is_closed() {
+                    // `poll_ready` is only valid if there is only a single producer.
+                    // Otherwise `Ready(Ok())` doesn't mean anything, since vacant
+                    // can be filled up by another producer, after future returns.
+                    break Poll::Pending;
+                }
             }
         }
     }
@@ -269,10 +271,9 @@ where
                 let count = self.push_slice(buf);
                 if count == 0 {
                     self.register_read_waker(cx.waker());
-                    if self.is_empty() {
-                        continue;
+                    if self.is_full() && !self.is_closed() {
+                        break Poll::Pending;
                     }
-                    break Poll::Pending;
                 } else {
                     break Poll::Ready(Ok(count));
                 }
