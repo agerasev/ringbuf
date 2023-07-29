@@ -48,3 +48,7 @@ required-features = ["alloc"]
 [[example]]
 name = "message"
 required-features = ["std"]
+
+[[example]]
+name = "test_ordering"
+required-features = ["std"]
