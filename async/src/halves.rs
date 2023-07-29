@@ -150,7 +150,7 @@ where
     }
     fn close(&self) {
         self.base.rb().close();
-        self.base.rb().wake_reader();
+        self.base.rb().wake_consumer();
     }
 }
 impl<R: RbRef> AsyncProducer for AsyncProd<R>
@@ -183,7 +183,7 @@ where
     }
     fn close(&self) {
         self.base.rb().close();
-        self.base.rb().wake_writer();
+        self.base.rb().wake_producer();
     }
 }
 impl<R: RbRef> AsyncConsumer for AsyncCons<R>

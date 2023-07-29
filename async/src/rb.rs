@@ -82,10 +82,10 @@ impl<S: Storage> AsyncConsumer for AsyncRb<S> {
     }
 }
 impl<S: Storage> AsyncRingBuffer for AsyncRb<S> {
-    fn wake_writer(&self) {
-        self.write.wake();
+    fn wake_consumer(&self) {
+        self.write.wake()
     }
-    fn wake_reader(&self) {
+    fn wake_producer(&self) {
         self.read.wake()
     }
 }
