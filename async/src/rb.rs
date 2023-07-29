@@ -81,7 +81,14 @@ impl<S: Storage> AsyncConsumer for AsyncRb<S> {
         self.write.register(waker);
     }
 }
-impl<S: Storage> AsyncRingBuffer for AsyncRb<S> {}
+impl<S: Storage> AsyncRingBuffer for AsyncRb<S> {
+    fn wake_writer(&self) {
+        self.write.wake();
+    }
+    fn wake_reader(&self) {
+        self.read.wake()
+    }
+}
 
 impl<S: Storage> SplitRef for AsyncRb<S> {
     type RefProd<'a> = AsyncProd<&'a Self> where Self:  'a;
