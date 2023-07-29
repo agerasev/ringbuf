@@ -168,3 +168,42 @@ fn wait() {
         },
     );
 }
+
+#[test]
+fn drop_close_prod() {
+    let (prod, mut cons) = AsyncHeapRb::<usize>::new(1).split();
+    let stage = AtomicUsize::new(0);
+    execute!(
+        async {
+            drop(prod);
+            assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 0);
+        },
+        async {
+            cons.wait_occupied(1).await;
+            assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 1);
+            assert!(cons.is_closed());
+        },
+    );
+}
+
+#[test]
+fn drop_close_cons() {
+    let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(1).split();
+    let stage = AtomicUsize::new(0);
+    execute!(
+        async {
+            prod.push(0).await.unwrap();
+            assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 0);
+
+            prod.wait_vacant(1).await;
+            assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 3);
+            assert!(prod.is_closed());
+        },
+        async {
+            cons.wait_occupied(1).await;
+            assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 1);
+            drop(cons);
+            assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 2);
+        },
+    );
+}
