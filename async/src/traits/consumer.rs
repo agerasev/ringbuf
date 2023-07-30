@@ -75,7 +75,6 @@ impl<'a, A: AsyncConsumer> Future for PopFuture<'a, A> {
             assert!(!self.done);
             let closed = self.owner.is_closed();
             #[cfg(feature = "std")]
-            std::println!("PopFuture::poll: closed={}", closed);
             match self.owner.try_pop() {
                 Some(item) => {
                     self.done = true;

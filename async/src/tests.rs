@@ -30,7 +30,6 @@ const COUNT: usize = 16;
 
 #[test]
 fn push_pop() {
-    use std::println;
     let (prod, cons) = AsyncHeapRb::<usize>::new(2).split();
     execute!(
         async move {
@@ -38,14 +37,12 @@ fn push_pop() {
             for i in 0..COUNT {
                 prod.push(i).await.unwrap();
             }
-            println!("push");
         },
         async move {
             let mut cons = cons;
             for i in 0..COUNT {
                 assert_eq!(cons.pop().await.unwrap(), i);
             }
-            println!("pop: {}", cons.is_closed());
             assert!(cons.pop().await.is_none());
         },
     );
