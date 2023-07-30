@@ -92,20 +92,17 @@ impl<'a, A: AsyncProducer> Future for PushFuture<'a, A> {
             let item = self.item.take().unwrap();
             if self.owner.is_closed() {
                 break Poll::Ready(Err(item));
-            } else {
-                match self.owner.try_push(item) {
-                    Err(item) => {
-                        self.item.replace(item);
-                        if waker_registered {
-                            break Poll::Pending;
-                        } else {
-                            self.owner.register_read_waker(cx.waker());
-                            waker_registered = true;
-                        }
-                    }
-                    Ok(()) => break Poll::Ready(Ok(())),
-                }
             }
+            let push_result = self.owner.try_push(item);
+            if push_result.is_ok() {
+                break Poll::Ready(Ok(()));
+            }
+            self.item.replace(push_result.unwrap_err());
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.owner.register_read_waker(cx.waker());
+            waker_registered = true;
         }
     }
 }
@@ -139,22 +136,19 @@ where
             let mut slice = self.slice.take().unwrap();
             if self.owner.is_closed() {
                 break Poll::Ready(Err(self.count));
-            } else {
-                let len = self.owner.push_slice(slice);
-                slice = &slice[len..];
-                self.count += len;
-                if slice.is_empty() {
-                    break Poll::Ready(Ok(()));
-                } else {
-                    self.slice.replace(slice);
-                    if waker_registered {
-                        break Poll::Pending;
-                    } else {
-                        self.owner.register_read_waker(cx.waker());
-                        waker_registered = true;
-                    }
-                }
             }
+            let len = self.owner.push_slice(slice);
+            slice = &slice[len..];
+            self.count += len;
+            if slice.is_empty() {
+                break Poll::Ready(Ok(()));
+            }
+            self.slice.replace(slice);
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.owner.register_read_waker(cx.waker());
+            waker_registered = true;
         }
     }
 }
@@ -178,20 +172,17 @@ impl<'a, A: AsyncProducer, I: Iterator<Item = A::Item>> Future for PushIterFutur
             let mut iter = self.iter.take().unwrap();
             if self.owner.is_closed() {
                 break Poll::Ready(false);
-            } else {
-                self.owner.push_iter(&mut iter);
-                if iter.peek().is_none() {
-                    break Poll::Ready(true);
-                } else {
-                    self.iter.replace(iter);
-                    if waker_registered {
-                        break Poll::Pending;
-                    } else {
-                        self.owner.register_read_waker(cx.waker());
-                        waker_registered = true;
-                    }
-                }
             }
+            self.owner.push_iter(&mut iter);
+            if iter.peek().is_none() {
+                break Poll::Ready(true);
+            }
+            self.iter.replace(iter);
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.owner.register_read_waker(cx.waker());
+            waker_registered = true;
         }
     }
 }
@@ -217,14 +208,12 @@ impl<'a, A: AsyncProducer> Future for WaitVacantFuture<'a, A> {
             let closed = self.owner.is_closed();
             if self.count <= self.owner.vacant_len() || closed {
                 break Poll::Ready(());
-            } else {
-                if waker_registered {
-                    break Poll::Pending;
-                } else {
-                    self.owner.register_read_waker(cx.waker());
-                    waker_registered = true;
-                }
             }
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.owner.register_read_waker(cx.waker());
+            waker_registered = true;
         }
     }
 }
@@ -240,16 +229,15 @@ where
         loop {
             if self.is_closed() {
                 break Poll::Ready(Err(()));
-            } else if !self.is_full() {
-                break Poll::Ready(Ok(()));
-            } else {
-                if waker_registered {
-                    break Poll::Pending;
-                } else {
-                    self.register_read_waker(cx.waker());
-                    waker_registered = true;
-                }
             }
+            if !self.is_full() {
+                break Poll::Ready(Ok(()));
+            }
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.register_read_waker(cx.waker());
+            waker_registered = true;
         }
     }
     fn start_send(mut self: Pin<&mut Self>, item: <R::Target as Observer>::Item) -> Result<(), Self::Error> {
@@ -276,19 +264,16 @@ where
         loop {
             if self.is_closed() {
                 break Poll::Ready(Ok(0));
-            } else {
-                let count = self.push_slice(buf);
-                if count == 0 {
-                    if waker_registered {
-                        break Poll::Pending;
-                    } else {
-                        self.register_read_waker(cx.waker());
-                        waker_registered = true;
-                    }
-                } else {
-                    break Poll::Ready(Ok(count));
-                }
             }
+            let count = self.push_slice(buf);
+            if count > 0 {
+                break Poll::Ready(Ok(count));
+            }
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.register_read_waker(cx.waker());
+            waker_registered = true;
         }
     }
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {

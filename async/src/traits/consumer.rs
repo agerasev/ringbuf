@@ -76,24 +76,18 @@ impl<'a, A: AsyncConsumer> Future for PopFuture<'a, A> {
             let closed = self.owner.is_closed();
             #[cfg(feature = "std")]
             std::println!("PopFuture::poll: closed={}", closed);
-            match self.owner.try_pop() {
-                Some(item) => {
-                    self.done = true;
-                    break Poll::Ready(Some(item));
-                }
-                None => {
-                    if closed {
-                        break Poll::Ready(None);
-                    } else {
-                        if waker_registered {
-                            break Poll::Pending;
-                        } else {
-                            self.owner.register_write_waker(cx.waker());
-                            waker_registered = true;
-                        }
-                    }
-                }
+            if let Some(item) = self.owner.try_pop() {
+                self.done = true;
+                break Poll::Ready(Some(item));
             }
+            if closed {
+                break Poll::Ready(None);
+            }
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.owner.register_write_waker(cx.waker());
+            waker_registered = true;
         }
     }
 }
@@ -131,17 +125,16 @@ where
             self.count += len;
             if slice.is_empty() {
                 break Poll::Ready(Ok(()));
-            } else if closed {
-                break Poll::Ready(Err(self.count));
-            } else {
-                self.slice.replace(slice);
-                if waker_registered {
-                    break Poll::Pending;
-                } else {
-                    self.owner.register_write_waker(cx.waker());
-                    waker_registered = true;
-                }
             }
+            if closed {
+                break Poll::Ready(Err(self.count));
+            }
+            self.slice.replace(slice);
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.owner.register_write_waker(cx.waker());
+            waker_registered = true;
         }
     }
 }
@@ -167,14 +160,12 @@ impl<'a, A: AsyncConsumer> Future for WaitOccupiedFuture<'a, A> {
             let closed = self.owner.is_closed();
             if self.count <= self.owner.occupied_len() || closed {
                 break Poll::Ready(());
-            } else {
-                if waker_registered {
-                    break Poll::Pending;
-                } else {
-                    self.owner.register_write_waker(cx.waker());
-                    waker_registered = true;
-                }
             }
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.owner.register_write_waker(cx.waker());
+            waker_registered = true;
         }
     }
 }
@@ -189,21 +180,17 @@ where
         let mut waker_registered = false;
         loop {
             let closed = self.is_closed();
-            match self.try_pop() {
-                Some(item) => break Poll::Ready(Some(item)),
-                None => {
-                    if closed {
-                        break Poll::Ready(None);
-                    } else {
-                        if waker_registered {
-                            break Poll::Pending;
-                        } else {
-                            self.register_write_waker(cx.waker());
-                            waker_registered = true;
-                        }
-                    }
-                }
+            if let Some(item) = self.try_pop() {
+                break Poll::Ready(Some(item));
             }
+            if closed {
+                break Poll::Ready(None);
+            }
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.register_write_waker(cx.waker());
+            waker_registered = true;
         }
     }
 }
@@ -220,14 +207,12 @@ where
             let len = self.pop_slice(buf);
             if len != 0 || closed {
                 break Poll::Ready(Ok(len));
-            } else {
-                if waker_registered {
-                    break Poll::Pending;
-                } else {
-                    self.register_write_waker(cx.waker());
-                    waker_registered = true;
-                }
             }
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.register_write_waker(cx.waker());
+            waker_registered = true;
         }
     }
 }
