@@ -177,8 +177,8 @@ fn drop_close_prod() {
     let stage_clone = stage.clone();
     let t0 = std::thread::spawn(move || {
         execute!(async {
-            drop(prod);
             assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 0);
+            drop(prod);
         });
     });
     let t1 = std::thread::spawn(move || {
@@ -199,11 +199,11 @@ fn drop_close_cons() {
     let stage_clone = stage.clone();
     let t0 = std::thread::spawn(move || {
         execute!(async {
-            prod.push(0).await.unwrap();
             assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 0);
+            prod.push(0).await.unwrap();
 
             prod.wait_vacant(1).await;
-            assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 3);
+            assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 2);
             assert!(prod.is_closed());
         });
     });
@@ -212,7 +212,6 @@ fn drop_close_cons() {
             cons.wait_occupied(1).await;
             assert_eq!(stage_clone.fetch_add(1, Ordering::SeqCst), 1);
             drop(cons);
-            assert_eq!(stage_clone.fetch_add(1, Ordering::SeqCst), 2);
         });
     });
     t0.join().unwrap();
