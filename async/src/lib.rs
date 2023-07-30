@@ -18,7 +18,7 @@ pub use rb::AsyncRb;
 pub use traits::{consumer, producer};
 pub use transfer::async_transfer;
 
-#[cfg(all(test, feature = "std"))]
+#[cfg(test)]
 mod tests;
 
 #[cfg(all(test, feature = "bench"))]
