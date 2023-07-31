@@ -24,3 +24,7 @@ futures = { version = "0.3.23", default-features = false }
 [dev-dependencies]
 futures = { version = "0.3.23", features = ["executor", "thread-pool"] }
 tokio = { version = "1.29.1", features = ["full"] }
+
+[[example]]
+name = "simple"
+required-features = ["alloc"]
