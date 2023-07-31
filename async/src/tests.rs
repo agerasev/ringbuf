@@ -1,8 +1,9 @@
 use crate::{async_transfer, traits::*, AsyncHeapRb};
+use alloc::vec::Vec;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use futures::task::{noop_waker_ref, AtomicWaker};
+#[cfg(feature = "std")]
 use std::sync::Arc;
-use std::{vec, vec::Vec};
 
 #[test]
 fn atomic_waker() {
@@ -59,7 +60,7 @@ fn push_pop_slice() {
         },
         async move {
             let mut cons = cons;
-            let mut data = vec![0; COUNT + 1];
+            let mut data = [0; COUNT + 1];
             let count = cons.pop_slice_all(&mut data).await.unwrap_err();
             assert_eq!(count, COUNT);
             assert!(data.into_iter().take(COUNT).eq(0..COUNT));
@@ -94,6 +95,7 @@ fn sink_stream() {
     );
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn read_write() {
     use futures::{AsyncReadExt, AsyncWriteExt};
@@ -167,6 +169,7 @@ fn wait() {
     );
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn drop_close_prod() {
     let (prod, mut cons) = AsyncHeapRb::<usize>::new(1).split();
@@ -189,6 +192,7 @@ fn drop_close_prod() {
     t1.join().unwrap();
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn drop_close_cons() {
     let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(1).split();
