@@ -202,13 +202,13 @@ impl<R: RbRef> ToRbRef for FrozenProd<R> {
     }
 }
 
-impl<R: RbRef> Observe for FrozenCons<R> {
+impl<R: RbRef + Clone> Observe for FrozenCons<R> {
     type Obs = Obs<R>;
     fn observe(&self) -> Self::Obs {
         Obs::new(self.rb.clone())
     }
 }
-impl<R: RbRef> Observe for FrozenProd<R> {
+impl<R: RbRef + Clone> Observe for FrozenProd<R> {
     type Obs = Obs<R>;
     fn observe(&self) -> Self::Obs {
         Obs::new(self.rb.clone())

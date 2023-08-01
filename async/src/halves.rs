@@ -215,7 +215,7 @@ where
 //impl_producer_traits!(AsyncProd<R: RbRef> where R::Target: AsyncRingBuffer);
 //impl_consumer_traits!(AsyncCons<R: RbRef> where R::Target: AsyncRingBuffer);
 
-impl<R: RbRef> Observe for AsyncObs<R>
+impl<R: RbRef + Clone> Observe for AsyncObs<R>
 where
     R::Target: AsyncRingBuffer,
 {
@@ -224,7 +224,7 @@ where
         AsyncObs::new(self.base.rb_ref().clone())
     }
 }
-impl<R: RbRef> Observe for AsyncProd<R>
+impl<R: RbRef + Clone> Observe for AsyncProd<R>
 where
     R::Target: AsyncRingBuffer,
 {
@@ -233,7 +233,7 @@ where
         AsyncObs::new(self.base.rb_ref().clone())
     }
 }
-impl<R: RbRef + Observe> Observe for AsyncCons<R>
+impl<R: Observe + RbRef + Clone> Observe for AsyncCons<R>
 where
     R::Target: AsyncRingBuffer,
 {

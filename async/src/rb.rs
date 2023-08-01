@@ -13,6 +13,7 @@ use futures::task::AtomicWaker;
 use ringbuf::traits::Split;
 use ringbuf::{
     delegate_observer, delegate_ring_buffer, impl_consumer_traits, impl_producer_traits,
+    rb::traits::RbRef,
     storage::Storage,
     traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
     SharedRb,
@@ -88,6 +89,15 @@ impl<S: Storage> AsyncRingBuffer for AsyncRb<S> {
     fn wake_producer(&self) {
         self.read.wake()
     }
+}
+
+impl<S: Storage> AsRef<AsyncRb<S>> for AsyncRb<S> {
+    fn as_ref(&self) -> &AsyncRb<S> {
+        self
+    }
+}
+unsafe impl<S: Storage> RbRef for AsyncRb<S> {
+    type Target = AsyncRb<S>;
 }
 
 impl<S: Storage> SplitRef for AsyncRb<S> {

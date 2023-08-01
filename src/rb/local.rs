@@ -1,4 +1,4 @@
-use super::{macros::rb_impl_init, utils::ranges};
+use super::{macros::rb_impl_init, traits::RbRef, utils::ranges};
 #[cfg(feature = "alloc")]
 use crate::traits::Split;
 use crate::{
@@ -91,6 +91,15 @@ impl<S: Storage> Drop for LocalRb<S> {
     fn drop(&mut self) {
         self.clear();
     }
+}
+
+impl<S: Storage> AsRef<LocalRb<S>> for LocalRb<S> {
+    fn as_ref(&self) -> &LocalRb<S> {
+        self
+    }
+}
+unsafe impl<S: Storage> RbRef for LocalRb<S> {
+    type Target = LocalRb<S>;
 }
 
 #[cfg(feature = "alloc")]

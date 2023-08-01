@@ -1,13 +1,18 @@
-use crate::traits::RingBuffer;
+use crate::traits::{Consumer, Producer, RingBuffer};
 #[cfg(feature = "alloc")]
 use alloc::{rc::Rc, sync::Arc};
 
-pub unsafe trait RbRef: Clone {
+pub unsafe trait RbRef: AsRef<Self::Target> {
     type Target: RingBuffer;
-    fn deref(&self) -> &Self::Target;
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
 }
 
-unsafe impl<'a, B: RingBuffer> RbRef for &'a B {
+unsafe impl<'a, B: RingBuffer> RbRef for &'a B
+where
+    B: RbRef<Target = B>,
+{
     type Target = B;
     fn deref(&self) -> &Self::Target {
         self

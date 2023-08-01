@@ -96,13 +96,13 @@ where
 impl_producer_traits!(BlockingProd<R: RbRef>);
 impl_consumer_traits!(BlockingCons<R: RbRef>);
 
-impl<R: RbRef> Observe for BlockingProd<R> {
+impl<R: RbRef + Clone> Observe for BlockingProd<R> {
     type Obs = Obs<R>;
     fn observe(&self) -> Self::Obs {
         self.base.observe()
     }
 }
-impl<R: RbRef> Observe for BlockingCons<R> {
+impl<R: RbRef + Clone> Observe for BlockingCons<R> {
     type Obs = Obs<R>;
     fn observe(&self) -> Self::Obs {
         self.base.observe()

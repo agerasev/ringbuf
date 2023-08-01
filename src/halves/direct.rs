@@ -96,19 +96,19 @@ impl<R: RbRef> Consumer for Cons<R> {
 impl_producer_traits!(Prod<R: RbRef>);
 impl_consumer_traits!(Cons<R: RbRef>);
 
-impl<R: RbRef> Observe for Obs<R> {
+impl<R: RbRef + Clone> Observe for Obs<R> {
     type Obs = Self;
     fn observe(&self) -> Self::Obs {
         self.clone()
     }
 }
-impl<R: RbRef> Observe for Prod<R> {
+impl<R: RbRef + Clone> Observe for Prod<R> {
     type Obs = Obs<R>;
     fn observe(&self) -> Self::Obs {
         Obs::new(self.rb.clone())
     }
 }
-impl<R: RbRef> Observe for Cons<R> {
+impl<R: RbRef + Clone> Observe for Cons<R> {
     type Obs = Obs<R>;
     fn observe(&self) -> Self::Obs {
         Obs::new(self.rb.clone())

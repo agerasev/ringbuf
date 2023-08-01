@@ -147,13 +147,13 @@ impl<R: RbRef> Consumer for CachingCons<R> {
 impl_producer_traits!(CachingProd<R: RbRef>);
 impl_consumer_traits!(CachingCons<R: RbRef>);
 
-impl<R: RbRef> Observe for CachingProd<R> {
+impl<R: RbRef + Clone> Observe for CachingProd<R> {
     type Obs = Obs<R>;
     fn observe(&self) -> Self::Obs {
         self.frozen.observe()
     }
 }
-impl<R: RbRef> Observe for CachingCons<R> {
+impl<R: RbRef + Clone> Observe for CachingCons<R> {
     type Obs = Obs<R>;
     fn observe(&self) -> Self::Obs {
         self.frozen.observe()

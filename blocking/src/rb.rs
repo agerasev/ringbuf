@@ -12,6 +12,7 @@ use core::time::Duration;
 use ringbuf::traits::Split;
 use ringbuf::{
     delegate_observer, delegate_ring_buffer,
+    rb::traits::RbRef,
     storage::Storage,
     traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
     SharedRb,
@@ -76,6 +77,15 @@ impl<S: Storage, X: Semaphore> BlockingConsumer for BlockingRb<S, X> {
         debug_assert!(count <= self.capacity().get());
         self.write.wait(|| self.occupied_len() >= count, timeout)
     }
+}
+
+impl<S: Storage, X: Semaphore> AsRef<BlockingRb<S, X>> for BlockingRb<S, X> {
+    fn as_ref(&self) -> &BlockingRb<S, X> {
+        self
+    }
+}
+unsafe impl<S: Storage, X: Semaphore> RbRef for BlockingRb<S, X> {
+    type Target = BlockingRb<S, X>;
 }
 
 impl<S: Storage, X: Semaphore> SplitRef for BlockingRb<S, X> {
