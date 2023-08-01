@@ -1,27 +1,28 @@
-use crate::traits::Consumer;
-use core::marker::PhantomData;
+use super::traits::RbRef;
+use crate::{
+    halves::FrozenCons,
+    traits::{Consumer, Observer},
+};
 
 /// An iterator that removes items from the ring buffer.
-pub struct PopIter<R: AsMut<C> + AsRef<C>, C: Consumer> {
-    target: R,
-    _ghost: PhantomData<C>,
+pub struct PopIter<R: RbRef> {
+    frozen: FrozenCons<R>,
 }
 
-impl<R: AsMut<C> + AsRef<C>, C: Consumer> PopIter<R, C> {
-    pub fn new(target: R) -> Self {
+impl<R: RbRef> PopIter<R> {
+    pub unsafe fn new(target: R) -> Self {
         Self {
-            target,
-            _ghost: PhantomData,
+            frozen: unsafe { FrozenCons::new(target) },
         }
     }
 }
 
-impl<R: AsMut<C> + AsRef<C>, C: Consumer> Iterator for PopIter<R, C> {
-    type Item = C::Item;
+impl<R: RbRef> Iterator for PopIter<R> {
+    type Item = <R::Target as Observer>::Item;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.target.as_mut().try_pop()
+        self.frozen.try_pop()
     }
 
     #[inline]
@@ -30,8 +31,8 @@ impl<R: AsMut<C> + AsRef<C>, C: Consumer> Iterator for PopIter<R, C> {
     }
 }
 
-impl<R: AsMut<C> + AsRef<C>, C: Consumer> ExactSizeIterator for PopIter<R, C> {
+impl<R: RbRef> ExactSizeIterator for PopIter<R> {
     fn len(&self) -> usize {
-        self.target.as_ref().occupied_len()
+        self.frozen.occupied_len()
     }
 }
