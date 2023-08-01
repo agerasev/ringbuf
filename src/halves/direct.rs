@@ -4,7 +4,7 @@ use crate::{
         iter::PopIter,
         traits::{RbRef, ToRbRef},
     },
-    traits::{Consumer, Observe, Observer, Producer, RingBuffer},
+    traits::{Consumer, Observe, Observer, Producer},
 };
 
 /// Observer of ring buffer.
@@ -100,9 +100,9 @@ impl<R: RbRef> Consumer for Cons<R> {
         unsafe { PopIter::new(self.rb) }
     }
 
-    type PopIter<'a> = PopIter<&'a R::Target> where R:'a, R::Target: 'a;
+    type PopIter<'a> = PopIter<&'a R::Target> where R:'a;
     fn pop_iter(&mut self) -> Self::PopIter<'_> {
-        unsafe { PopIter::new(&self.rb.deref()) }
+        unsafe { PopIter::new(self.rb.deref()) }
     }
 }
 

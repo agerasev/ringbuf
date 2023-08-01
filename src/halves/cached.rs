@@ -151,7 +151,7 @@ impl<R: RbRef> Consumer for CachingCons<R> {
         unsafe { PopIter::new(self.frozen.into_rb_ref()) }
     }
 
-    type PopIter<'a> = PopIter<&'a R::Target> where R:'a, R::Target: 'a;
+    type PopIter<'a> = PopIter<&'a R::Target> where R:'a;
     fn pop_iter(&mut self) -> Self::PopIter<'_> {
         unsafe { PopIter::new(self.frozen.rb_ref().deref()) }
     }

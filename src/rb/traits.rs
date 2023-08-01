@@ -1,4 +1,4 @@
-use crate::traits::{Consumer, Producer, RingBuffer};
+use crate::traits::RingBuffer;
 #[cfg(feature = "alloc")]
 use alloc::{rc::Rc, sync::Arc};
 

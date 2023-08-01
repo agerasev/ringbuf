@@ -90,9 +90,9 @@ impl<R: RbRef> Consumer for FrozenCons<R> {
         unsafe { PopIter::new(self.into_rb_ref()) }
     }
 
-    type PopIter<'a> = PopIter<&'a R::Target> where R:'a, R::Target: 'a;
+    type PopIter<'a> = PopIter<&'a R::Target> where R:'a;
     fn pop_iter(&mut self) -> Self::PopIter<'_> {
-        unsafe { PopIter::new(&self.rb.deref()) }
+        unsafe { PopIter::new(self.rb.deref()) }
     }
 }
 

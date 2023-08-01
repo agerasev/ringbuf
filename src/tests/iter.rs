@@ -64,15 +64,15 @@ fn push_pop_iter_partial() {
     prod.try_push(0).unwrap();
     prod.try_push(1).unwrap();
     prod.try_push(2).unwrap();
-    for (i, v) in (0..2).zip(cons.pop_iter()) {
-        assert_eq!(i, v);
+    for (i, v) in cons.pop_iter().take(2).enumerate() {
+        assert_eq!(i as i32, v);
     }
 
     prod.try_push(3).unwrap();
     prod.try_push(4).unwrap();
     prod.try_push(5).unwrap();
-    for (i, v) in (2..5).zip(cons.pop_iter()) {
-        assert_eq!(i, v);
+    for (i, v) in cons.pop_iter().enumerate() {
+        assert_eq!(i as i32 + 2, v);
     }
     assert_eq!(cons.try_pop().unwrap(), 5);
     assert!(prod.is_empty());
