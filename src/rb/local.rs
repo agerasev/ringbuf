@@ -1,4 +1,4 @@
-use super::{macros::rb_impl_init, traits::RbRef, utils::ranges};
+use super::{iter::PopIter, macros::rb_impl_init, traits::RbRef, utils::ranges};
 #[cfg(feature = "alloc")]
 use crate::traits::Split;
 use crate::{
@@ -82,6 +82,16 @@ impl<S: Storage> Consumer for LocalRb<S> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
         self.read.set(value);
+    }
+
+    type IntoIter = PopIter<Self>;
+    fn into_iter(self) -> Self::IntoIter {
+        unsafe { PopIter::new(self) }
+    }
+
+    type PopIter<'a> = PopIter<&'a Self> where S: 'a;
+    fn pop_iter(&mut self) -> Self::PopIter<'_> {
+        unsafe { PopIter::new(self) }
     }
 }
 

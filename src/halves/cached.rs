@@ -4,7 +4,10 @@ use super::{
 };
 use crate::{
     impl_consumer_traits, impl_producer_traits,
-    rb::traits::{RbRef, ToRbRef},
+    rb::{
+        iter::PopIter,
+        traits::{RbRef, ToRbRef},
+    },
     traits::{Consumer, Observe, Observer, Producer},
 };
 use core::{mem::MaybeUninit, num::NonZeroUsize};
@@ -141,6 +144,16 @@ impl<R: RbRef> Consumer for CachingCons<R> {
             self.frozen.commit();
         }
         r
+    }
+
+    type IntoIter = PopIter<R>;
+    fn into_iter(self) -> Self::IntoIter {
+        unsafe { PopIter::new(self.frozen.into_rb_ref()) }
+    }
+
+    type PopIter<'a> = PopIter<&'a R::Target> where R:'a, R::Target: 'a;
+    fn pop_iter(&mut self) -> Self::PopIter<'_> {
+        unsafe { PopIter::new(self.frozen.rb_ref().deref()) }
     }
 }
 

@@ -1,7 +1,10 @@
 use crate::{
     delegate_observer, impl_consumer_traits, impl_producer_traits,
-    rb::traits::{RbRef, ToRbRef},
-    traits::{Consumer, Observe, Observer, Producer},
+    rb::{
+        iter::PopIter,
+        traits::{RbRef, ToRbRef},
+    },
+    traits::{Consumer, Observe, Observer, Producer, RingBuffer},
 };
 
 /// Observer of ring buffer.
@@ -90,6 +93,16 @@ impl<R: RbRef> Consumer for Cons<R> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
         self.rb().set_read_index(value)
+    }
+
+    type IntoIter = PopIter<R>;
+    fn into_iter(self) -> Self::IntoIter {
+        unsafe { PopIter::new(self.rb) }
+    }
+
+    type PopIter<'a> = PopIter<&'a R::Target> where R:'a, R::Target: 'a;
+    fn pop_iter(&mut self) -> Self::PopIter<'_> {
+        unsafe { PopIter::new(&self.rb.deref()) }
     }
 }
 

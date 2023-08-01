@@ -12,7 +12,7 @@ use super::{Consumer, Observer, Producer};
 /// It allows us to distinguish situations when the buffer is empty (`read == write`) and when the buffer is full (`write - read` modulo `2 * capacity` equals to `capacity`)
 /// without using the space for an extra element in container.
 /// And obviously we cannot store more than `capacity` items in the buffer, so `write - read` modulo `2 * capacity` is not allowed to be greater than `capacity`.
-pub trait RingBuffer: Observer + Consumer + Producer {
+pub trait RingBuffer: Observer + Consumer + Producer + AsRef<Self> {
     /// Pushes an item to the ring buffer overwriting the latest item if the buffer is full.
     ///
     /// Returns overwritten item if overwriting took place.

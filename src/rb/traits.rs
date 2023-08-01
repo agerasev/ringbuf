@@ -9,10 +9,7 @@ pub unsafe trait RbRef: AsRef<Self::Target> {
     }
 }
 
-unsafe impl<'a, B: RingBuffer> RbRef for &'a B
-where
-    B: RbRef<Target = B>,
-{
+unsafe impl<'a, B: RingBuffer> RbRef for &'a B {
     type Target = B;
     fn deref(&self) -> &Self::Target {
         self
