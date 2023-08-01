@@ -1,5 +1,6 @@
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
+#![cfg_attr(feature = "bench", feature(test))]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -17,5 +18,8 @@ pub use rb::AsyncRb;
 pub use traits::{consumer, producer};
 pub use transfer::async_transfer;
 
-#[cfg(all(test, feature = "std"))]
+#[cfg(all(test, feature = "alloc"))]
 mod tests;
+
+#[cfg(all(test, feature = "bench"))]
+mod bench;

@@ -1,7 +1,9 @@
 use crate::{async_transfer, traits::*, AsyncHeapRb};
+use alloc::vec::Vec;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use futures::task::{noop_waker_ref, AtomicWaker};
-use std::{vec, vec::Vec};
+#[cfg(feature = "std")]
+use std::sync::Arc;
 
 #[test]
 fn atomic_waker() {
@@ -29,7 +31,6 @@ const COUNT: usize = 16;
 
 #[test]
 fn push_pop() {
-    use std::println;
     let (prod, cons) = AsyncHeapRb::<usize>::new(2).split();
     execute!(
         async move {
@@ -37,14 +38,12 @@ fn push_pop() {
             for i in 0..COUNT {
                 prod.push(i).await.unwrap();
             }
-            println!("push");
         },
         async move {
             let mut cons = cons;
             for i in 0..COUNT {
                 assert_eq!(cons.pop().await.unwrap(), i);
             }
-            println!("pop: {}", cons.is_closed());
             assert!(cons.pop().await.is_none());
         },
     );
@@ -61,7 +60,7 @@ fn push_pop_slice() {
         },
         async move {
             let mut cons = cons;
-            let mut data = vec![0; COUNT + 1];
+            let mut data = [0; COUNT + 1];
             let count = cons.pop_slice_all(&mut data).await.unwrap_err();
             assert_eq!(count, COUNT);
             assert!(data.into_iter().take(COUNT).eq(0..COUNT));
@@ -96,6 +95,7 @@ fn sink_stream() {
     );
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn read_write() {
     use futures::{AsyncReadExt, AsyncWriteExt};
@@ -167,4 +167,54 @@ fn wait() {
             cons.pop().await.unwrap();
         },
     );
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn drop_close_prod() {
+    let (prod, mut cons) = AsyncHeapRb::<usize>::new(1).split();
+    let stage = Arc::new(AtomicUsize::new(0));
+    let stage_clone = stage.clone();
+    let t0 = std::thread::spawn(move || {
+        execute!(async {
+            assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 0);
+            drop(prod);
+        });
+    });
+    let t1 = std::thread::spawn(move || {
+        execute!(async {
+            cons.wait_occupied(1).await;
+            assert_eq!(stage_clone.fetch_add(1, Ordering::SeqCst), 1);
+            assert!(cons.is_closed());
+        });
+    });
+    t0.join().unwrap();
+    t1.join().unwrap();
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn drop_close_cons() {
+    let (mut prod, mut cons) = AsyncHeapRb::<usize>::new(1).split();
+    let stage = Arc::new(AtomicUsize::new(0));
+    let stage_clone = stage.clone();
+    let t0 = std::thread::spawn(move || {
+        execute!(async {
+            assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 0);
+            prod.push(0).await.unwrap();
+
+            prod.wait_vacant(1).await;
+            assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 2);
+            assert!(prod.is_closed());
+        });
+    });
+    let t1 = std::thread::spawn(move || {
+        execute!(async {
+            cons.wait_occupied(1).await;
+            assert_eq!(stage_clone.fetch_add(1, Ordering::SeqCst), 1);
+            drop(cons);
+        });
+    });
+    t0.join().unwrap();
+    t1.join().unwrap();
 }
