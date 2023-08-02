@@ -1,3 +1,4 @@
+use super::{FrozenCons, FrozenProd};
 use crate::{
     delegate_observer, impl_consumer_traits, impl_producer_traits,
     rb::traits::{RbRef, ToRbRef},
@@ -30,6 +31,12 @@ impl<R: RbRef> Prod<R> {
     pub unsafe fn new(rb: R) -> Self {
         Self { rb }
     }
+    pub fn freeze(&self) -> FrozenProd<&R::Target> {
+        unsafe { FrozenProd::new(self.rb()) }
+    }
+    pub fn into_frozen(self) -> FrozenProd<R> {
+        unsafe { FrozenProd::new(self.rb) }
+    }
 }
 impl<R: RbRef> Cons<R> {
     /// # Safety
@@ -37,6 +44,12 @@ impl<R: RbRef> Cons<R> {
     /// There must be no more than one consumer wrapper.
     pub unsafe fn new(rb: R) -> Self {
         Self { rb }
+    }
+    pub fn freeze(&self) -> FrozenCons<&R::Target> {
+        unsafe { FrozenCons::new(self.rb()) }
+    }
+    pub fn into_frozen(self) -> FrozenCons<R> {
+        unsafe { FrozenCons::new(self.rb) }
     }
 }
 impl<R: RbRef> ToRbRef for Obs<R> {

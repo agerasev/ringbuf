@@ -28,6 +28,12 @@ impl<R: RbRef> CachingProd<R> {
             frozen: FrozenProd::new(ref_),
         }
     }
+    pub fn freeze(&self) -> &FrozenProd<R> {
+        &self.frozen
+    }
+    pub fn into_frozen(self) -> FrozenProd<R> {
+        self.frozen
+    }
 }
 impl<R: RbRef> ToRbRef for CachingProd<R> {
     type RbRef = R;
@@ -47,6 +53,12 @@ impl<R: RbRef> CachingCons<R> {
         Self {
             frozen: FrozenCons::new(ref_),
         }
+    }
+    pub fn freeze(&self) -> &FrozenCons<R> {
+        &self.frozen
+    }
+    pub fn into_frozen(self) -> FrozenCons<R> {
+        self.frozen
     }
 }
 impl<R: RbRef> ToRbRef for CachingCons<R> {
