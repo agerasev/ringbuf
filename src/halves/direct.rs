@@ -1,7 +1,10 @@
 use crate::{
-    delegate_observer, impl_consumer_traits, impl_producer_traits,
+    impl_consumer_traits, impl_producer_traits,
     rb::traits::{RbRef, ToRbRef},
-    traits::{Consumer, Observe, Observer, Producer},
+    traits::{
+        delegate::{self, Delegate},
+        Consumer, Observe, Producer,
+    },
 };
 
 /// Observer of ring buffer.
@@ -67,17 +70,29 @@ impl<R: RbRef> ToRbRef for Cons<R> {
     }
 }
 
-impl<R: RbRef> Observer for Obs<R> {
-    delegate_observer!(R::Target, Self::rb);
+impl<R: RbRef> Delegate for Obs<R> {
+    type Base = R::Target;
+    fn base(&self) -> &Self::Base {
+        self.rb.deref()
+    }
 }
+impl<R: RbRef> delegate::Observer for Obs<R> {}
 
-impl<R: RbRef> Observer for Prod<R> {
-    delegate_observer!(R::Target, Self::rb);
+impl<R: RbRef> Delegate for Prod<R> {
+    type Base = R::Target;
+    fn base(&self) -> &Self::Base {
+        self.rb.deref()
+    }
 }
+impl<R: RbRef> delegate::Observer for Prod<R> {}
 
-impl<R: RbRef> Observer for Cons<R> {
-    delegate_observer!(R::Target, Self::rb);
+impl<R: RbRef> Delegate for Cons<R> {
+    type Base = R::Target;
+    fn base(&self) -> &Self::Base {
+        self.rb.deref()
+    }
 }
+impl<R: RbRef> delegate::Observer for Cons<R> {}
 
 impl<R: RbRef> Producer for Prod<R> {
     #[inline]

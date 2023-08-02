@@ -1,9 +1,9 @@
 use crate::traits::{AsyncConsumer, AsyncObserver, AsyncProducer, AsyncRingBuffer};
 use core::{mem::ManuallyDrop, ptr};
 use ringbuf::{
-    delegate_consumer, delegate_observer, delegate_producer,
     rb::traits::{RbRef, ToRbRef},
-    traits::{Consumer, Observe, Observer, Producer},
+    traits::delegate::{self, Delegate, DelegateMut},
+    traits::Observe,
     Cons, Obs, Prod,
 };
 
@@ -33,9 +33,6 @@ where
     pub fn new(rb: R) -> Self {
         Self { base: Obs::new(rb) }
     }
-    fn base(&self) -> &Obs<R> {
-        &self.base
-    }
 }
 impl<R: RbRef> AsyncProd<R>
 where
@@ -44,12 +41,6 @@ where
     pub unsafe fn new(rb: R) -> Self {
         Self { base: Prod::new(rb) }
     }
-    fn base(&self) -> &Prod<R> {
-        &self.base
-    }
-    fn base_mut(&mut self) -> &mut Prod<R> {
-        &mut self.base
-    }
 }
 impl<R: RbRef> AsyncCons<R>
 where
@@ -57,12 +48,6 @@ where
 {
     pub unsafe fn new(rb: R) -> Self {
         Self { base: Cons::new(rb) }
-    }
-    fn base(&self) -> &Cons<R> {
-        &self.base
-    }
-    fn base_mut(&mut self) -> &mut Cons<R> {
-        &mut self.base
     }
 }
 
@@ -111,12 +96,25 @@ impl<R: RbRef> Unpin for AsyncObs<R> where R::Target: AsyncRingBuffer {}
 impl<R: RbRef> Unpin for AsyncProd<R> where R::Target: AsyncRingBuffer {}
 impl<R: RbRef> Unpin for AsyncCons<R> where R::Target: AsyncRingBuffer {}
 
-impl<R: RbRef> Observer for AsyncObs<R>
+impl<R: RbRef> Delegate for AsyncObs<R>
 where
     R::Target: AsyncRingBuffer,
 {
-    delegate_observer!(Obs<R>, Self::base);
+    type Base = Obs<R>;
+    fn base(&self) -> &Self::Base {
+        &self.base
+    }
 }
+impl<R: RbRef> DelegateMut for AsyncObs<R>
+where
+    R::Target: AsyncRingBuffer,
+{
+    fn base_mut(&mut self) -> &mut Self::Base {
+        &mut self.base
+    }
+}
+impl<R: RbRef> delegate::Observer for AsyncObs<R> where R::Target: AsyncRingBuffer {}
+
 impl<R: RbRef> AsyncObserver for AsyncObs<R>
 where
     R::Target: AsyncRingBuffer,
@@ -129,18 +127,26 @@ where
     }
 }
 
-impl<R: RbRef> Observer for AsyncProd<R>
+impl<R: RbRef> Delegate for AsyncProd<R>
 where
     R::Target: AsyncRingBuffer,
 {
-    delegate_observer!(Prod<R>, Self::base);
+    type Base = Prod<R>;
+    fn base(&self) -> &Self::Base {
+        &self.base
+    }
 }
-impl<R: RbRef> Producer for AsyncProd<R>
+impl<R: RbRef> DelegateMut for AsyncProd<R>
 where
     R::Target: AsyncRingBuffer,
 {
-    delegate_producer!(Self::base, Self::base_mut);
+    fn base_mut(&mut self) -> &mut Self::Base {
+        &mut self.base
+    }
 }
+impl<R: RbRef> delegate::Observer for AsyncProd<R> where R::Target: AsyncRingBuffer {}
+impl<R: RbRef> delegate::Producer for AsyncProd<R> where R::Target: AsyncRingBuffer {}
+
 impl<R: RbRef> AsyncObserver for AsyncProd<R>
 where
     R::Target: AsyncRingBuffer,
@@ -162,18 +168,26 @@ where
     }
 }
 
-impl<R: RbRef> Observer for AsyncCons<R>
+impl<R: RbRef> Delegate for AsyncCons<R>
 where
     R::Target: AsyncRingBuffer,
 {
-    delegate_observer!(Cons<R>, Self::base);
+    type Base = Cons<R>;
+    fn base(&self) -> &Self::Base {
+        &self.base
+    }
 }
-impl<R: RbRef> Consumer for AsyncCons<R>
+impl<R: RbRef> DelegateMut for AsyncCons<R>
 where
     R::Target: AsyncRingBuffer,
 {
-    delegate_consumer!(Self::base, Self::base_mut);
+    fn base_mut(&mut self) -> &mut Self::Base {
+        &mut self.base
+    }
 }
+impl<R: RbRef> delegate::Observer for AsyncCons<R> where R::Target: AsyncRingBuffer {}
+impl<R: RbRef> delegate::Consumer for AsyncCons<R> where R::Target: AsyncRingBuffer {}
+
 impl<R: RbRef> AsyncObserver for AsyncCons<R>
 where
     R::Target: AsyncRingBuffer,

@@ -1,4 +1,8 @@
-use super::{Consumer, Observer, Producer};
+use super::{
+    consumer::{Consumer, DelegateConsumer},
+    producer::{DelegateProducer, Producer},
+    Observer,
+};
 
 /// An abstract ring buffer.
 ///
@@ -50,25 +54,31 @@ pub trait RingBuffer: Observer + Consumer + Producer {
     }
 }
 
-#[macro_export]
-macro_rules! delegate_ring_buffer {
-    ($ref:expr, $mut:expr) => {
-        #[inline]
-        fn push_overwrite(&mut self, elem: Self::Item) -> Option<Self::Item> {
-            $mut(self).push_overwrite(elem)
-        }
+pub trait DelegateRingBuffer: DelegateProducer + DelegateConsumer
+where
+    Self::Base: RingBuffer,
+{
+}
 
-        #[inline]
-        fn push_iter_overwrite<I: Iterator<Item = Self::Item>>(&mut self, iter: I) {
-            $mut(self).push_iter_overwrite(iter)
-        }
+impl<D: DelegateRingBuffer> RingBuffer for D
+where
+    D::Base: RingBuffer,
+{
+    #[inline]
+    fn push_overwrite(&mut self, elem: Self::Item) -> Option<Self::Item> {
+        self.base_mut().push_overwrite(elem)
+    }
 
-        #[inline]
-        fn push_slice_overwrite(&mut self, elems: &[Self::Item])
-        where
-            Self::Item: Copy,
-        {
-            $mut(self).push_slice_overwrite(elems)
-        }
-    };
+    #[inline]
+    fn push_iter_overwrite<I: Iterator<Item = Self::Item>>(&mut self, iter: I) {
+        self.base_mut().push_iter_overwrite(iter)
+    }
+
+    #[inline]
+    fn push_slice_overwrite(&mut self, elems: &[Self::Item])
+    where
+        Self::Item: Copy,
+    {
+        self.base_mut().push_slice_overwrite(elems)
+    }
 }

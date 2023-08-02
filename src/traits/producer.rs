@@ -1,4 +1,8 @@
-use super::{utils::modulus, Observer};
+use super::{
+    delegate::DelegateMut,
+    observer::{DelegateObserver, Observer},
+    utils::modulus,
+};
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
 use crate::utils::write_slice;
@@ -179,44 +183,49 @@ macro_rules! impl_producer_traits {
     };
 }
 
-#[macro_export]
-macro_rules! delegate_producer {
-    ($ref:expr, $mut:expr) => {
-        #[inline]
-        unsafe fn set_write_index(&self, value: usize) {
-            $ref(self).set_write_index(value)
-        }
-        #[inline]
-        unsafe fn advance_write_index(&self, count: usize) {
-            $ref(self).advance_write_index(count)
-        }
+pub trait DelegateProducer: DelegateObserver + DelegateMut
+where
+    Self::Base: Producer,
+{
+}
+impl<D: DelegateProducer> Producer for D
+where
+    D::Base: Producer,
+{
+    #[inline]
+    unsafe fn set_write_index(&self, value: usize) {
+        self.base().set_write_index(value)
+    }
+    #[inline]
+    unsafe fn advance_write_index(&self, count: usize) {
+        self.base().advance_write_index(count)
+    }
 
-        #[inline]
-        fn vacant_slices(&self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
-            $ref(self).vacant_slices()
-        }
+    #[inline]
+    fn vacant_slices(&self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
+        self.base().vacant_slices()
+    }
 
-        #[inline]
-        fn vacant_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
-            $mut(self).vacant_slices_mut()
-        }
+    #[inline]
+    fn vacant_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
+        self.base_mut().vacant_slices_mut()
+    }
 
-        #[inline]
-        fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
-            $mut(self).try_push(elem)
-        }
+    #[inline]
+    fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
+        self.base_mut().try_push(elem)
+    }
 
-        #[inline]
-        fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, iter: I) -> usize {
-            $mut(self).push_iter(iter)
-        }
+    #[inline]
+    fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, iter: I) -> usize {
+        self.base_mut().push_iter(iter)
+    }
 
-        #[inline]
-        fn push_slice(&mut self, elems: &[Self::Item]) -> usize
-        where
-            Self::Item: Copy,
-        {
-            $mut(self).push_slice(elems)
-        }
-    };
+    #[inline]
+    fn push_slice(&mut self, elems: &[Self::Item]) -> usize
+    where
+        Self::Item: Copy,
+    {
+        self.base_mut().push_slice(elems)
+    }
 }

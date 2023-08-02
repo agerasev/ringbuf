@@ -11,9 +11,11 @@ use core::time::Duration;
 #[cfg(feature = "alloc")]
 use ringbuf::traits::Split;
 use ringbuf::{
-    delegate_observer, delegate_ring_buffer,
     storage::Storage,
-    traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
+    traits::{
+        delegate::{self, Delegate},
+        Consumer, Observer, Producer, RingBuffer, SplitRef,
+    },
     SharedRb,
 };
 
@@ -38,17 +40,15 @@ impl<S: Storage, X: Semaphore> BlockingRb<S, X> {
             write: X::default(),
         }
     }
-    fn base(&self) -> &SharedRb<S> {
-        &self.base
-    }
-    fn base_mut(&mut self) -> &mut SharedRb<S> {
-        &mut self.base
-    }
 }
 
-impl<S: Storage, X: Semaphore> Observer for BlockingRb<S, X> {
-    delegate_observer!(SharedRb<S>, Self::base);
+impl<S: Storage, X: Semaphore> Delegate for BlockingRb<S, X> {
+    type Base = SharedRb<S>;
+    fn base(&self) -> &Self::Base {
+        &self.base
+    }
 }
+impl<S: Storage, X: Semaphore> delegate::Observer for BlockingRb<S, X> {}
 impl<S: Storage, X: Semaphore> Producer for BlockingRb<S, X> {
     unsafe fn set_write_index(&self, value: usize) {
         self.write.notify(|| self.base.set_write_index(value));
@@ -59,9 +59,7 @@ impl<S: Storage, X: Semaphore> Consumer for BlockingRb<S, X> {
         self.read.notify(|| self.base.set_read_index(value));
     }
 }
-impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {
-    delegate_ring_buffer!(Self::base, Self::base_mut);
-}
+impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {}
 
 impl<S: Storage, X: Semaphore> BlockingProducer for BlockingRb<S, X> {
     type Instant = X::Instant;

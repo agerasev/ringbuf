@@ -12,9 +12,12 @@ use futures::task::AtomicWaker;
 #[cfg(feature = "alloc")]
 use ringbuf::traits::Split;
 use ringbuf::{
-    delegate_observer, delegate_ring_buffer, impl_consumer_traits, impl_producer_traits,
+    impl_consumer_traits, impl_producer_traits,
     storage::Storage,
-    traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
+    traits::{
+        delegate::{self, Delegate},
+        Consumer, Producer, RingBuffer, SplitRef,
+    },
     SharedRb,
 };
 
@@ -34,19 +37,17 @@ impl<S: Storage> AsyncRb<S> {
             closed: AtomicBool::new(false),
         }
     }
-    fn base(&self) -> &SharedRb<S> {
-        &self.base
-    }
-    fn base_mut(&mut self) -> &mut SharedRb<S> {
-        &mut self.base
-    }
 }
 
 impl<S: Storage> Unpin for AsyncRb<S> {}
 
-impl<S: Storage> Observer for AsyncRb<S> {
-    delegate_observer!(SharedRb<S>, Self::base);
+impl<S: Storage> Delegate for AsyncRb<S> {
+    type Base = SharedRb<S>;
+    fn base(&self) -> &Self::Base {
+        &self.base
+    }
 }
+impl<S: Storage> delegate::Observer for AsyncRb<S> {}
 impl<S: Storage> Producer for AsyncRb<S> {
     unsafe fn set_write_index(&self, value: usize) {
         self.base.set_write_index(value);
@@ -59,9 +60,7 @@ impl<S: Storage> Consumer for AsyncRb<S> {
         self.read.wake();
     }
 }
-impl<S: Storage> RingBuffer for AsyncRb<S> {
-    delegate_ring_buffer!(Self::base, Self::base_mut);
-}
+impl<S: Storage> RingBuffer for AsyncRb<S> {}
 
 impl<S: Storage> AsyncObserver for AsyncRb<S> {
     fn is_closed(&self) -> bool {
