@@ -23,7 +23,7 @@ fn write_overflow() {
 
     assert_eq!(
         write!(prod, "This is a very long string that will overflow the small buffer\n"),
-        Err(core::fmt::Error::default())
+        Err(core::fmt::Error)
     );
 
     assert_eq!(cons.occupied_len(), 10);
@@ -31,7 +31,7 @@ fn write_overflow() {
 
     assert_eq!(
         write!(prod, "{} {} {} {} {}\n", "This", "string", "will", "also", "overflow"),
-        Err(core::fmt::Error::default())
+        Err(core::fmt::Error)
     );
 
     assert_eq!(cons.occupied_len(), 10);
