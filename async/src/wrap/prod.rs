@@ -18,10 +18,6 @@ impl<R: AsyncRbRef> Producer for AsyncProd<R> {
     unsafe fn set_write_index(&self, value: usize) {
         self.base.set_write_index(value)
     }
-    #[inline]
-    fn close(&mut self) {
-        self.base.close();
-    }
 
     #[inline]
     fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
@@ -43,6 +39,11 @@ impl<R: AsyncRbRef> Producer for AsyncProd<R> {
 impl<R: AsyncRbRef> AsyncProducer for AsyncProd<R> {
     fn register_waker(&self, waker: &core::task::Waker) {
         self.rb().read.register(waker)
+    }
+
+    #[inline]
+    fn close(&mut self) {
+        self.base.close();
     }
 }
 

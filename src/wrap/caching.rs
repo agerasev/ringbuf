@@ -31,6 +31,10 @@ impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
     pub fn freeze(self) -> Frozen<R, P, C> {
         self.frozen
     }
+
+    pub fn close(&mut self) {
+        self.frozen.close();
+    }
 }
 
 impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Caching<R, P, C> {
@@ -109,11 +113,6 @@ impl<R: RbRef> Producer for CachingProd<R> {
         }
         r
     }
-
-    #[inline]
-    fn close(&mut self) {
-        self.frozen.close();
-    }
 }
 
 impl<R: RbRef> Consumer for CachingCons<R> {
@@ -132,11 +131,6 @@ impl<R: RbRef> Consumer for CachingCons<R> {
             self.frozen.commit();
         }
         r
-    }
-
-    #[inline]
-    fn close(&mut self) {
-        self.frozen.close();
     }
 }
 

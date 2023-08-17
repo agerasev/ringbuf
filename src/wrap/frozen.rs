@@ -62,7 +62,7 @@ impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
         Obs::new(self.rb.clone())
     }
 
-    fn close(&mut self) {
+    pub fn close(&mut self) {
         if P {
             self.rb().hold_write(false);
         }
@@ -175,20 +175,12 @@ impl<R: RbRef> Producer for FrozenProd<R> {
     unsafe fn set_write_index(&self, value: usize) {
         self.write.set(value);
     }
-    #[inline]
-    fn close(&mut self) {
-        self.close();
-    }
 }
 
 impl<R: RbRef> Consumer for FrozenCons<R> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
         self.read.set(value);
-    }
-    #[inline]
-    fn close(&mut self) {
-        self.close();
     }
 }
 

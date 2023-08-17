@@ -24,13 +24,6 @@ pub trait Producer: Observer {
         self.set_write_index((self.write_index() + count) % modulus(self));
     }
 
-    /// Close this producer.
-    fn close(&mut self);
-    /// Whether the corresponding consumer was closed.
-    fn is_closed(&self) -> bool {
-        !self.read_is_held()
-    }
-
     /// Provides a direct access to the ring buffer vacant memory.
     ///
     /// Returns a pair of slices of uninitialized memory, the second one may be empty.

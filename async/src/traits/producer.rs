@@ -12,6 +12,12 @@ use std::io;
 pub trait AsyncProducer: Producer {
     fn register_waker(&self, waker: &Waker);
 
+    fn close(&mut self);
+    /// Whether the corresponding consumer was closed.
+    fn is_closed(&self) -> bool {
+        !self.read_is_held()
+    }
+
     /// Push item to the ring buffer waiting asynchronously if the buffer is full.
     ///
     /// Future returns:

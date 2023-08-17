@@ -101,7 +101,6 @@ impl<S: Storage> Producer for LocalRb<S> {
     unsafe fn set_write_index(&self, value: usize) {
         self.write.index.set(value);
     }
-    fn close(&mut self) {}
 }
 
 impl<S: Storage> Consumer for LocalRb<S> {
@@ -109,7 +108,6 @@ impl<S: Storage> Consumer for LocalRb<S> {
     unsafe fn set_read_index(&self, value: usize) {
         self.read.index.set(value);
     }
-    fn close(&mut self) {}
 }
 
 impl<S: Storage> RingBuffer for LocalRb<S> {

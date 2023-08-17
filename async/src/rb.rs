@@ -73,14 +73,12 @@ impl<S: Storage> Producer for AsyncRb<S> {
         self.base.set_write_index(value);
         self.write.wake();
     }
-    fn close(&mut self) {}
 }
 impl<S: Storage> Consumer for AsyncRb<S> {
     unsafe fn set_read_index(&self, value: usize) {
         self.base.set_read_index(value);
         self.read.wake();
     }
-    fn close(&mut self) {}
 }
 impl<S: Storage> RingBuffer for AsyncRb<S> {
     #[inline]

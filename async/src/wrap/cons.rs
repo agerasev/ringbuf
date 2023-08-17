@@ -19,11 +19,6 @@ impl<R: AsyncRbRef> Consumer for AsyncCons<R> {
         self.base.set_read_index(value)
     }
     #[inline]
-    fn close(&mut self) {
-        self.base.close();
-    }
-
-    #[inline]
     fn try_pop(&mut self) -> Option<Self::Item> {
         self.base.try_pop()
     }
@@ -39,6 +34,11 @@ impl<R: AsyncRbRef> Consumer for AsyncCons<R> {
 impl<R: AsyncRbRef> AsyncConsumer for AsyncCons<R> {
     fn register_waker(&self, waker: &core::task::Waker) {
         self.rb().write.register(waker)
+    }
+
+    #[inline]
+    fn close(&mut self) {
+        self.base.close();
     }
 }
 

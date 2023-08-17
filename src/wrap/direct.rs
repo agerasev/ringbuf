@@ -55,7 +55,7 @@ impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
         unsafe { Frozen::new_unchecked(ptr::read(&this.rb)) }
     }
 
-    fn close(&mut self) {
+    pub fn close(&mut self) {
         if P {
             self.rb().hold_write(false);
         }
@@ -122,20 +122,12 @@ impl<R: RbRef> Producer for Prod<R> {
     unsafe fn set_write_index(&self, value: usize) {
         self.rb().set_write_index(value)
     }
-    #[inline]
-    fn close(&mut self) {
-        Direct::close(self);
-    }
 }
 
 impl<R: RbRef> Consumer for Cons<R> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
         self.rb().set_read_index(value)
-    }
-    #[inline]
-    fn close(&mut self) {
-        Direct::close(self);
     }
 }
 
