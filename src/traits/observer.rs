@@ -1,4 +1,4 @@
-use super::utils::modulus;
+use super::{delegate::Delegate, utils::modulus};
 use core::{mem::MaybeUninit, num::NonZeroUsize};
 
 pub trait Observer: Sized {
@@ -47,54 +47,59 @@ pub trait Observer: Sized {
     }
 }
 
-#[macro_export]
-macro_rules! delegate_observer {
-    ($type:ty, $ref:expr) => {
-        type Item = <$type as $crate::traits::Observer>::Item;
+pub trait DelegateObserver: Delegate
+where
+    Self::Base: Observer,
+{
+}
+impl<D: DelegateObserver> Observer for D
+where
+    D::Base: Observer,
+{
+    type Item = <D::Base as Observer>::Item;
 
-        #[inline]
-        fn capacity(&self) -> core::num::NonZeroUsize {
-            $ref(self).capacity()
-        }
+    #[inline]
+    fn capacity(&self) -> core::num::NonZeroUsize {
+        self.base().capacity()
+    }
 
-        #[inline]
-        fn read_index(&self) -> usize {
-            $ref(self).read_index()
-        }
-        #[inline]
-        fn write_index(&self) -> usize {
-            $ref(self).write_index()
-        }
+    #[inline]
+    fn read_index(&self) -> usize {
+        self.base().read_index()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.base().write_index()
+    }
 
-        #[inline]
-        unsafe fn unsafe_slices(
-            &self,
-            start: usize,
-            end: usize,
-        ) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
-            $ref(self).unsafe_slices(start, end)
-        }
+    #[inline]
+    unsafe fn unsafe_slices(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
+        self.base().unsafe_slices(start, end)
+    }
 
-        #[inline]
-        fn occupied_len(&self) -> usize {
-            $ref(self).occupied_len()
-        }
+    #[inline]
+    fn occupied_len(&self) -> usize {
+        self.base().occupied_len()
+    }
 
-        #[inline]
-        fn vacant_len(&self) -> usize {
-            $ref(self).vacant_len()
-        }
+    #[inline]
+    fn vacant_len(&self) -> usize {
+        self.base().vacant_len()
+    }
 
-        #[inline]
-        fn is_empty(&self) -> bool {
-            $ref(self).is_empty()
-        }
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.base().is_empty()
+    }
 
-        #[inline]
-        fn is_full(&self) -> bool {
-            $ref(self).is_full()
-        }
-    };
+    #[inline]
+    fn is_full(&self) -> bool {
+        self.base().is_full()
+    }
 }
 
 pub trait Observe {

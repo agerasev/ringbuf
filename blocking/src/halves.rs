@@ -1,9 +1,12 @@
 use crate::traits::{BlockingConsumer, BlockingProducer};
 use core::time::Duration;
 use ringbuf::{
-    delegate_consumer, delegate_observer, delegate_producer, impl_consumer_traits, impl_producer_traits,
+    impl_consumer_traits, impl_producer_traits,
     rb::traits::{RbRef, ToRbRef},
-    traits::{Consumer, Observe, Observer, Producer},
+    traits::{
+        delegate::{self, Delegate, DelegateMut},
+        Observe,
+    },
     CachingCons, CachingProd, Obs,
 };
 
@@ -19,12 +22,6 @@ impl<R: RbRef> BlockingProd<R> {
         Self {
             base: CachingProd::new(rb),
         }
-    }
-    fn base(&self) -> &CachingProd<R> {
-        &self.base
-    }
-    fn base_mut(&mut self) -> &mut CachingProd<R> {
-        &mut self.base
     }
 }
 impl<R: RbRef> ToRbRef for BlockingProd<R> {
@@ -42,12 +39,6 @@ impl<R: RbRef> BlockingCons<R> {
             base: CachingCons::new(rb),
         }
     }
-    fn base(&self) -> &CachingCons<R> {
-        &self.base
-    }
-    fn base_mut(&mut self) -> &mut CachingCons<R> {
-        &mut self.base
-    }
 }
 impl<R: RbRef> ToRbRef for BlockingCons<R> {
     type RbRef = R;
@@ -59,12 +50,19 @@ impl<R: RbRef> ToRbRef for BlockingCons<R> {
     }
 }
 
-impl<R: RbRef> Observer for BlockingProd<R> {
-    delegate_observer!(CachingProd<R>, Self::base);
+impl<R: RbRef> Delegate for BlockingProd<R> {
+    type Base = CachingProd<R>;
+    fn base(&self) -> &Self::Base {
+        &self.base
+    }
 }
-impl<R: RbRef> Producer for BlockingProd<R> {
-    delegate_producer!(Self::base, Self::base_mut);
+impl<R: RbRef> DelegateMut for BlockingProd<R> {
+    fn base_mut(&mut self) -> &mut Self::Base {
+        &mut self.base
+    }
 }
+impl<R: RbRef> delegate::Observer for BlockingProd<R> {}
+impl<R: RbRef> delegate::Producer for BlockingProd<R> {}
 impl<R: RbRef> BlockingProducer for BlockingProd<R>
 where
     R::Target: BlockingProducer,
@@ -76,12 +74,19 @@ where
     }
 }
 
-impl<R: RbRef> Observer for BlockingCons<R> {
-    delegate_observer!(CachingCons<R>, Self::base);
+impl<R: RbRef> Delegate for BlockingCons<R> {
+    type Base = CachingCons<R>;
+    fn base(&self) -> &Self::Base {
+        &self.base
+    }
 }
-impl<R: RbRef> Consumer for BlockingCons<R> {
-    delegate_consumer!(Self::base, Self::base_mut);
+impl<R: RbRef> DelegateMut for BlockingCons<R> {
+    fn base_mut(&mut self) -> &mut Self::Base {
+        &mut self.base
+    }
 }
+impl<R: RbRef> delegate::Observer for BlockingCons<R> {}
+impl<R: RbRef> delegate::Consumer for BlockingCons<R> {}
 impl<R: RbRef> BlockingConsumer for BlockingCons<R>
 where
     R::Target: BlockingConsumer,

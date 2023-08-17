@@ -1,4 +1,8 @@
-use super::{utils::modulus, Observer};
+use super::{
+    delegate::DelegateMut,
+    observer::{DelegateObserver, Observer},
+    utils::modulus,
+};
 use crate::utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice};
 use core::{iter::Chain, mem::MaybeUninit, ptr, slice};
 #[cfg(feature = "std")]
@@ -315,69 +319,74 @@ macro_rules! impl_consumer_traits {
     };
 }
 
-#[macro_export]
-macro_rules! delegate_consumer {
-    ($ref:expr, $mut:expr) => {
-        #[inline]
-        unsafe fn set_read_index(&self, value: usize) {
-            $ref(self).set_read_index(value)
-        }
-        #[inline]
-        unsafe fn advance_read_index(&self, count: usize) {
-            $ref(self).advance_read_index(count)
-        }
+pub trait DelegateConsumer: DelegateObserver + DelegateMut
+where
+    Self::Base: Consumer,
+{
+}
+impl<D: DelegateConsumer> Consumer for D
+where
+    D::Base: Consumer,
+{
+    #[inline]
+    unsafe fn set_read_index(&self, value: usize) {
+        self.base().set_read_index(value)
+    }
+    #[inline]
+    unsafe fn advance_read_index(&self, count: usize) {
+        self.base().advance_read_index(count)
+    }
 
-        #[inline]
-        fn occupied_slices(&self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
-            $ref(self).occupied_slices()
-        }
+    #[inline]
+    fn occupied_slices(&self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
+        self.base().occupied_slices()
+    }
 
-        #[inline]
-        unsafe fn occupied_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
-            $mut(self).occupied_slices_mut()
-        }
+    #[inline]
+    unsafe fn occupied_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
+        self.base_mut().occupied_slices_mut()
+    }
 
-        #[inline]
-        fn as_slices(&self) -> (&[Self::Item], &[Self::Item]) {
-            $ref(self).as_slices()
-        }
+    #[inline]
+    fn as_slices(&self) -> (&[Self::Item], &[Self::Item]) {
+        self.base().as_slices()
+    }
 
-        #[inline]
-        fn as_mut_slices(&mut self) -> (&mut [Self::Item], &mut [Self::Item]) {
-            $mut(self).as_mut_slices()
-        }
+    #[inline]
+    fn as_mut_slices(&mut self) -> (&mut [Self::Item], &mut [Self::Item]) {
+        self.base_mut().as_mut_slices()
+    }
 
-        #[inline]
-        fn try_pop(&mut self) -> Option<Self::Item> {
-            $mut(self).try_pop()
-        }
+    #[inline]
+    fn try_pop(&mut self) -> Option<Self::Item> {
+        self.base_mut().try_pop()
+    }
 
-        #[inline]
-        fn pop_slice(&mut self, elems: &mut [Self::Item]) -> usize
-        where
-            Self::Item: Copy,
-        {
-            $mut(self).pop_slice(elems)
-        }
+    #[inline]
+    fn pop_slice(&mut self, elems: &mut [Self::Item]) -> usize
+    where
+        Self::Item: Copy,
+    {
+        self.base_mut().pop_slice(elems)
+    }
 
-        #[inline]
-        fn iter(&self) -> $crate::consumer::Iter<'_, Self> {
-            $ref(self).iter()
-        }
+    #[inline]
+    fn iter(&self) -> Iter<'_, Self> {
+        self.base().iter()
+    }
 
-        #[inline]
-        fn iter_mut(&mut self) -> $crate::consumer::IterMut<'_, Self> {
-            $mut(self).iter_mut()
-        }
+    #[inline]
+    fn iter_mut(&mut self) -> IterMut<'_, Self> {
+        self.base_mut().iter_mut()
+    }
 
-        #[inline]
-        fn skip(&mut self, count: usize) -> usize {
-            $mut(self).skip(count)
-        }
+    #[inline]
+    fn skip(&mut self, count: usize) -> usize {
+        self.base_mut().skip(count)
+    }
 
-        #[inline]
-        fn clear(&mut self) -> usize {
-            $mut(self).clear()
-        }
-    };
+    #[inline]
+    fn clear(&mut self) -> usize {
+        self.base_mut().clear()
+    }
 }
