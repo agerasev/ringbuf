@@ -2,9 +2,9 @@ use super::{macros::rb_impl_init, utils::ranges};
 #[cfg(feature = "alloc")]
 use crate::traits::Split;
 use crate::{
-    halves::{Cons, Prod},
     storage::{Shared, Static, Storage},
     traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
+    wrap::{Cons, Prod},
 };
 #[cfg(feature = "alloc")]
 use alloc::rc::Rc;

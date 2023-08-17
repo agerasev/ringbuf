@@ -2,9 +2,9 @@ use super::{macros::rb_impl_init, utils::ranges};
 #[cfg(feature = "alloc")]
 use crate::traits::Split;
 use crate::{
-    halves::{CachingCons, CachingProd},
     storage::{Shared, Static, Storage},
     traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
+    wrap::{CachingCons, CachingProd},
 };
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;

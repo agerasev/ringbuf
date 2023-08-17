@@ -1,4 +1,4 @@
-use super::frozen::FrozenWrap;
+use super::frozen::Frozen;
 use crate::{
     rb::traits::{RbRef, ToRbRef},
     traits::{consumer::Consumer, producer::Producer, Observer},
@@ -7,16 +7,16 @@ use core::{fmt, mem::MaybeUninit, num::NonZeroUsize};
 #[cfg(feature = "std")]
 use std::io;
 
-pub struct Wrap<R: RbRef, const P: bool, const C: bool> {
+pub struct Direct<R: RbRef, const P: bool, const C: bool> {
     rb: R,
 }
 
 /// Observer of ring buffer.
-pub type Obs<R> = Wrap<R, false, false>;
+pub type Obs<R> = Direct<R, false, false>;
 /// Producer of ring buffer.
-pub type Prod<R> = Wrap<R, true, false>;
+pub type Prod<R> = Direct<R, true, false>;
 /// Consumer of ring buffer.
-pub type Cons<R> = Wrap<R, false, true>;
+pub type Cons<R> = Direct<R, false, true>;
 
 impl<R: RbRef> Clone for Obs<R> {
     fn clone(&self) -> Self {
@@ -24,7 +24,7 @@ impl<R: RbRef> Clone for Obs<R> {
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> Wrap<R, P, C> {
+impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
     /// # Safety
     ///
     /// There must be no more than one wrapper with the same parameter being `true`.
@@ -35,12 +35,13 @@ impl<R: RbRef, const P: bool, const C: bool> Wrap<R, P, C> {
     pub fn observe(&self) -> Obs<R> {
         Obs { rb: self.rb.clone() }
     }
-    pub fn freeze(self) -> FrozenWrap<R, P, C> {
-        unsafe { FrozenWrap::new(self.rb) }
+
+    pub fn freeze(self) -> Frozen<R, P, C> {
+        unsafe { Frozen::new(self.rb) }
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Wrap<R, P, C> {
+impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Direct<R, P, C> {
     type RbRef = R;
     fn rb_ref(&self) -> &R {
         &self.rb
@@ -50,7 +51,7 @@ impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Wrap<R, P, C> {
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> Observer for Wrap<R, P, C> {
+impl<R: RbRef, const P: bool, const C: bool> Observer for Direct<R, P, C> {
     type Item = <R::Target as Observer>::Item;
 
     #[inline]

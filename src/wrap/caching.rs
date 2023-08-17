@@ -1,4 +1,4 @@
-use super::{direct::Obs, frozen::FrozenWrap};
+use super::{direct::Obs, frozen::Frozen};
 use crate::{
     rb::traits::{RbRef, ToRbRef},
     traits::{Consumer, Observer, Producer},
@@ -8,33 +8,31 @@ use core::{fmt, mem::MaybeUninit, num::NonZeroUsize};
 use std::io;
 
 /// Caching wrapper of ring buffer.
-pub struct CachingWrap<R: RbRef, const P: bool, const C: bool> {
-    frozen: FrozenWrap<R, P, C>,
+pub struct Caching<R: RbRef, const P: bool, const C: bool> {
+    frozen: Frozen<R, P, C>,
 }
 
-pub type CachingProd<R> = CachingWrap<R, true, false>;
-pub type CachingCons<R> = CachingWrap<R, false, true>;
+pub type CachingProd<R> = Caching<R, true, false>;
+pub type CachingCons<R> = Caching<R, false, true>;
 
-impl<R: RbRef, const P: bool, const C: bool> CachingWrap<R, P, C> {
+impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
     pub unsafe fn new(rb: R) -> Self {
-        Self {
-            frozen: FrozenWrap::new(rb),
-        }
+        Self { frozen: Frozen::new(rb) }
     }
 
     pub fn observe(&self) -> Obs<R> {
         self.frozen.observe()
     }
 
-    pub fn freeze(self) -> FrozenWrap<R, P, C> {
+    pub fn freeze(self) -> Frozen<R, P, C> {
         self.frozen
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> ToRbRef for CachingWrap<R, P, C> {
+impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Caching<R, P, C> {
     type RbRef = R;
 
     fn rb_ref(&self) -> &R {
@@ -45,7 +43,7 @@ impl<R: RbRef, const P: bool, const C: bool> ToRbRef for CachingWrap<R, P, C> {
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> Observer for CachingWrap<R, P, C> {
+impl<R: RbRef, const P: bool, const C: bool> Observer for Caching<R, P, C> {
     type Item = <R::Target as Observer>::Item;
 
     #[inline]

@@ -13,7 +13,7 @@ use core::{
 #[cfg(feature = "std")]
 use std::io;
 
-pub struct FrozenWrap<R: RbRef, const P: bool, const C: bool> {
+pub struct Frozen<R: RbRef, const P: bool, const C: bool> {
     rb: R,
     read: Cell<usize>,
     write: Cell<usize>,
@@ -23,15 +23,15 @@ pub struct FrozenWrap<R: RbRef, const P: bool, const C: bool> {
 ///
 /// Inserted items is not visible for an opposite write end until [`Self::commit`]/[`Self::sync`] is called or `Self` is dropped.
 /// A free space of items removed by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
-pub type FrozenProd<R> = FrozenWrap<R, true, false>;
+pub type FrozenProd<R> = Frozen<R, true, false>;
 
 /// Frozen read end of some ring buffer.
 ///
 /// A free space of removed items is not visible for an opposite write end until [`Self::commit`]/[`Self::sync`] is called or `Self` is dropped.
 /// Items inserted by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
-pub type FrozenCons<R> = FrozenWrap<R, false, true>;
+pub type FrozenCons<R> = Frozen<R, false, true>;
 
-impl<R: RbRef, const P: bool, const C: bool> FrozenWrap<R, P, C> {
+impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
     /// Create new ring buffer cache.
     ///
     /// # Safety
@@ -50,7 +50,7 @@ impl<R: RbRef, const P: bool, const C: bool> FrozenWrap<R, P, C> {
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> ToRbRef for FrozenWrap<R, P, C> {
+impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Frozen<R, P, C> {
     type RbRef = R;
 
     fn rb_ref(&self) -> &R {
@@ -63,7 +63,7 @@ impl<R: RbRef, const P: bool, const C: bool> ToRbRef for FrozenWrap<R, P, C> {
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> FrozenWrap<R, P, C> {
+impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
     /// Commit changes to the ring buffer.
     pub fn commit(&self) {
         unsafe {
@@ -105,7 +105,7 @@ impl<R: RbRef> FrozenProd<R> {
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> Observer for FrozenWrap<R, P, C> {
+impl<R: RbRef, const P: bool, const C: bool> Observer for Frozen<R, P, C> {
     type Item = <R::Target as Observer>::Item;
 
     #[inline]
@@ -141,7 +141,7 @@ impl<R: RbRef> Consumer for FrozenCons<R> {
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> Drop for FrozenWrap<R, P, C> {
+impl<R: RbRef, const P: bool, const C: bool> Drop for Frozen<R, P, C> {
     fn drop(&mut self) {
         self.commit();
     }

@@ -1,8 +1,8 @@
 use super::Rb;
 use crate::{
-    halves::{FrozenCons, FrozenProd},
     storage::Static,
     traits::*,
+    wrap::{FrozenCons, FrozenProd},
 };
 
 #[test]
