@@ -1,22 +1,15 @@
-use super::{AsyncObserver, AsyncRingBuffer};
-use crate::wrap::AsyncCons;
 use core::{
     future::Future,
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-#[cfg(feature = "std")]
-use futures::io::AsyncRead;
-use futures::{future::FusedFuture, Stream};
-use ringbuf::{
-    rb::traits::RbRef,
-    traits::{Consumer, Observer},
-};
+use futures::future::FusedFuture;
+use ringbuf::traits::Consumer;
 #[cfg(feature = "std")]
 use std::io;
 
-pub trait AsyncConsumer: AsyncObserver + Consumer {
-    fn register_write_waker(&self, waker: &Waker);
+pub trait AsyncConsumer: Consumer {
+    fn register_waker(&self, waker: &Waker);
 
     /// Pop item from the ring buffer waiting asynchronously if the buffer is empty.
     ///
@@ -29,7 +22,7 @@ pub trait AsyncConsumer: AsyncObserver + Consumer {
 
     /// Wait for the buffer to contain at least `count` items or to close.
     ///
-    /// Panics if `count` is greater than buffer capacity.
+    /// In debug mode panics if `count` is greater than buffer capacity.
     fn wait_occupied(&mut self, count: usize) -> WaitOccupiedFuture<'_, Self> {
         debug_assert!(count <= self.capacity().get());
         WaitOccupiedFuture {
@@ -52,6 +45,47 @@ pub trait AsyncConsumer: AsyncObserver + Consumer {
             owner: self,
             slice: Some(slice),
             count: 0,
+        }
+    }
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>>
+    where
+        Self: Unpin,
+    {
+        let mut waker_registered = false;
+        loop {
+            let closed = self.is_closed();
+            if let Some(item) = self.try_pop() {
+                break Poll::Ready(Some(item));
+            }
+            if closed {
+                break Poll::Ready(None);
+            }
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.register_waker(cx.waker());
+            waker_registered = true;
+        }
+    }
+
+    #[cfg(feature = "std")]
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>>
+    where
+        Self: AsyncConsumer<Item = u8> + Unpin,
+    {
+        let mut waker_registered = false;
+        loop {
+            let closed = self.is_closed();
+            let len = self.pop_slice(buf);
+            if len != 0 || closed {
+                break Poll::Ready(Ok(len));
+            }
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.register_waker(cx.waker());
+            waker_registered = true;
         }
     }
 }
@@ -84,7 +118,7 @@ impl<'a, A: AsyncConsumer> Future for PopFuture<'a, A> {
             if waker_registered {
                 break Poll::Pending;
             }
-            self.owner.register_write_waker(cx.waker());
+            self.owner.register_waker(cx.waker());
             waker_registered = true;
         }
     }
@@ -131,7 +165,7 @@ where
             if waker_registered {
                 break Poll::Pending;
             }
-            self.owner.register_write_waker(cx.waker());
+            self.owner.register_waker(cx.waker());
             waker_registered = true;
         }
     }
@@ -162,54 +196,7 @@ impl<'a, A: AsyncConsumer> Future for WaitOccupiedFuture<'a, A> {
             if waker_registered {
                 break Poll::Pending;
             }
-            self.owner.register_write_waker(cx.waker());
-            waker_registered = true;
-        }
-    }
-}
-
-impl<R: RbRef> Stream for AsyncCons<R>
-where
-    R::Target: AsyncRingBuffer,
-{
-    type Item = <R::Target as Observer>::Item;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut waker_registered = false;
-        loop {
-            let closed = self.is_closed();
-            if let Some(item) = self.try_pop() {
-                break Poll::Ready(Some(item));
-            }
-            if closed {
-                break Poll::Ready(None);
-            }
-            if waker_registered {
-                break Poll::Pending;
-            }
-            self.register_write_waker(cx.waker());
-            waker_registered = true;
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl<R: RbRef> AsyncRead for AsyncCons<R>
-where
-    R::Target: AsyncRingBuffer<Item = u8>,
-{
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        let mut waker_registered = false;
-        loop {
-            let closed = self.is_closed();
-            let len = self.pop_slice(buf);
-            if len != 0 || closed {
-                break Poll::Ready(Ok(len));
-            }
-            if waker_registered {
-                break Poll::Pending;
-            }
-            self.register_write_waker(cx.waker());
+            self.owner.register_waker(cx.waker());
             waker_registered = true;
         }
     }

@@ -1,29 +1,28 @@
-use crate::{
-    traits::{AsyncConsumer, AsyncObserver, AsyncProducer, AsyncRingBuffer},
-    wrap::{AsyncCons, AsyncProd},
-};
+use crate::wrap::{AsyncCons, AsyncProd};
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
-use core::{
-    mem::MaybeUninit,
-    num::NonZeroUsize,
-    sync::atomic::{AtomicBool, Ordering},
-    task::Waker,
-};
+use core::{mem::MaybeUninit, num::NonZeroUsize};
 use futures::task::AtomicWaker;
 #[cfg(feature = "alloc")]
 use ringbuf::traits::Split;
 use ringbuf::{
+    rb::traits::RbRef,
     storage::Storage,
     traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
     SharedRb,
 };
 
+pub trait AsyncRbRef: RbRef<Target = AsyncRb<Self::Storage>> {
+    type Storage: Storage;
+}
+impl<S: Storage, R: RbRef<Target = AsyncRb<S>>> AsyncRbRef for R {
+    type Storage = S;
+}
+
 pub struct AsyncRb<S: Storage> {
     base: SharedRb<S>,
-    read: AtomicWaker,
-    write: AtomicWaker,
-    closed: AtomicBool,
+    pub(crate) read: AtomicWaker,
+    pub(crate) write: AtomicWaker,
 }
 
 impl<S: Storage> AsyncRb<S> {
@@ -32,7 +31,6 @@ impl<S: Storage> AsyncRb<S> {
             base,
             read: AtomicWaker::default(),
             write: AtomicWaker::default(),
-            closed: AtomicBool::new(false),
         }
     }
 }
@@ -59,6 +57,15 @@ impl<S: Storage> Observer for AsyncRb<S> {
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
         self.base.unsafe_slices(start, end)
     }
+
+    #[inline]
+    fn read_is_held(&self) -> bool {
+        self.base.read_is_held()
+    }
+    #[inline]
+    fn write_is_held(&self) -> bool {
+        self.base.write_is_held()
+    }
 }
 
 impl<S: Storage> Producer for AsyncRb<S> {
@@ -66,39 +73,25 @@ impl<S: Storage> Producer for AsyncRb<S> {
         self.base.set_write_index(value);
         self.write.wake();
     }
+    fn close(&mut self) {}
 }
 impl<S: Storage> Consumer for AsyncRb<S> {
     unsafe fn set_read_index(&self, value: usize) {
         self.base.set_read_index(value);
         self.read.wake();
     }
+    fn close(&mut self) {}
 }
-impl<S: Storage> RingBuffer for AsyncRb<S> {}
-
-impl<S: Storage> AsyncObserver for AsyncRb<S> {
-    fn is_closed(&self) -> bool {
-        self.closed.load(Ordering::Relaxed)
-    }
-    fn close(&self) {
-        self.closed.store(true, Ordering::Relaxed);
-    }
-}
-impl<S: Storage> AsyncProducer for AsyncRb<S> {
-    fn register_read_waker(&self, waker: &Waker) {
-        self.read.register(waker);
-    }
-}
-impl<S: Storage> AsyncConsumer for AsyncRb<S> {
-    fn register_write_waker(&self, waker: &Waker) {
-        self.write.register(waker);
-    }
-}
-impl<S: Storage> AsyncRingBuffer for AsyncRb<S> {
-    fn wake_consumer(&self) {
-        self.write.wake()
-    }
-    fn wake_producer(&self) {
+impl<S: Storage> RingBuffer for AsyncRb<S> {
+    #[inline]
+    fn hold_read(&self, flag: bool) {
+        self.base.hold_read(flag);
         self.read.wake()
+    }
+    #[inline]
+    fn hold_write(&self, flag: bool) {
+        self.base.hold_write(flag);
+        self.write.wake()
     }
 }
 
