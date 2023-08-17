@@ -1,12 +1,8 @@
 use crate::{
     rb::traits::{RbRef, ToRbRef},
-    traits::{
-        consumer::Consumer,
-        observer::{DelegateObserver, Observe},
-        producer::Producer,
-    },
+    traits::{consumer::Consumer, observer::Observe, producer::Producer, Observer},
 };
-use core::fmt;
+use core::{fmt, mem::MaybeUninit, num::NonZeroUsize};
 #[cfg(feature = "std")]
 use std::io;
 
@@ -73,33 +69,66 @@ impl<R: RbRef> ToRbRef for Cons<R> {
     }
 }
 
-impl<R: RbRef> DelegateObserver for Obs<R> {
-    type Delegate = R::Target;
-    fn delegate(&self) -> &Self::Delegate {
-        self.rb.deref()
+impl<R: RbRef> Observer for Obs<R> {
+    type Item = <R::Target as Observer>::Item;
+
+    #[inline]
+    fn capacity(&self) -> NonZeroUsize {
+        self.rb().capacity()
     }
-    fn delegate_mut(&mut self) -> &mut Self::Delegate {
-        unreachable!()
+    #[inline]
+    fn read_index(&self) -> usize {
+        self.rb().read_index()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.rb().write_index()
+    }
+    #[inline]
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
+        self.rb().unsafe_slices(start, end)
     }
 }
 
-impl<R: RbRef> DelegateObserver for Prod<R> {
-    type Delegate = R::Target;
-    fn delegate(&self) -> &Self::Delegate {
-        self.rb.deref()
+impl<R: RbRef> Observer for Prod<R> {
+    type Item = <R::Target as Observer>::Item;
+
+    #[inline]
+    fn capacity(&self) -> NonZeroUsize {
+        self.rb().capacity()
     }
-    fn delegate_mut(&mut self) -> &mut Self::Delegate {
-        unreachable!()
+    #[inline]
+    fn read_index(&self) -> usize {
+        self.rb().read_index()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.rb().write_index()
+    }
+    #[inline]
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
+        self.rb().unsafe_slices(start, end)
     }
 }
 
-impl<R: RbRef> DelegateObserver for Cons<R> {
-    type Delegate = R::Target;
-    fn delegate(&self) -> &Self::Delegate {
-        self.rb.deref()
+impl<R: RbRef> Observer for Cons<R> {
+    type Item = <R::Target as Observer>::Item;
+
+    #[inline]
+    fn capacity(&self) -> NonZeroUsize {
+        self.rb().capacity()
     }
-    fn delegate_mut(&mut self) -> &mut Self::Delegate {
-        unreachable!()
+    #[inline]
+    fn read_index(&self) -> usize {
+        self.rb().read_index()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.rb().write_index()
+    }
+    #[inline]
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
+        self.rb().unsafe_slices(start, end)
     }
 }
 

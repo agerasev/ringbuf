@@ -47,60 +47,6 @@ pub trait Observer: Sized {
     }
 }
 
-pub trait DelegateObserver {
-    type Delegate: Observer;
-
-    fn delegate(&self) -> &Self::Delegate;
-    fn delegate_mut(&mut self) -> &mut Self::Delegate;
-}
-
-impl<D: DelegateObserver> Observer for D {
-    type Item = <D::Delegate as Observer>::Item;
-
-    #[inline]
-    fn capacity(&self) -> core::num::NonZeroUsize {
-        self.delegate().capacity()
-    }
-
-    #[inline]
-    fn read_index(&self) -> usize {
-        self.delegate().read_index()
-    }
-    #[inline]
-    fn write_index(&self) -> usize {
-        self.delegate().write_index()
-    }
-
-    #[inline]
-    unsafe fn unsafe_slices(
-        &self,
-        start: usize,
-        end: usize,
-    ) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
-        self.delegate().unsafe_slices(start, end)
-    }
-
-    #[inline]
-    fn occupied_len(&self) -> usize {
-        self.delegate().occupied_len()
-    }
-
-    #[inline]
-    fn vacant_len(&self) -> usize {
-        self.delegate().vacant_len()
-    }
-
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.delegate().is_empty()
-    }
-
-    #[inline]
-    fn is_full(&self) -> bool {
-        self.delegate().is_full()
-    }
-}
-
 pub trait Observe {
     type Obs: Observer;
     fn observe(&self) -> Self::Obs;

@@ -1,7 +1,4 @@
-use super::{
-    observer::{DelegateObserver, Observer},
-    utils::modulus,
-};
+use super::{observer::Observer, utils::modulus};
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
 use crate::utils::write_slice;
@@ -155,53 +152,5 @@ pub trait Producer: Observer {
         } else {
             Ok(())
         }
-    }
-}
-
-pub trait DelegateProducer: DelegateObserver
-where
-    Self::Delegate: Producer,
-{
-}
-
-impl<D: DelegateProducer> Producer for D
-where
-    D::Delegate: Producer,
-{
-    #[inline]
-    unsafe fn set_write_index(&self, value: usize) {
-        self.delegate().set_write_index(value)
-    }
-    #[inline]
-    unsafe fn advance_write_index(&self, count: usize) {
-        self.delegate().advance_write_index(count)
-    }
-
-    #[inline]
-    fn vacant_slices(&self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
-        self.delegate().vacant_slices()
-    }
-
-    #[inline]
-    fn vacant_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
-        self.delegate_mut().vacant_slices_mut()
-    }
-
-    #[inline]
-    fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
-        self.delegate_mut().try_push(elem)
-    }
-
-    #[inline]
-    fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, iter: I) -> usize {
-        self.delegate_mut().push_iter(iter)
-    }
-
-    #[inline]
-    fn push_slice(&mut self, elems: &[Self::Item]) -> usize
-    where
-        Self::Item: Copy,
-    {
-        self.delegate_mut().push_slice(elems)
     }
 }
