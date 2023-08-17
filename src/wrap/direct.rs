@@ -2,9 +2,14 @@ use super::frozen::Frozen;
 use crate::{
     consumer::PopIter,
     rb::traits::{RbRef, ToRbRef},
-    traits::{consumer::Consumer, producer::Producer, Observer},
+    traits::{Consumer, Observer, Producer, RingBuffer},
 };
-use core::{fmt, mem::MaybeUninit, num::NonZeroUsize};
+use core::{
+    fmt,
+    mem::{ManuallyDrop, MaybeUninit},
+    num::NonZeroUsize,
+    ptr,
+};
 #[cfg(feature = "std")]
 use std::io;
 
@@ -29,7 +34,15 @@ impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
     /// # Safety
     ///
     /// There must be no more than one wrapper with the same parameter being `true`.
-    pub unsafe fn new(rb: R) -> Self {
+    pub fn new(rb: R) -> Self {
+        if P {
+            assert!(!rb.deref().write_is_held());
+            rb.deref().hold_write(true);
+        }
+        if C {
+            assert!(!rb.deref().read_is_held());
+            rb.deref().hold_read(true);
+        }
         Self { rb }
     }
 
@@ -38,7 +51,17 @@ impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
     }
 
     pub fn freeze(self) -> Frozen<R, P, C> {
-        unsafe { Frozen::new(self.rb) }
+        let this = ManuallyDrop::new(self);
+        unsafe { Frozen::new_unchecked(ptr::read(&this.rb)) }
+    }
+
+    fn close(&mut self) {
+        if P {
+            self.rb().hold_write(false);
+        }
+        if C {
+            self.rb().hold_read(false);
+        }
     }
 }
 
@@ -47,8 +70,10 @@ impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Direct<R, P, C> {
     fn rb_ref(&self) -> &R {
         &self.rb
     }
-    fn into_rb_ref(self) -> R {
-        self.rb
+    fn into_rb_ref(mut self) -> R {
+        self.close();
+        let this = ManuallyDrop::new(self);
+        unsafe { ptr::read(&this.rb) }
     }
 }
 
@@ -82,6 +107,14 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Direct<R, P, C> {
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
         self.rb().unsafe_slices(start, end)
     }
+    #[inline]
+    fn read_is_held(&self) -> bool {
+        self.rb().read_is_held()
+    }
+    #[inline]
+    fn write_is_held(&self) -> bool {
+        self.rb().write_is_held()
+    }
 }
 
 impl<R: RbRef> Producer for Prod<R> {
@@ -89,12 +122,26 @@ impl<R: RbRef> Producer for Prod<R> {
     unsafe fn set_write_index(&self, value: usize) {
         self.rb().set_write_index(value)
     }
+    #[inline]
+    fn close(&mut self) {
+        Direct::close(self);
+    }
 }
 
 impl<R: RbRef> Consumer for Cons<R> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
         self.rb().set_read_index(value)
+    }
+    #[inline]
+    fn close(&mut self) {
+        Direct::close(self);
+    }
+}
+
+impl<R: RbRef, const P: bool, const C: bool> Drop for Direct<R, P, C> {
+    fn drop(&mut self) {
+        self.close();
     }
 }
 

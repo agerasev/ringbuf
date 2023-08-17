@@ -2,7 +2,7 @@ use super::direct::Obs;
 use crate::{
     consumer::PopIter,
     rb::traits::{RbRef, ToRbRef},
-    traits::{Consumer, Observer, Producer},
+    traits::{Consumer, Observer, Producer, RingBuffer},
 };
 use core::{
     cell::Cell,
@@ -38,7 +38,19 @@ impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
     /// # Safety
     ///
     /// There must be only one instance containing the same ring buffer reference.
-    pub unsafe fn new(rb: R) -> Self {
+    pub fn new(rb: R) -> Self {
+        if P {
+            assert!(!rb.deref().write_is_held());
+            rb.deref().hold_write(true);
+        }
+        if C {
+            assert!(!rb.deref().read_is_held());
+            rb.deref().hold_read(true);
+        }
+        unsafe { Self::new_unchecked(rb) }
+    }
+
+    pub(crate) unsafe fn new_unchecked(rb: R) -> Self {
         Self {
             read: Cell::new(rb.deref().read_index()),
             write: Cell::new(rb.deref().write_index()),
@@ -47,7 +59,16 @@ impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
     }
 
     pub fn observe(&self) -> Obs<R> {
-        unsafe { Obs::new(self.rb.clone()) }
+        Obs::new(self.rb.clone())
+    }
+
+    fn close(&mut self) {
+        if P {
+            self.rb().hold_write(false);
+        }
+        if C {
+            self.rb().hold_read(false);
+        }
     }
 }
 
@@ -57,8 +78,9 @@ impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Frozen<R, P, C> {
     fn rb_ref(&self) -> &R {
         &self.rb
     }
-    fn into_rb_ref(self) -> R {
+    fn into_rb_ref(mut self) -> R {
         self.commit();
+        self.close();
         let this = ManuallyDrop::new(self);
         unsafe { ptr::read(&this.rb) }
     }
@@ -137,12 +159,25 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Frozen<R, P, C> {
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
         self.rb().unsafe_slices(start, end)
     }
+
+    #[inline]
+    fn read_is_held(&self) -> bool {
+        self.rb().read_is_held()
+    }
+    #[inline]
+    fn write_is_held(&self) -> bool {
+        self.rb().write_is_held()
+    }
 }
 
 impl<R: RbRef> Producer for FrozenProd<R> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         self.write.set(value);
+    }
+    #[inline]
+    fn close(&mut self) {
+        self.close();
     }
 }
 
@@ -151,11 +186,16 @@ impl<R: RbRef> Consumer for FrozenCons<R> {
     unsafe fn set_read_index(&self, value: usize) {
         self.read.set(value);
     }
+    #[inline]
+    fn close(&mut self) {
+        self.close();
+    }
 }
 
 impl<R: RbRef, const P: bool, const C: bool> Drop for Frozen<R, P, C> {
     fn drop(&mut self) {
         self.commit();
+        self.close();
     }
 }
 

@@ -48,4 +48,7 @@ pub trait RingBuffer: Observer + Consumer + Producer {
             elems
         });
     }
+
+    fn hold_read(&self, flag: bool);
+    fn hold_write(&self, flag: bool);
 }

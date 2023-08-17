@@ -9,6 +9,7 @@ mod basic;
 mod drop;
 mod fmt_write;
 mod frozen;
+mod hold;
 mod iter;
 mod overwrite;
 #[cfg(feature = "std")]

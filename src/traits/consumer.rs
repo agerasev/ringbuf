@@ -19,6 +19,13 @@ pub trait Consumer: Observer {
         self.set_read_index((self.read_index() + count) % modulus(self));
     }
 
+    /// Close this consumer.
+    fn close(&mut self);
+    /// Whether the corresponding producer was closed.
+    fn is_closed(&self) -> bool {
+        !self.write_is_held()
+    }
+
     /// Provides a direct access to the ring buffer occupied memory.
     /// The difference from [`Self::as_slices`] is that this method provides slices of [`MaybeUninit`], so items may be moved out of slices.  
     ///

@@ -14,6 +14,11 @@ pub trait Observer: Sized {
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]);
 
+    /// Whether read end is held by consumer.
+    fn read_is_held(&self) -> bool;
+    /// Whether write end is held by producer.
+    fn write_is_held(&self) -> bool;
+
     /// The number of items stored in the buffer.
     ///
     /// *Actual number may be greater or less than returned value due to concurring activity of producer or consumer respectively.*
