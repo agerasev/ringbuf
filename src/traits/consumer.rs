@@ -9,15 +9,6 @@ use core::{iter::Chain, mem::MaybeUninit, ptr, slice};
 use std::io::{self, Write};
 
 /// Consumer part of ring buffer.
-///
-/// # Mode
-///
-/// It can operate in immediate (by default) or postponed mode.
-/// Mode could be switched using [`Self::postponed`]/[`Self::into_postponed`] and [`Self::into_immediate`] methods.
-///
-/// + In immediate mode removed and inserted items are automatically synchronized with the other end.
-/// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
-///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub trait Consumer: Observer {
     unsafe fn set_read_index(&self, value: usize);
 
@@ -212,6 +203,19 @@ pub trait Consumer: Observer {
         unsafe { self.advance_read_index(write_count) };
         Ok(write_count)
     }
+
+    #[cfg(feature = "std")]
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize>
+    where
+        Self: Consumer<Item = u8>,
+    {
+        let n = self.pop_slice(buffer);
+        if n == 0 && !buffer.is_empty() {
+            Err(std::io::ErrorKind::WouldBlock.into())
+        } else {
+            Ok(n)
+        }
+    }
 }
 
 pub struct IntoIter<C: Consumer>(C);
@@ -296,28 +300,6 @@ pub type Iter<'a, C: Consumer> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a,
 /// *Please do not rely on actual type, it may change in future.*
 #[allow(type_alias_bounds)]
 pub type IterMut<'a, C: Consumer> = Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
-
-#[macro_export]
-macro_rules! impl_consumer_traits {
-    ($type:ident $(< $( $param:tt $( : $first_bound:tt $(+ $next_bound:tt )* )? ),+ >)?) => {
-
-        #[cfg(feature = "std")]
-        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? std::io::Read for $type $(< $( $param ),+ >)?
-        where
-            Self: $crate::traits::Consumer<Item = u8>,
-        {
-            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-                use $crate::consumer::Consumer;
-                let n = self.pop_slice(buffer);
-                if n == 0 && !buffer.is_empty() {
-                    Err(std::io::ErrorKind::WouldBlock.into())
-                } else {
-                    Ok(n)
-                }
-            }
-        }
-    };
-}
 
 pub trait DelegateConsumer: DelegateObserver + DelegateMut
 where

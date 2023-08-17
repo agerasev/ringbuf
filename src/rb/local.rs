@@ -3,7 +3,6 @@ use super::{macros::rb_impl_init, utils::ranges};
 use crate::traits::Split;
 use crate::{
     halves::{Cons, Prod},
-    impl_consumer_traits, impl_producer_traits,
     storage::{Shared, Static, Storage},
     traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
 };
@@ -11,10 +10,13 @@ use crate::{
 use alloc::rc::Rc;
 use core::{
     cell::Cell,
+    fmt,
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
     ptr,
 };
+#[cfg(feature = "std")]
+use std::io;
 
 /// Ring buffer for single-threaded use only.
 pub struct LocalRb<S: Storage> {
@@ -114,5 +116,24 @@ impl<S: Storage> SplitRef for LocalRb<S> {
 
 rb_impl_init!(LocalRb);
 
-impl_producer_traits!(LocalRb<S: Storage>);
-impl_consumer_traits!(LocalRb<S: Storage>);
+#[cfg(feature = "std")]
+impl<S: Storage<Item = u8>> io::Write for LocalRb<S> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        <Self as Producer>::write(self, buf)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+impl<S: Storage<Item = u8>> fmt::Write for LocalRb<S> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        <Self as Producer>::write_str(self, s)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<S: Storage<Item = u8>> io::Read for LocalRb<S> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        <Self as Consumer>::read(self, buf)
+    }
+}

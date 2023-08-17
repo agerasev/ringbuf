@@ -7,10 +7,13 @@ use crate::{
 };
 use core::{
     cell::Cell,
+    fmt,
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
     ptr,
 };
+#[cfg(feature = "std")]
+use std::io;
 
 /// Frozen read end of some ring buffer.
 ///
@@ -199,6 +202,38 @@ impl<R: RbRef> ToRbRef for FrozenProd<R> {
         self.commit();
         let this = ManuallyDrop::new(self);
         unsafe { ptr::read(&this.rb) }
+    }
+}
+
+#[cfg(feature = "std")]
+impl<R: RbRef> io::Write for FrozenProd<R>
+where
+    Self: Producer<Item = u8>,
+{
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        <Self as Producer>::write(self, buf)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.commit();
+        Ok(())
+    }
+}
+impl<R: RbRef> fmt::Write for FrozenProd<R>
+where
+    Self: Producer<Item = u8>,
+{
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        <Self as Producer>::write_str(self, s)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<R: RbRef> io::Read for FrozenCons<R>
+where
+    Self: Consumer<Item = u8>,
+{
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        <Self as Consumer>::read(self, buf)
     }
 }
 

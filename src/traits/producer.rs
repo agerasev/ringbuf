@@ -6,7 +6,7 @@ use super::{
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
 use crate::utils::write_slice;
-use core::mem::MaybeUninit;
+use core::{fmt, mem::MaybeUninit};
 #[cfg(feature = "std")]
 use std::{
     cmp,
@@ -14,15 +14,6 @@ use std::{
 };
 
 /// Producer part of ring buffer.
-///
-/// # Mode
-///
-/// It can operate in immediate (by default) or postponed mode.
-/// Mode could be switched using [`Self::postponed`]/[`Self::into_postponed`] and [`Self::into_immediate`] methods.
-///
-/// + In immediate mode removed and inserted items are automatically synchronized with the other end.
-/// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
-///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub trait Producer: Observer {
     unsafe fn set_write_index(&self, value: usize);
 
@@ -141,46 +132,31 @@ pub trait Producer: Observer {
         unsafe { self.advance_write_index(read_count) };
         Ok(read_count)
     }
-}
 
-#[macro_export]
-macro_rules! impl_producer_traits {
-    ($type:ident $(< $( $param:tt $( : $first_bound:tt $(+ $next_bound:tt )* )? ),+ >)?) => {
-
-        #[cfg(feature = "std")]
-        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? std::io::Write for $type $(< $( $param ),+ >)?
-        where
-            Self: $crate::traits::Producer<Item = u8>,
-        {
-            fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
-                use $crate::producer::Producer;
-                let n = self.push_slice(buffer);
-                if n == 0 && !buffer.is_empty() {
-                    Err(std::io::ErrorKind::WouldBlock.into())
-                } else {
-                    Ok(n)
-                }
-            }
-            fn flush(&mut self) -> std::io::Result<()> {
-                Ok(())
-            }
+    #[cfg(feature = "std")]
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize>
+    where
+        Self: Producer<Item = u8>,
+    {
+        let n = self.push_slice(buffer);
+        if n == 0 && !buffer.is_empty() {
+            Err(std::io::ErrorKind::WouldBlock.into())
+        } else {
+            Ok(n)
         }
+    }
 
-        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? core::fmt::Write for $type $(< $( $param ),+ >)?
-        where
-            Self: $crate::traits::Producer<Item = u8>,
-        {
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                use $crate::producer::Producer;
-                let n = self.push_slice(s.as_bytes());
-                if n != s.len() {
-                    Err(core::fmt::Error::default())
-                } else {
-                    Ok(())
-                }
-            }
+    fn write_str(&mut self, s: &str) -> fmt::Result
+    where
+        Self: Producer<Item = u8>,
+    {
+        let n = self.push_slice(s.as_bytes());
+        if n != s.len() {
+            Err(fmt::Error::default())
+        } else {
+            Ok(())
         }
-    };
+    }
 }
 
 pub trait DelegateProducer: DelegateObserver + DelegateMut

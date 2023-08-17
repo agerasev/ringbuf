@@ -3,11 +3,12 @@ use super::{
     frozen::{FrozenCons, FrozenProd},
 };
 use crate::{
-    impl_consumer_traits, impl_producer_traits,
     rb::traits::{RbRef, ToRbRef},
     traits::{Consumer, Observe, Observer, Producer},
 };
-use core::{mem::MaybeUninit, num::NonZeroUsize};
+use core::{fmt, mem::MaybeUninit, num::NonZeroUsize};
+#[cfg(feature = "std")]
+use std::io;
 
 /// Caching producer of ring buffer.
 pub struct CachingProd<R: RbRef> {
@@ -144,8 +145,36 @@ impl<R: RbRef> Consumer for CachingCons<R> {
     }
 }
 
-impl_producer_traits!(CachingProd<R: RbRef>);
-impl_consumer_traits!(CachingCons<R: RbRef>);
+#[cfg(feature = "std")]
+impl<R: RbRef> io::Write for CachingProd<R>
+where
+    Self: Producer<Item = u8>,
+{
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        <Self as Producer>::write(self, buf)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+impl<R: RbRef> fmt::Write for CachingProd<R>
+where
+    Self: Producer<Item = u8>,
+{
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        <Self as Producer>::write_str(self, s)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<R: RbRef> io::Read for CachingCons<R>
+where
+    Self: Consumer<Item = u8>,
+{
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        <Self as Consumer>::read(self, buf)
+    }
+}
 
 impl<R: RbRef> Observe for CachingProd<R> {
     type Obs = Obs<R>;
