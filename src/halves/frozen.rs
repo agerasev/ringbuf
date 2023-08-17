@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use super::direct::Obs;
 use crate::{
     rb::traits::{RbRef, ToRbRef},

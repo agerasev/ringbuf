@@ -1,3 +1,4 @@
+use super::frozen::FrozenWrap;
 use crate::{
     rb::traits::{RbRef, ToRbRef},
     traits::{consumer::Consumer, producer::Producer, Observer},
@@ -33,6 +34,9 @@ impl<R: RbRef, const P: bool, const C: bool> Wrap<R, P, C> {
 
     pub fn observe(&self) -> Obs<R> {
         Obs { rb: self.rb.clone() }
+    }
+    pub fn freeze(self) -> FrozenWrap<R, P, C> {
+        unsafe { FrozenWrap::new(self.rb) }
     }
 }
 

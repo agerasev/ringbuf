@@ -28,6 +28,10 @@ impl<R: RbRef, const P: bool, const C: bool> CachingWrap<R, P, C> {
     pub fn observe(&self) -> Obs<R> {
         self.frozen.observe()
     }
+
+    pub fn freeze(self) -> FrozenWrap<R, P, C> {
+        self.frozen
+    }
 }
 
 impl<R: RbRef, const P: bool, const C: bool> ToRbRef for CachingWrap<R, P, C> {
