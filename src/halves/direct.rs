@@ -1,8 +1,9 @@
 use crate::{
     rb::traits::{RbRef, ToRbRef},
     traits::{
-        delegate::{self, Delegate},
-        Consumer, Observe, Producer,
+        consumer::Consumer,
+        observer::{DelegateObserver, Observe},
+        producer::Producer,
     },
 };
 use core::fmt;
@@ -72,29 +73,35 @@ impl<R: RbRef> ToRbRef for Cons<R> {
     }
 }
 
-impl<R: RbRef> Delegate for Obs<R> {
-    type Base = R::Target;
-    fn base(&self) -> &Self::Base {
+impl<R: RbRef> DelegateObserver for Obs<R> {
+    type Delegate = R::Target;
+    fn delegate(&self) -> &Self::Delegate {
         self.rb.deref()
     }
+    fn delegate_mut(&mut self) -> &mut Self::Delegate {
+        unreachable!()
+    }
 }
-impl<R: RbRef> delegate::Observer for Obs<R> {}
 
-impl<R: RbRef> Delegate for Prod<R> {
-    type Base = R::Target;
-    fn base(&self) -> &Self::Base {
+impl<R: RbRef> DelegateObserver for Prod<R> {
+    type Delegate = R::Target;
+    fn delegate(&self) -> &Self::Delegate {
         self.rb.deref()
     }
+    fn delegate_mut(&mut self) -> &mut Self::Delegate {
+        unreachable!()
+    }
 }
-impl<R: RbRef> delegate::Observer for Prod<R> {}
 
-impl<R: RbRef> Delegate for Cons<R> {
-    type Base = R::Target;
-    fn base(&self) -> &Self::Base {
+impl<R: RbRef> DelegateObserver for Cons<R> {
+    type Delegate = R::Target;
+    fn delegate(&self) -> &Self::Delegate {
         self.rb.deref()
     }
+    fn delegate_mut(&mut self) -> &mut Self::Delegate {
+        unreachable!()
+    }
 }
-impl<R: RbRef> delegate::Observer for Cons<R> {}
 
 impl<R: RbRef> Producer for Prod<R> {
     #[inline]

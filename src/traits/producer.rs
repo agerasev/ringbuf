@@ -1,5 +1,4 @@
 use super::{
-    delegate::DelegateMut,
     observer::{DelegateObserver, Observer},
     utils::modulus,
 };
@@ -159,42 +158,43 @@ pub trait Producer: Observer {
     }
 }
 
-pub trait DelegateProducer: DelegateObserver + DelegateMut
+pub trait DelegateProducer: DelegateObserver
 where
-    Self::Base: Producer,
+    Self::Delegate: Producer,
 {
 }
+
 impl<D: DelegateProducer> Producer for D
 where
-    D::Base: Producer,
+    D::Delegate: Producer,
 {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
-        self.base().set_write_index(value)
+        self.delegate().set_write_index(value)
     }
     #[inline]
     unsafe fn advance_write_index(&self, count: usize) {
-        self.base().advance_write_index(count)
+        self.delegate().advance_write_index(count)
     }
 
     #[inline]
     fn vacant_slices(&self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
-        self.base().vacant_slices()
+        self.delegate().vacant_slices()
     }
 
     #[inline]
     fn vacant_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
-        self.base_mut().vacant_slices_mut()
+        self.delegate_mut().vacant_slices_mut()
     }
 
     #[inline]
     fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
-        self.base_mut().try_push(elem)
+        self.delegate_mut().try_push(elem)
     }
 
     #[inline]
     fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, iter: I) -> usize {
-        self.base_mut().push_iter(iter)
+        self.delegate_mut().push_iter(iter)
     }
 
     #[inline]
@@ -202,6 +202,6 @@ where
     where
         Self::Item: Copy,
     {
-        self.base_mut().push_slice(elems)
+        self.delegate_mut().push_slice(elems)
     }
 }

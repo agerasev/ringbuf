@@ -56,22 +56,22 @@ pub trait RingBuffer: Observer + Consumer + Producer {
 
 pub trait DelegateRingBuffer: DelegateProducer + DelegateConsumer
 where
-    Self::Base: RingBuffer,
+    Self::Delegate: RingBuffer,
 {
 }
 
 impl<D: DelegateRingBuffer> RingBuffer for D
 where
-    D::Base: RingBuffer,
+    D::Delegate: RingBuffer,
 {
     #[inline]
     fn push_overwrite(&mut self, elem: Self::Item) -> Option<Self::Item> {
-        self.base_mut().push_overwrite(elem)
+        self.delegate_mut().push_overwrite(elem)
     }
 
     #[inline]
     fn push_iter_overwrite<I: Iterator<Item = Self::Item>>(&mut self, iter: I) {
-        self.base_mut().push_iter_overwrite(iter)
+        self.delegate_mut().push_iter_overwrite(iter)
     }
 
     #[inline]
@@ -79,6 +79,6 @@ where
     where
         Self::Item: Copy,
     {
-        self.base_mut().push_slice_overwrite(elems)
+        self.delegate_mut().push_slice_overwrite(elems)
     }
 }

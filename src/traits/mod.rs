@@ -1,5 +1,4 @@
 pub mod consumer;
-pub mod delegate;
 pub mod observer;
 pub mod producer;
 pub mod ring_buffer;
