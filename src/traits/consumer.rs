@@ -1,6 +1,6 @@
 use super::{observer::Observer, utils::modulus};
 use crate::utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice};
-use core::{iter::Chain, mem::MaybeUninit, ptr, slice};
+use core::{iter::Chain, marker::PhantomData, mem::MaybeUninit, ptr, slice};
 #[cfg(feature = "std")]
 use std::io::{self, Write};
 
@@ -106,12 +106,11 @@ pub trait Consumer: Observer {
         count
     }
 
-    fn into_iter(self) -> IntoIter<Self> {
-        IntoIter::new(self)
-    }
-
     /// Returns an iterator that removes items one by one from the ring buffer.
-    fn pop_iter(&mut self) -> PopIter<'_, Self> {
+    fn pop_iter(&mut self) -> PopIter<&mut Self, Self>
+    where
+        Self: AsMut<Self> + AsRef<Self>,
+    {
         PopIter::new(self)
     }
 
@@ -214,74 +213,34 @@ pub trait Consumer: Observer {
     }
 }
 
-pub struct IntoIter<C: Consumer>(C);
-impl<C: Consumer> IntoIter<C> {
-    pub fn new(inner: C) -> Self {
-        Self(inner)
-    }
-    pub fn into_inner(self) -> C {
-        self.0
-    }
-}
-impl<C: Consumer> Iterator for IntoIter<C> {
-    type Item = C::Item;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.try_pop()
-    }
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.0.occupied_len(), None)
-    }
-}
-
 /// An iterator that removes items from the ring buffer.
-pub struct PopIter<'a, C: Consumer> {
-    target: &'a C,
-    slices: (&'a [MaybeUninit<C::Item>], &'a [MaybeUninit<C::Item>]),
-    len: usize,
+pub struct PopIter<U: AsMut<C> + AsRef<C>, C: Consumer> {
+    inner: U,
+    _ghost: PhantomData<C>,
 }
-impl<'a, C: Consumer> PopIter<'a, C> {
-    pub fn new(target: &'a mut C) -> Self {
-        let slices = target.occupied_slices();
+
+impl<U: AsMut<C> + AsRef<C>, C: Consumer> PopIter<U, C> {
+    pub fn new(inner: U) -> Self {
         Self {
-            len: slices.0.len() + slices.1.len(),
-            slices,
-            target,
+            inner,
+            _ghost: PhantomData,
         }
     }
+    pub fn into_inner(self) -> U {
+        self.inner
+    }
 }
-impl<'a, C: Consumer> Iterator for PopIter<'a, C> {
+
+impl<U: AsMut<C> + AsRef<C>, C: Consumer> Iterator for PopIter<U, C> {
     type Item = C::Item;
+
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        match self.slices.0.len() {
-            0 => None,
-            n => {
-                let item = unsafe { self.slices.0.get_unchecked(0).assume_init_read() };
-                if n == 1 {
-                    (self.slices.0, self.slices.1) = (self.slices.1, &[]);
-                } else {
-                    self.slices.0 = unsafe { self.slices.0.get_unchecked(1..n) };
-                }
-                Some(item)
-            }
-        }
+        self.inner.as_mut().try_pop()
     }
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.len(), Some(self.len()))
-    }
-}
-impl<'a, C: Consumer> ExactSizeIterator for PopIter<'a, C> {
-    fn len(&self) -> usize {
-        self.slices.0.len() + self.slices.1.len()
-    }
-}
-impl<'a, C: Consumer> Drop for PopIter<'a, C> {
-    fn drop(&mut self) {
-        unsafe { self.target.advance_read_index(self.len - self.len()) };
+        (self.inner.as_ref().occupied_len(), None)
     }
 }
 

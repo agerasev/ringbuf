@@ -1,5 +1,6 @@
 use super::frozen::Frozen;
 use crate::{
+    consumer::PopIter,
     rb::traits::{RbRef, ToRbRef},
     traits::{consumer::Consumer, producer::Producer, Observer},
 };
@@ -48,6 +49,17 @@ impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Direct<R, P, C> {
     }
     fn into_rb_ref(self) -> R {
         self.rb
+    }
+}
+
+impl<R: RbRef, const P: bool, const C: bool> AsRef<Self> for Direct<R, P, C> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+impl<R: RbRef, const P: bool, const C: bool> AsMut<Self> for Direct<R, P, C> {
+    fn as_mut(&mut self) -> &mut Self {
+        self
     }
 }
 
@@ -104,6 +116,14 @@ where
 {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         <Self as Producer>::write_str(self, s)
+    }
+}
+
+impl<R: RbRef> IntoIterator for Cons<R> {
+    type Item = <Self as Observer>::Item;
+    type IntoIter = PopIter<Self, Self>;
+    fn into_iter(self) -> Self::IntoIter {
+        PopIter::new(self)
     }
 }
 

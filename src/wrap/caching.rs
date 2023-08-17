@@ -1,5 +1,6 @@
 use super::{direct::Obs, frozen::Frozen};
 use crate::{
+    consumer::PopIter,
     rb::traits::{RbRef, ToRbRef},
     traits::{Consumer, Observer, Producer},
 };
@@ -40,6 +41,17 @@ impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Caching<R, P, C> {
     }
     fn into_rb_ref(self) -> R {
         self.frozen.into_rb_ref()
+    }
+}
+
+impl<R: RbRef, const P: bool, const C: bool> AsRef<Self> for Caching<R, P, C> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+impl<R: RbRef, const P: bool, const C: bool> AsMut<Self> for Caching<R, P, C> {
+    fn as_mut(&mut self) -> &mut Self {
+        self
     }
 }
 
@@ -127,6 +139,14 @@ where
 {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         <Self as Producer>::write_str(self, s)
+    }
+}
+
+impl<R: RbRef> IntoIterator for CachingCons<R> {
+    type Item = <Self as Observer>::Item;
+    type IntoIter = PopIter<Self, Self>;
+    fn into_iter(self) -> Self::IntoIter {
+        PopIter::new(self)
     }
 }
 

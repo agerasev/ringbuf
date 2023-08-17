@@ -1,5 +1,6 @@
 use super::direct::Obs;
 use crate::{
+    consumer::PopIter,
     rb::traits::{RbRef, ToRbRef},
     traits::{Consumer, Observer, Producer},
 };
@@ -60,6 +61,17 @@ impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Frozen<R, P, C> {
         self.commit();
         let this = ManuallyDrop::new(self);
         unsafe { ptr::read(&this.rb) }
+    }
+}
+
+impl<R: RbRef, const P: bool, const C: bool> AsRef<Self> for Frozen<R, P, C> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+impl<R: RbRef, const P: bool, const C: bool> AsMut<Self> for Frozen<R, P, C> {
+    fn as_mut(&mut self) -> &mut Self {
+        self
     }
 }
 
@@ -166,6 +178,14 @@ where
 {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         <Self as Producer>::write_str(self, s)
+    }
+}
+
+impl<R: RbRef> IntoIterator for FrozenCons<R> {
+    type Item = <Self as Observer>::Item;
+    type IntoIter = PopIter<Self, Self>;
+    fn into_iter(self) -> Self::IntoIter {
+        PopIter::new(self)
     }
 }
 
