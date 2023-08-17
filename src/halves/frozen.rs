@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 
-use super::direct::{Cons, Obs, Prod};
+use super::direct::Obs;
 use crate::{
     rb::traits::{RbRef, ToRbRef},
-    traits::{Consumer, Observe, Observer, Producer},
+    traits::{Consumer, Observer, Producer},
 };
 use core::{
     cell::Cell,
@@ -15,11 +15,7 @@ use core::{
 #[cfg(feature = "std")]
 use std::io;
 
-/// Frozen read end of some ring buffer.
-///
-/// A free space of removed items is not visible for an opposite write end until [`Self::commit`]/[`Self::sync`] is called or `Self` is dropped.
-/// Items inserted by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
-pub struct FrozenCons<R: RbRef> {
+pub struct FrozenWrap<R: RbRef, const P: bool, const C: bool> {
     rb: R,
     read: Cell<usize>,
     write: Cell<usize>,
@@ -29,83 +25,15 @@ pub struct FrozenCons<R: RbRef> {
 ///
 /// Inserted items is not visible for an opposite write end until [`Self::commit`]/[`Self::sync`] is called or `Self` is dropped.
 /// A free space of items removed by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
-pub struct FrozenProd<R: RbRef> {
-    rb: R,
-    read: Cell<usize>,
-    write: Cell<usize>,
-}
+pub type FrozenProd<R> = FrozenWrap<R, true, false>;
 
-impl<R: RbRef> Observer for FrozenCons<R> {
-    type Item = <R::Target as Observer>::Item;
+/// Frozen read end of some ring buffer.
+///
+/// A free space of removed items is not visible for an opposite write end until [`Self::commit`]/[`Self::sync`] is called or `Self` is dropped.
+/// Items inserted by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
+pub type FrozenCons<R> = FrozenWrap<R, false, true>;
 
-    #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.rb().capacity()
-    }
-
-    #[inline]
-    fn read_index(&self) -> usize {
-        self.read.get()
-    }
-    #[inline]
-    fn write_index(&self) -> usize {
-        self.write.get()
-    }
-
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        self.rb().unsafe_slices(start, end)
-    }
-}
-
-impl<R: RbRef> Observer for FrozenProd<R> {
-    type Item = <R::Target as Observer>::Item;
-
-    #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.rb().capacity()
-    }
-
-    #[inline]
-    fn read_index(&self) -> usize {
-        self.read.get()
-    }
-    #[inline]
-    fn write_index(&self) -> usize {
-        self.write.get()
-    }
-
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        self.rb().unsafe_slices(start, end)
-    }
-}
-
-impl<R: RbRef> Consumer for FrozenCons<R> {
-    #[inline]
-    unsafe fn set_read_index(&self, value: usize) {
-        self.read.set(value);
-    }
-}
-
-impl<R: RbRef> Producer for FrozenProd<R> {
-    #[inline]
-    unsafe fn set_write_index(&self, value: usize) {
-        self.write.set(value);
-    }
-}
-
-impl<R: RbRef> Drop for FrozenCons<R> {
-    fn drop(&mut self) {
-        self.commit();
-    }
-}
-
-impl<R: RbRef> Drop for FrozenProd<R> {
-    fn drop(&mut self) {
-        self.commit();
-    }
-}
-
-impl<R: RbRef> FrozenCons<R> {
+impl<R: RbRef, const P: bool, const C: bool> FrozenWrap<R, P, C> {
     /// Create new ring buffer cache.
     ///
     /// # Safety
@@ -118,26 +46,13 @@ impl<R: RbRef> FrozenCons<R> {
             rb,
         }
     }
-    /// Commit and destroy `Self` returning underlying consumer.
-    pub fn release(self) -> Cons<R> {
-        unsafe { Cons::new(self.into_rb_ref()) }
-    }
 
-    /// Commit changes to the ring buffer.
-    pub fn commit(&self) {
-        unsafe { self.rb().set_read_index(self.read.get()) }
-    }
-    /// Fetch changes from the ring buffer.
-    pub fn fetch(&self) {
-        self.write.set(self.rb().write_index());
-    }
-    /// Commit changes to and fetch updates from the ring buffer.
-    pub fn sync(&self) {
-        self.commit();
-        self.fetch();
+    pub fn observe(&self) -> Obs<R> {
+        unsafe { Obs::new(self.rb.clone()) }
     }
 }
-impl<R: RbRef> ToRbRef for FrozenCons<R> {
+
+impl<R: RbRef, const P: bool, const C: bool> ToRbRef for FrozenWrap<R, P, C> {
     type RbRef = R;
 
     fn rb_ref(&self) -> &R {
@@ -150,38 +65,37 @@ impl<R: RbRef> ToRbRef for FrozenCons<R> {
     }
 }
 
-impl<R: RbRef> FrozenProd<R> {
-    /// Create new ring buffer cache.
-    ///
-    /// # Safety
-    ///
-    /// There must be only one instance containing the same ring buffer reference.
-    pub unsafe fn new(rb: R) -> Self {
-        Self {
-            read: Cell::new(rb.deref().read_index()),
-            write: Cell::new(rb.deref().write_index()),
-            rb,
-        }
-    }
-    /// Commit and destroy `Self` returning underlying producer.
-    pub fn release(self) -> Prod<R> {
-        unsafe { Prod::new(self.into_rb_ref()) }
-    }
-
+impl<R: RbRef, const P: bool, const C: bool> FrozenWrap<R, P, C> {
     /// Commit changes to the ring buffer.
     pub fn commit(&self) {
-        unsafe { self.rb().set_write_index(self.write.get()) }
+        unsafe {
+            if P {
+                self.rb().set_write_index(self.write.get());
+            }
+            if C {
+                self.rb().set_read_index(self.read.get());
+            }
+        }
     }
+
     /// Fetch changes from the ring buffer.
     pub fn fetch(&self) {
-        self.read.set(self.rb().read_index());
+        if P {
+            self.read.set(self.rb().read_index());
+        }
+        if C {
+            self.write.set(self.rb().write_index());
+        }
     }
+
     /// Commit changes to and fetch updates from the ring buffer.
     pub fn sync(&self) {
         self.commit();
         self.fetch();
     }
+}
 
+impl<R: RbRef> FrozenProd<R> {
     /// Discard new items pushed since last sync.
     pub fn discard(&mut self) {
         let last_tail = self.rb().write_index();
@@ -192,16 +106,46 @@ impl<R: RbRef> FrozenProd<R> {
         self.write.set(last_tail);
     }
 }
-impl<R: RbRef> ToRbRef for FrozenProd<R> {
-    type RbRef = R;
 
-    fn rb_ref(&self) -> &R {
-        &self.rb
+impl<R: RbRef, const P: bool, const C: bool> Observer for FrozenWrap<R, P, C> {
+    type Item = <R::Target as Observer>::Item;
+
+    #[inline]
+    fn capacity(&self) -> NonZeroUsize {
+        self.rb().capacity()
     }
-    fn into_rb_ref(self) -> R {
+
+    #[inline]
+    fn read_index(&self) -> usize {
+        self.read.get()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.write.get()
+    }
+
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        self.rb().unsafe_slices(start, end)
+    }
+}
+
+impl<R: RbRef> Producer for FrozenProd<R> {
+    #[inline]
+    unsafe fn set_write_index(&self, value: usize) {
+        self.write.set(value);
+    }
+}
+
+impl<R: RbRef> Consumer for FrozenCons<R> {
+    #[inline]
+    unsafe fn set_read_index(&self, value: usize) {
+        self.read.set(value);
+    }
+}
+
+impl<R: RbRef, const P: bool, const C: bool> Drop for FrozenWrap<R, P, C> {
+    fn drop(&mut self) {
         self.commit();
-        let this = ManuallyDrop::new(self);
-        unsafe { ptr::read(&this.rb) }
     }
 }
 
@@ -234,18 +178,5 @@ where
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         <Self as Consumer>::read(self, buf)
-    }
-}
-
-impl<R: RbRef> Observe for FrozenCons<R> {
-    type Obs = Obs<R>;
-    fn observe(&self) -> Self::Obs {
-        Obs::new(self.rb.clone())
-    }
-}
-impl<R: RbRef> Observe for FrozenProd<R> {
-    type Obs = Obs<R>;
-    fn observe(&self) -> Self::Obs {
-        Obs::new(self.rb.clone())
     }
 }

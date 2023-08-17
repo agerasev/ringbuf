@@ -1,8 +1,5 @@
 use super::Rb;
-use crate::{
-    storage::Static,
-    traits::{observer::Observe, *},
-};
+use crate::{storage::Static, traits::*};
 
 fn indices(this: impl Observer) -> (usize, usize) {
     (this.read_index(), this.write_index())

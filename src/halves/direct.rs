@@ -1,65 +1,42 @@
 use crate::{
     rb::traits::{RbRef, ToRbRef},
-    traits::{consumer::Consumer, observer::Observe, producer::Producer, Observer},
+    traits::{consumer::Consumer, producer::Producer, Observer},
 };
 use core::{fmt, mem::MaybeUninit, num::NonZeroUsize};
 #[cfg(feature = "std")]
 use std::io;
 
+pub struct Wrap<R: RbRef, const P: bool, const C: bool> {
+    rb: R,
+}
+
 /// Observer of ring buffer.
-#[derive(Clone)]
-pub struct Obs<R: RbRef> {
-    rb: R,
-}
+pub type Obs<R> = Wrap<R, false, false>;
 /// Producer of ring buffer.
-pub struct Prod<R: RbRef> {
-    rb: R,
-}
+pub type Prod<R> = Wrap<R, true, false>;
 /// Consumer of ring buffer.
-pub struct Cons<R: RbRef> {
-    rb: R,
-}
+pub type Cons<R> = Wrap<R, false, true>;
 
-impl<R: RbRef> Obs<R> {
-    pub fn new(rb: R) -> Self {
-        Self { rb }
+impl<R: RbRef> Clone for Obs<R> {
+    fn clone(&self) -> Self {
+        Self { rb: self.rb.clone() }
     }
 }
-impl<R: RbRef> Prod<R> {
+
+impl<R: RbRef, const P: bool, const C: bool> Wrap<R, P, C> {
     /// # Safety
     ///
-    /// There must be no more than one consumer wrapper.
+    /// There must be no more than one wrapper with the same parameter being `true`.
     pub unsafe fn new(rb: R) -> Self {
         Self { rb }
     }
-}
-impl<R: RbRef> Cons<R> {
-    /// # Safety
-    ///
-    /// There must be no more than one consumer wrapper.
-    pub unsafe fn new(rb: R) -> Self {
-        Self { rb }
+
+    pub fn observe(&self) -> Obs<R> {
+        Obs { rb: self.rb.clone() }
     }
 }
-impl<R: RbRef> ToRbRef for Obs<R> {
-    type RbRef = R;
-    fn rb_ref(&self) -> &R {
-        &self.rb
-    }
-    fn into_rb_ref(self) -> R {
-        self.rb
-    }
-}
-impl<R: RbRef> ToRbRef for Prod<R> {
-    type RbRef = R;
-    fn rb_ref(&self) -> &R {
-        &self.rb
-    }
-    fn into_rb_ref(self) -> R {
-        self.rb
-    }
-}
-impl<R: RbRef> ToRbRef for Cons<R> {
+
+impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Wrap<R, P, C> {
     type RbRef = R;
     fn rb_ref(&self) -> &R {
         &self.rb
@@ -69,7 +46,7 @@ impl<R: RbRef> ToRbRef for Cons<R> {
     }
 }
 
-impl<R: RbRef> Observer for Obs<R> {
+impl<R: RbRef, const P: bool, const C: bool> Observer for Wrap<R, P, C> {
     type Item = <R::Target as Observer>::Item;
 
     #[inline]
@@ -85,49 +62,7 @@ impl<R: RbRef> Observer for Obs<R> {
         self.rb().write_index()
     }
     #[inline]
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
-        self.rb().unsafe_slices(start, end)
-    }
-}
-
-impl<R: RbRef> Observer for Prod<R> {
-    type Item = <R::Target as Observer>::Item;
-
-    #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.rb().capacity()
-    }
-    #[inline]
-    fn read_index(&self) -> usize {
-        self.rb().read_index()
-    }
-    #[inline]
-    fn write_index(&self) -> usize {
-        self.rb().write_index()
-    }
-    #[inline]
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
-        self.rb().unsafe_slices(start, end)
-    }
-}
-
-impl<R: RbRef> Observer for Cons<R> {
-    type Item = <R::Target as Observer>::Item;
-
-    #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.rb().capacity()
-    }
-    #[inline]
-    fn read_index(&self) -> usize {
-        self.rb().read_index()
-    }
-    #[inline]
-    fn write_index(&self) -> usize {
-        self.rb().write_index()
-    }
-    #[inline]
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
         self.rb().unsafe_slices(start, end)
     }
 }
@@ -174,24 +109,5 @@ where
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         <Self as Consumer>::read(self, buf)
-    }
-}
-
-impl<R: RbRef> Observe for Obs<R> {
-    type Obs = Self;
-    fn observe(&self) -> Self::Obs {
-        self.clone()
-    }
-}
-impl<R: RbRef> Observe for Prod<R> {
-    type Obs = Obs<R>;
-    fn observe(&self) -> Self::Obs {
-        Obs::new(self.rb.clone())
-    }
-}
-impl<R: RbRef> Observe for Cons<R> {
-    type Obs = Obs<R>;
-    fn observe(&self) -> Self::Obs {
-        Obs::new(self.rb.clone())
     }
 }

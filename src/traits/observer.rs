@@ -46,8 +46,3 @@ pub trait Observer: Sized {
         self.vacant_len() == 0
     }
 }
-
-pub trait Observe {
-    type Obs: Observer;
-    fn observe(&self) -> Self::Obs;
-}
