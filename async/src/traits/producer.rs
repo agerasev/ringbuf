@@ -1,4 +1,4 @@
-use crate::halves::AsyncProd;
+use crate::wrap::AsyncProd;
 
 use super::{AsyncObserver, AsyncRingBuffer};
 use core::{

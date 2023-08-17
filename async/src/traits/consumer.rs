@@ -1,5 +1,5 @@
 use super::{AsyncObserver, AsyncRingBuffer};
-use crate::halves::AsyncCons;
+use crate::wrap::AsyncCons;
 use core::{
     future::Future,
     pin::Pin,

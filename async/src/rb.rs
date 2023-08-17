@@ -1,10 +1,12 @@
 use crate::{
-    halves::{AsyncCons, AsyncProd},
     traits::{AsyncConsumer, AsyncObserver, AsyncProducer, AsyncRingBuffer},
+    wrap::{AsyncCons, AsyncProd},
 };
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
 use core::{
+    mem::MaybeUninit,
+    num::NonZeroUsize,
     sync::atomic::{AtomicBool, Ordering},
     task::Waker,
 };
@@ -12,12 +14,8 @@ use futures::task::AtomicWaker;
 #[cfg(feature = "alloc")]
 use ringbuf::traits::Split;
 use ringbuf::{
-    impl_consumer_traits, impl_producer_traits,
     storage::Storage,
-    traits::{
-        delegate::{self, Delegate},
-        Consumer, Producer, RingBuffer, SplitRef,
-    },
+    traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
     SharedRb,
 };
 
@@ -41,13 +39,28 @@ impl<S: Storage> AsyncRb<S> {
 
 impl<S: Storage> Unpin for AsyncRb<S> {}
 
-impl<S: Storage> Delegate for AsyncRb<S> {
-    type Base = SharedRb<S>;
-    fn base(&self) -> &Self::Base {
-        &self.base
+impl<S: Storage> Observer for AsyncRb<S> {
+    type Item = S::Item;
+
+    #[inline]
+    fn capacity(&self) -> NonZeroUsize {
+        self.base.capacity()
+    }
+
+    #[inline]
+    fn read_index(&self) -> usize {
+        self.base.read_index()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.base.write_index()
+    }
+
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
+        self.base.unsafe_slices(start, end)
     }
 }
-impl<S: Storage> delegate::Observer for AsyncRb<S> {}
+
 impl<S: Storage> Producer for AsyncRb<S> {
     unsafe fn set_write_index(&self, value: usize) {
         self.base.set_write_index(value);
@@ -107,6 +120,3 @@ impl<S: Storage> Split for AsyncRb<S> {
         unsafe { (AsyncProd::new(arc.clone()), AsyncCons::new(arc)) }
     }
 }
-
-impl_producer_traits!(AsyncRb<S: Storage>);
-impl_consumer_traits!(AsyncRb<S: Storage>);

@@ -8,10 +8,10 @@ extern crate alloc;
 extern crate std;
 
 mod alias;
-pub mod halves;
 pub mod rb;
 pub mod traits;
 mod transfer;
+pub mod wrap;
 
 pub use alias::*;
 pub use rb::AsyncRb;
