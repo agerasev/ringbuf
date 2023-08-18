@@ -1,4 +1,7 @@
-use super::{observer::Observer, utils::modulus};
+use super::{
+    observer::{DelegateObserver, Observer},
+    utils::modulus,
+};
 use crate::utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice};
 use core::{iter::Chain, marker::PhantomData, mem::MaybeUninit, ptr, slice};
 #[cfg(feature = "std")]
@@ -255,3 +258,75 @@ pub type Iter<'a, C: Consumer> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a,
 /// *Please do not rely on actual type, it may change in future.*
 #[allow(type_alias_bounds)]
 pub type IterMut<'a, C: Consumer> = Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
+
+pub trait DelegateConsumer: DelegateObserver
+where
+    Self::Base: Consumer,
+{
+}
+impl<D: DelegateConsumer> Consumer for D
+where
+    D::Base: Consumer,
+{
+    #[inline]
+    unsafe fn set_read_index(&self, value: usize) {
+        self.base().set_read_index(value)
+    }
+    #[inline]
+    unsafe fn advance_read_index(&self, count: usize) {
+        self.base().advance_read_index(count)
+    }
+
+    #[inline]
+    fn occupied_slices(&self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
+        self.base().occupied_slices()
+    }
+
+    #[inline]
+    unsafe fn occupied_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
+        self.base_mut().occupied_slices_mut()
+    }
+
+    #[inline]
+    fn as_slices(&self) -> (&[Self::Item], &[Self::Item]) {
+        self.base().as_slices()
+    }
+
+    #[inline]
+    fn as_mut_slices(&mut self) -> (&mut [Self::Item], &mut [Self::Item]) {
+        self.base_mut().as_mut_slices()
+    }
+
+    #[inline]
+    fn try_pop(&mut self) -> Option<Self::Item> {
+        self.base_mut().try_pop()
+    }
+
+    #[inline]
+    fn pop_slice(&mut self, elems: &mut [Self::Item]) -> usize
+    where
+        Self::Item: Copy,
+    {
+        self.base_mut().pop_slice(elems)
+    }
+
+    #[inline]
+    fn iter(&self) -> Iter<'_, Self> {
+        self.base().iter()
+    }
+
+    #[inline]
+    fn iter_mut(&mut self) -> IterMut<'_, Self> {
+        self.base_mut().iter_mut()
+    }
+
+    #[inline]
+    fn skip(&mut self, count: usize) -> usize {
+        self.base_mut().skip(count)
+    }
+
+    #[inline]
+    fn clear(&mut self) -> usize {
+        self.base_mut().clear()
+    }
+}

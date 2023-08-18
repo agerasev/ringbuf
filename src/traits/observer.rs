@@ -1,4 +1,4 @@
-use super::utils::modulus;
+use super::{utils::modulus, Based};
 use core::{mem::MaybeUninit, num::NonZeroUsize};
 
 pub trait Observer: Sized {
@@ -49,5 +49,66 @@ pub trait Observer: Sized {
     #[inline]
     fn is_full(&self) -> bool {
         self.vacant_len() == 0
+    }
+}
+
+pub trait DelegateObserver: Based
+where
+    Self::Base: Observer,
+{
+}
+
+impl<D: DelegateObserver> Observer for D
+where
+    D::Base: Observer,
+{
+    type Item = <D::Base as Observer>::Item;
+
+    #[inline]
+    fn capacity(&self) -> NonZeroUsize {
+        self.base().capacity()
+    }
+
+    #[inline]
+    fn read_index(&self) -> usize {
+        self.base().read_index()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.base().write_index()
+    }
+
+    #[inline]
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        self.base().unsafe_slices(start, end)
+    }
+
+    #[inline]
+    fn read_is_held(&self) -> bool {
+        self.base().read_is_held()
+    }
+    #[inline]
+    fn write_is_held(&self) -> bool {
+        self.base().write_is_held()
+    }
+
+    #[inline]
+    fn occupied_len(&self) -> usize {
+        self.base().occupied_len()
+    }
+
+    #[inline]
+    fn vacant_len(&self) -> usize {
+        self.base().vacant_len()
+    }
+
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.base().is_empty()
+    }
+
+    #[inline]
+    fn is_full(&self) -> bool {
+        self.base().is_full()
     }
 }

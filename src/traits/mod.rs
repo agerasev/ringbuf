@@ -10,3 +10,4 @@ pub use observer::Observer;
 pub use producer::Producer;
 pub use ring_buffer::RingBuffer;
 pub use split::{Split, SplitRef};
+pub use utils::Based;

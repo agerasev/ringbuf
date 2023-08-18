@@ -1,4 +1,8 @@
-use super::{consumer::Consumer, producer::Producer, Observer};
+use super::{
+    consumer::{Consumer, DelegateConsumer},
+    producer::{DelegateProducer, Producer},
+    Observer,
+};
 
 /// An abstract ring buffer.
 ///
@@ -13,6 +17,9 @@ use super::{consumer::Consumer, producer::Producer, Observer};
 /// without using the space for an extra element in container.
 /// And obviously we cannot store more than `capacity` items in the buffer, so `write - read` modulo `2 * capacity` is not allowed to be greater than `capacity`.
 pub trait RingBuffer: Observer + Consumer + Producer {
+    unsafe fn hold_read(&self, flag: bool);
+    unsafe fn hold_write(&self, flag: bool);
+
     /// Pushes an item to the ring buffer overwriting the latest item if the buffer is full.
     ///
     /// Returns overwritten item if overwriting took place.
@@ -48,7 +55,40 @@ pub trait RingBuffer: Observer + Consumer + Producer {
             elems
         });
     }
+}
 
-    unsafe fn hold_read(&self, flag: bool);
-    unsafe fn hold_write(&self, flag: bool);
+pub trait DelegateRingBuffer: DelegateProducer + DelegateConsumer
+where
+    Self::Base: RingBuffer,
+{
+}
+
+impl<D: DelegateRingBuffer> RingBuffer for D
+where
+    D::Base: RingBuffer,
+{
+    unsafe fn hold_read(&self, flag: bool) {
+        self.base().hold_read(flag);
+    }
+    unsafe fn hold_write(&self, flag: bool) {
+        self.base().hold_write(flag);
+    }
+
+    #[inline]
+    fn push_overwrite(&mut self, elem: Self::Item) -> Option<Self::Item> {
+        self.base_mut().push_overwrite(elem)
+    }
+
+    #[inline]
+    fn push_iter_overwrite<I: Iterator<Item = Self::Item>>(&mut self, iter: I) {
+        self.base_mut().push_iter_overwrite(iter)
+    }
+
+    #[inline]
+    fn push_slice_overwrite(&mut self, elems: &[Self::Item])
+    where
+        Self::Item: Copy,
+    {
+        self.base_mut().push_slice_overwrite(elems)
+    }
 }

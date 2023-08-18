@@ -8,28 +8,15 @@ use futures::io::AsyncRead;
 use futures::Stream;
 use ringbuf::{
     rb::traits::ToRbRef,
-    traits::{Consumer, Observer, RingBuffer},
+    traits::{
+        consumer::{Consumer, DelegateConsumer},
+        Observer,
+    },
 };
 #[cfg(feature = "std")]
 use std::io;
 
-impl<R: AsyncRbRef> Consumer for AsyncCons<R> {
-    #[inline]
-    unsafe fn set_read_index(&self, value: usize) {
-        self.base().set_read_index(value)
-    }
-    #[inline]
-    fn try_pop(&mut self) -> Option<Self::Item> {
-        self.base_mut().try_pop()
-    }
-    #[inline]
-    fn pop_slice(&mut self, elems: &mut [Self::Item]) -> usize
-    where
-        Self::Item: Copy,
-    {
-        self.base_mut().pop_slice(elems)
-    }
-}
+impl<R: AsyncRbRef> DelegateConsumer for AsyncCons<R> {}
 
 impl<R: AsyncRbRef> AsyncConsumer for AsyncCons<R> {
     fn register_waker(&self, waker: &core::task::Waker) {
@@ -67,7 +54,7 @@ impl<R: AsyncRbRef> Stream for AsyncCons<R> {
 #[cfg(feature = "std")]
 impl<R: AsyncRbRef> AsyncRead for AsyncCons<R>
 where
-    R::Target: RingBuffer<Item = u8>,
+    Self: AsyncConsumer<Item = u8>,
 {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         let mut waker_registered = false;

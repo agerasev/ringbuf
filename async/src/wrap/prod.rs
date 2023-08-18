@@ -8,33 +8,15 @@ use futures::io::AsyncWrite;
 use futures::{ready, Sink};
 use ringbuf::{
     rb::traits::ToRbRef,
-    traits::{Observer, Producer, RingBuffer},
+    traits::{
+        producer::{DelegateProducer, Producer},
+        Observer, RingBuffer,
+    },
 };
 #[cfg(feature = "std")]
 use std::io;
 
-impl<R: AsyncRbRef> Producer for AsyncProd<R> {
-    #[inline]
-    unsafe fn set_write_index(&self, value: usize) {
-        self.base().set_write_index(value)
-    }
-
-    #[inline]
-    fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
-        self.base_mut().try_push(elem)
-    }
-    #[inline]
-    fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, iter: I) -> usize {
-        self.base_mut().push_iter(iter)
-    }
-    #[inline]
-    fn push_slice(&mut self, elems: &[Self::Item]) -> usize
-    where
-        Self::Item: Copy,
-    {
-        self.base_mut().push_slice(elems)
-    }
-}
+impl<R: AsyncRbRef> DelegateProducer for AsyncProd<R> {}
 
 impl<R: AsyncRbRef> AsyncProducer for AsyncProd<R> {
     fn register_waker(&self, waker: &core::task::Waker) {
