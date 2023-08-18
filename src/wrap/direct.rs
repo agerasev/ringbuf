@@ -37,11 +37,11 @@ impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
     pub fn new(rb: R) -> Self {
         if P {
             assert!(!rb.deref().write_is_held());
-            rb.deref().hold_write(true);
+            unsafe { rb.deref().hold_write(true) };
         }
         if C {
             assert!(!rb.deref().read_is_held());
-            rb.deref().hold_read(true);
+            unsafe { rb.deref().hold_read(true) };
         }
         Self { rb }
     }
@@ -55,7 +55,10 @@ impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
         unsafe { Frozen::new_unchecked(ptr::read(&this.rb)) }
     }
 
-    pub fn close(&mut self) {
+    /// # Safety
+    ///
+    /// Must not be used after this call.
+    unsafe fn close(&mut self) {
         if P {
             self.rb().hold_write(false);
         }
@@ -71,9 +74,11 @@ impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Direct<R, P, C> {
         &self.rb
     }
     fn into_rb_ref(mut self) -> R {
-        self.close();
-        let this = ManuallyDrop::new(self);
-        unsafe { ptr::read(&this.rb) }
+        unsafe {
+            self.close();
+            let this = ManuallyDrop::new(self);
+            ptr::read(&this.rb)
+        }
     }
 }
 
@@ -133,7 +138,7 @@ impl<R: RbRef> Consumer for Cons<R> {
 
 impl<R: RbRef, const P: bool, const C: bool> Drop for Direct<R, P, C> {
     fn drop(&mut self) {
-        self.close();
+        unsafe { self.close() };
     }
 }
 

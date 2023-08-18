@@ -16,23 +16,23 @@ use std::io;
 impl<R: AsyncRbRef> Producer for AsyncProd<R> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
-        self.base.set_write_index(value)
+        self.base().set_write_index(value)
     }
 
     #[inline]
     fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
-        self.base.try_push(elem)
+        self.base_mut().try_push(elem)
     }
     #[inline]
     fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, iter: I) -> usize {
-        self.base.push_iter(iter)
+        self.base_mut().push_iter(iter)
     }
     #[inline]
     fn push_slice(&mut self, elems: &[Self::Item]) -> usize
     where
         Self::Item: Copy,
     {
-        self.base.push_slice(elems)
+        self.base_mut().push_slice(elems)
     }
 }
 
@@ -43,7 +43,7 @@ impl<R: AsyncRbRef> AsyncProducer for AsyncProd<R> {
 
     #[inline]
     fn close(&mut self) {
-        self.base.close();
+        drop(self.base.take());
     }
 }
 

@@ -82,12 +82,12 @@ impl<S: Storage> Consumer for AsyncRb<S> {
 }
 impl<S: Storage> RingBuffer for AsyncRb<S> {
     #[inline]
-    fn hold_read(&self, flag: bool) {
+    unsafe fn hold_read(&self, flag: bool) {
         self.base.hold_read(flag);
         self.read.wake()
     }
     #[inline]
-    fn hold_write(&self, flag: bool) {
+    unsafe fn hold_write(&self, flag: bool) {
         self.base.hold_write(flag);
         self.write.wake()
     }

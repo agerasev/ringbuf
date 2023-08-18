@@ -31,10 +31,6 @@ impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
     pub fn freeze(self) -> Frozen<R, P, C> {
         self.frozen
     }
-
-    pub fn close(&mut self) {
-        self.frozen.close();
-    }
 }
 
 impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Caching<R, P, C> {

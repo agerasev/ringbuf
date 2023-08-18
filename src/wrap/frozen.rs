@@ -41,11 +41,11 @@ impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
     pub fn new(rb: R) -> Self {
         if P {
             assert!(!rb.deref().write_is_held());
-            rb.deref().hold_write(true);
+            unsafe { rb.deref().hold_write(true) };
         }
         if C {
             assert!(!rb.deref().read_is_held());
-            rb.deref().hold_read(true);
+            unsafe { rb.deref().hold_read(true) };
         }
         unsafe { Self::new_unchecked(rb) }
     }
@@ -62,7 +62,7 @@ impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
         Obs::new(self.rb.clone())
     }
 
-    pub fn close(&mut self) {
+    unsafe fn close(&mut self) {
         if P {
             self.rb().hold_write(false);
         }
@@ -80,9 +80,11 @@ impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Frozen<R, P, C> {
     }
     fn into_rb_ref(mut self) -> R {
         self.commit();
-        self.close();
-        let this = ManuallyDrop::new(self);
-        unsafe { ptr::read(&this.rb) }
+        unsafe {
+            self.close();
+            let this = ManuallyDrop::new(self);
+            ptr::read(&this.rb)
+        }
     }
 }
 
@@ -187,7 +189,7 @@ impl<R: RbRef> Consumer for FrozenCons<R> {
 impl<R: RbRef, const P: bool, const C: bool> Drop for Frozen<R, P, C> {
     fn drop(&mut self) {
         self.commit();
-        self.close();
+        unsafe { self.close() };
     }
 }
 

@@ -16,18 +16,18 @@ use std::io;
 impl<R: AsyncRbRef> Consumer for AsyncCons<R> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
-        self.base.set_read_index(value)
+        self.base().set_read_index(value)
     }
     #[inline]
     fn try_pop(&mut self) -> Option<Self::Item> {
-        self.base.try_pop()
+        self.base_mut().try_pop()
     }
     #[inline]
     fn pop_slice(&mut self, elems: &mut [Self::Item]) -> usize
     where
         Self::Item: Copy,
     {
-        self.base.pop_slice(elems)
+        self.base_mut().pop_slice(elems)
     }
 }
 
@@ -38,7 +38,7 @@ impl<R: AsyncRbRef> AsyncConsumer for AsyncCons<R> {
 
     #[inline]
     fn close(&mut self) {
-        self.base.close();
+        drop(self.base.take());
     }
 }
 
