@@ -20,7 +20,7 @@ impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
-    pub unsafe fn new(rb: R) -> Self {
+    pub fn new(rb: R) -> Self {
         Self { frozen: Frozen::new(rb) }
     }
 
@@ -80,6 +80,15 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Caching<R, P, C> {
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
         self.frozen.unsafe_slices(start, end)
+    }
+
+    #[inline]
+    fn read_is_held(&self) -> bool {
+        self.frozen.read_is_held()
+    }
+    #[inline]
+    fn write_is_held(&self) -> bool {
+        self.frozen.write_is_held()
     }
 }
 
