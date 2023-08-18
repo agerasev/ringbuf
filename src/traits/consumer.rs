@@ -203,7 +203,7 @@ pub trait Consumer: Observer {
     }
 
     #[cfg(feature = "std")]
-    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize>
+    fn try_read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize>
     where
         Self: Consumer<Item = u8>,
     {
@@ -330,3 +330,26 @@ where
         self.base_mut().clear()
     }
 }
+
+macro_rules! impl_consumer_traits {
+    ($type:ident $(< $( $param:tt $( : $first_bound:tt $(+ $next_bound:tt )* )? ),+ >)?) => {
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? core::iter::IntoIterator for $type $(< $( $param ),+ >)? {
+            type Item = <Self as $crate::traits::Observer>::Item;
+            type IntoIter = $crate::traits::consumer::PopIter<Self, Self>;
+            fn into_iter(self) -> Self::IntoIter {
+                $crate::traits::consumer::PopIter::new(self)
+            }
+        }
+
+        #[cfg(feature = "std")]
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? std::io::Read for $type $(< $( $param ),+ >)?
+        where
+            Self: $crate::traits::Consumer<Item = u8>,
+        {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                <Self as $crate::traits::Consumer>::try_read(self, buf)
+            }
+        }
+    };
+}
+pub(crate) use impl_consumer_traits;

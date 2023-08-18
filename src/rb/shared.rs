@@ -3,21 +3,22 @@ use super::{macros::rb_impl_init, utils::ranges};
 use crate::traits::Split;
 use crate::{
     storage::{Shared, Static, Storage},
-    traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
+    traits::{
+        consumer::{impl_consumer_traits, Consumer},
+        producer::{impl_producer_traits, Producer},
+        Observer, RingBuffer, SplitRef,
+    },
     wrap::{CachingCons, CachingProd},
 };
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
 use core::{
-    fmt,
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
     ptr,
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use crossbeam_utils::CachePadded;
-#[cfg(feature = "std")]
-use std::io;
 
 /// Ring buffer that can be shared between threads.
 ///
@@ -162,24 +163,16 @@ impl<S: Storage> SplitRef for SharedRb<S> {
 
 rb_impl_init!(SharedRb);
 
-#[cfg(feature = "std")]
-impl<S: Storage<Item = u8>> io::Write for SharedRb<S> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        <Self as Producer>::write(self, buf)
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-impl<S: Storage<Item = u8>> fmt::Write for SharedRb<S> {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        <Self as Producer>::write_str(self, s)
-    }
-}
+impl_producer_traits!(SharedRb<S: Storage>);
+impl_consumer_traits!(SharedRb<S: Storage>);
 
-#[cfg(feature = "std")]
-impl<S: Storage<Item = u8>> io::Read for SharedRb<S> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        <Self as Consumer>::read(self, buf)
+impl<S: Storage> AsRef<Self> for SharedRb<S> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+impl<S: Storage> AsMut<Self> for SharedRb<S> {
+    fn as_mut(&mut self) -> &mut Self {
+        self
     }
 }

@@ -1,12 +1,13 @@
 use super::{direct::Obs, frozen::Frozen};
 use crate::{
-    consumer::PopIter,
     rb::traits::{RbRef, ToRbRef},
-    traits::{Consumer, Observer, Producer},
+    traits::{
+        consumer::{impl_consumer_traits, Consumer},
+        producer::{impl_producer_traits, Producer},
+        Observer,
+    },
 };
-use core::{fmt, mem::MaybeUninit, num::NonZeroUsize};
-#[cfg(feature = "std")]
-use std::io;
+use core::{mem::MaybeUninit, num::NonZeroUsize};
 
 /// Caching wrapper of ring buffer.
 pub struct Caching<R: RbRef, const P: bool, const C: bool> {
@@ -130,41 +131,5 @@ impl<R: RbRef> Consumer for CachingCons<R> {
     }
 }
 
-#[cfg(feature = "std")]
-impl<R: RbRef> io::Write for CachingProd<R>
-where
-    Self: Producer<Item = u8>,
-{
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        <Self as Producer>::write(self, buf)
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-impl<R: RbRef> fmt::Write for CachingProd<R>
-where
-    Self: Producer<Item = u8>,
-{
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        <Self as Producer>::write_str(self, s)
-    }
-}
-
-impl<R: RbRef> IntoIterator for CachingCons<R> {
-    type Item = <Self as Observer>::Item;
-    type IntoIter = PopIter<Self, Self>;
-    fn into_iter(self) -> Self::IntoIter {
-        PopIter::new(self)
-    }
-}
-
-#[cfg(feature = "std")]
-impl<R: RbRef> io::Read for CachingCons<R>
-where
-    Self: Consumer<Item = u8>,
-{
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        <Self as Consumer>::read(self, buf)
-    }
-}
+impl_producer_traits!(CachingProd<R: RbRef>);
+impl_consumer_traits!(CachingCons<R: RbRef>);
