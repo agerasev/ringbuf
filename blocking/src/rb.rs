@@ -1,21 +1,18 @@
 #[cfg(feature = "std")]
 use crate::sync::StdSemaphore;
 use crate::{
-    halves::{BlockingCons, BlockingProd},
     sync::Semaphore,
     traits::{BlockingConsumer, BlockingProducer},
+    wrap::{BlockingCons, BlockingProd},
 };
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
-use core::time::Duration;
+use core::{mem::MaybeUninit, num::NonZeroUsize, time::Duration};
 #[cfg(feature = "alloc")]
 use ringbuf::traits::Split;
 use ringbuf::{
     storage::Storage,
-    traits::{
-        delegate::{self, Delegate},
-        Consumer, Observer, Producer, RingBuffer, SplitRef,
-    },
+    traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
     SharedRb,
 };
 
@@ -42,13 +39,36 @@ impl<S: Storage, X: Semaphore> BlockingRb<S, X> {
     }
 }
 
-impl<S: Storage, X: Semaphore> Delegate for BlockingRb<S, X> {
-    type Base = SharedRb<S>;
-    fn base(&self) -> &Self::Base {
-        &self.base
+impl<S: Storage, X: Semaphore> Observer for BlockingRb<S, X> {
+    type Item = S::Item;
+
+    #[inline]
+    fn capacity(&self) -> NonZeroUsize {
+        self.base.capacity()
+    }
+
+    #[inline]
+    fn read_index(&self) -> usize {
+        self.base.read_index()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.base.write_index()
+    }
+
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
+        self.base.unsafe_slices(start, end)
+    }
+
+    #[inline]
+    fn read_is_held(&self) -> bool {
+        self.base.read_is_held()
+    }
+    #[inline]
+    fn write_is_held(&self) -> bool {
+        self.base.write_is_held()
     }
 }
-impl<S: Storage, X: Semaphore> delegate::Observer for BlockingRb<S, X> {}
 impl<S: Storage, X: Semaphore> Producer for BlockingRb<S, X> {
     unsafe fn set_write_index(&self, value: usize) {
         self.write.notify(|| self.base.set_write_index(value));
@@ -59,7 +79,14 @@ impl<S: Storage, X: Semaphore> Consumer for BlockingRb<S, X> {
         self.read.notify(|| self.base.set_read_index(value));
     }
 }
-impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {}
+impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {
+    unsafe fn hold_read(&self, flag: bool) {
+        self.base.hold_read(flag);
+    }
+    unsafe fn hold_write(&self, flag: bool) {
+        self.base.hold_write(flag);
+    }
+}
 
 impl<S: Storage, X: Semaphore> BlockingProducer for BlockingRb<S, X> {
     type Instant = X::Instant;
@@ -81,7 +108,7 @@ impl<S: Storage, X: Semaphore> SplitRef for BlockingRb<S, X> {
     type RefCons<'a> = BlockingCons<&'a Self> where Self: 'a;
 
     fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
-        unsafe { (BlockingProd::new(self), BlockingCons::new(self)) }
+        (BlockingProd::new(self), BlockingCons::new(self))
     }
 }
 #[cfg(feature = "alloc")]
@@ -91,6 +118,6 @@ impl<S: Storage, X: Semaphore> Split for BlockingRb<S, X> {
 
     fn split(self) -> (Self::Prod, Self::Cons) {
         let arc = Arc::new(self);
-        unsafe { (BlockingProd::new(arc.clone()), BlockingCons::new(arc)) }
+        (BlockingProd::new(arc.clone()), BlockingCons::new(arc))
     }
 }
