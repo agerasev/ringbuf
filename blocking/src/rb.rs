@@ -2,15 +2,15 @@
 use crate::sync::StdSemaphore;
 use crate::{
     sync::Semaphore,
-    traits::{BlockingConsumer, BlockingProducer},
     wrap::{BlockingCons, BlockingProd},
 };
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
-use core::{mem::MaybeUninit, num::NonZeroUsize, time::Duration};
+use core::{mem::MaybeUninit, num::NonZeroUsize};
 #[cfg(feature = "alloc")]
 use ringbuf::traits::Split;
 use ringbuf::{
+    rb::traits::RbRef,
     storage::Storage,
     traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
     SharedRb,
@@ -25,8 +25,8 @@ pub struct BlockingRb<S: Storage, X: Semaphore> {
 #[cfg(feature = "std")]
 pub struct BlockingRb<S: Storage, X: Semaphore = StdSemaphore> {
     base: SharedRb<S>,
-    read: X,
-    write: X,
+    pub(crate) read: X,
+    pub(crate) write: X,
 }
 
 impl<S: Storage, X: Semaphore> BlockingRb<S, X> {
@@ -88,21 +88,6 @@ impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {
     }
 }
 
-impl<S: Storage, X: Semaphore> BlockingProducer for BlockingRb<S, X> {
-    type Instant = X::Instant;
-    fn wait_vacant(&self, count: usize, timeout: Option<Duration>) -> bool {
-        debug_assert!(count <= self.capacity().get());
-        self.read.wait(|| self.vacant_len() >= count, timeout)
-    }
-}
-impl<S: Storage, X: Semaphore> BlockingConsumer for BlockingRb<S, X> {
-    type Instant = X::Instant;
-    fn wait_occupied(&self, count: usize, timeout: Option<Duration>) -> bool {
-        debug_assert!(count <= self.capacity().get());
-        self.write.wait(|| self.occupied_len() >= count, timeout)
-    }
-}
-
 impl<S: Storage, X: Semaphore> SplitRef for BlockingRb<S, X> {
     type RefProd<'a> = BlockingProd<&'a Self> where Self: 'a;
     type RefCons<'a> = BlockingCons<&'a Self> where Self: 'a;
@@ -120,4 +105,13 @@ impl<S: Storage, X: Semaphore> Split for BlockingRb<S, X> {
         let arc = Arc::new(self);
         (BlockingProd::new(arc.clone()), BlockingCons::new(arc))
     }
+}
+
+pub trait BlockingRbRef: RbRef<Target = BlockingRb<Self::Storage, Self::Semaphore>> {
+    type Storage: Storage;
+    type Semaphore: Semaphore;
+}
+impl<S: Storage, X: Semaphore, R: RbRef<Target = BlockingRb<S, X>>> BlockingRbRef for R {
+    type Storage = S;
+    type Semaphore = X;
 }

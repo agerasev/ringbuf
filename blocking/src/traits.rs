@@ -8,8 +8,11 @@ pub trait BlockingProducer: Producer {
 
     fn wait_vacant(&self, count: usize, timeout: Option<Duration>) -> bool;
 
-    fn push(&mut self, item: Self::Item, timeout: Option<Duration>) -> Result<(), Self::Item> {
-        if self.wait_vacant(1, timeout) {
+    fn set_timeout(&mut self, timeout: Option<Duration>);
+    fn timeout(&self) -> Option<Duration>;
+
+    fn push(&mut self, item: Self::Item) -> Result<(), Self::Item> {
+        if self.wait_vacant(1, self.timeout()) {
             assert!(self.try_push(item).is_ok());
             Ok(())
         } else {
@@ -17,10 +20,10 @@ pub trait BlockingProducer: Producer {
         }
     }
 
-    fn push_iter_all<I: Iterator<Item = Self::Item>>(&mut self, iter: I, timeout: Option<Duration>) -> usize {
+    fn push_iter_all<I: Iterator<Item = Self::Item>>(&mut self, iter: I) -> usize {
         let mut count = 0;
         let mut iter = iter.peekable();
-        for timeout in TimeoutIterator::<Self::Instant>::new(timeout) {
+        for timeout in TimeoutIterator::<Self::Instant>::new(self.timeout()) {
             if iter.peek().is_none() {
                 break;
             }
@@ -31,12 +34,12 @@ pub trait BlockingProducer: Producer {
         count
     }
 
-    fn push_slice_all(&mut self, mut slice: &[Self::Item], timeout: Option<Duration>) -> usize
+    fn push_slice_all(&mut self, mut slice: &[Self::Item]) -> usize
     where
         Self::Item: Copy,
     {
         let mut count = 0;
-        for timeout in TimeoutIterator::<Self::Instant>::new(timeout) {
+        for timeout in TimeoutIterator::<Self::Instant>::new(self.timeout()) {
             if slice.is_empty() {
                 break;
             }
@@ -55,24 +58,27 @@ pub trait BlockingConsumer: Consumer {
 
     fn wait_occupied(&self, count: usize, timeout: Option<Duration>) -> bool;
 
-    fn pop_wait(&mut self, timeout: Option<Duration>) -> Option<Self::Item> {
-        if self.wait_occupied(1, timeout) {
+    fn set_timeout(&mut self, timeout: Option<Duration>);
+    fn timeout(&self) -> Option<Duration>;
+
+    fn pop_wait(&mut self) -> Option<Self::Item> {
+        if self.wait_occupied(1, self.timeout()) {
             Some(self.try_pop().unwrap())
         } else {
             None
         }
     }
 
-    fn pop_iter_all(&mut self, timeout: Option<Duration>) -> PopAllIter<'_, Self> {
-        PopAllIter::new(self, timeout)
+    fn pop_iter_all(&mut self) -> PopAllIter<'_, Self> {
+        PopAllIter::new(self, self.timeout())
     }
 
-    fn pop_slice_all(&mut self, mut slice: &mut [Self::Item], timeout: Option<Duration>) -> usize
+    fn pop_slice_all(&mut self, mut slice: &mut [Self::Item]) -> usize
     where
         Self::Item: Copy,
     {
         let mut count = 0;
-        for timeout in TimeoutIterator::<Self::Instant>::new(timeout) {
+        for timeout in TimeoutIterator::<Self::Instant>::new(self.timeout()) {
             if slice.is_empty() {
                 break;
             }

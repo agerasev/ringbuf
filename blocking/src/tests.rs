@@ -66,14 +66,16 @@ fn slice_all() {
 
     let pjh = thread::spawn(move || {
         let bytes = smsg.as_bytes();
-        assert_eq!(prod.push_slice_all(bytes, TIMEOUT), bytes.len());
-        prod.push(0, TIMEOUT).unwrap();
+        prod.set_timeout(TIMEOUT);
+        assert_eq!(prod.push_slice_all(bytes), bytes.len());
+        prod.push(0).unwrap();
     });
 
     let cjh = thread::spawn(move || {
         let mut bytes = vec![0u8; smsg.as_bytes().len()];
-        assert_eq!(cons.pop_slice_all(&mut bytes, TIMEOUT), bytes.len());
-        assert_eq!(cons.pop_wait(TIMEOUT).unwrap(), 0);
+        cons.set_timeout(TIMEOUT);
+        assert_eq!(cons.pop_slice_all(&mut bytes), bytes.len());
+        assert_eq!(cons.pop_wait().unwrap(), 0);
         String::from_utf8(bytes).unwrap()
     });
 
@@ -92,12 +94,14 @@ fn iter_all() {
     let smsg = THE_BOOK_FOREWORD;
 
     let pjh = thread::spawn(move || {
+        prod.set_timeout(TIMEOUT);
         let bytes = smsg.as_bytes();
-        assert_eq!(prod.push_iter_all(bytes.iter().copied().chain(once(0)), TIMEOUT), bytes.len() + 1);
+        assert_eq!(prod.push_iter_all(bytes.iter().copied().chain(once(0))), bytes.len() + 1);
     });
 
     let cjh = thread::spawn(move || {
-        let bytes = cons.pop_iter_all(TIMEOUT).take_while(|x| *x != 0).collect::<Vec<_>>();
+        cons.set_timeout(TIMEOUT);
+        let bytes = cons.pop_iter_all().take_while(|x| *x != 0).collect::<Vec<_>>();
         String::from_utf8(bytes).unwrap()
     });
 
