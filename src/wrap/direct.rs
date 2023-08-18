@@ -1,17 +1,17 @@
 use super::frozen::Frozen;
 use crate::{
-    consumer::PopIter,
     rb::traits::{RbRef, ToRbRef},
-    traits::{Consumer, Observer, Producer, RingBuffer},
+    traits::{
+        consumer::{impl_consumer_traits, Consumer},
+        producer::{impl_producer_traits, Producer},
+        Observer, RingBuffer,
+    },
 };
 use core::{
-    fmt,
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
     ptr,
 };
-#[cfg(feature = "std")]
-use std::io;
 
 pub struct Direct<R: RbRef, const P: bool, const C: bool> {
     rb: R,
@@ -142,41 +142,5 @@ impl<R: RbRef, const P: bool, const C: bool> Drop for Direct<R, P, C> {
     }
 }
 
-#[cfg(feature = "std")]
-impl<R: RbRef> io::Write for Prod<R>
-where
-    Self: Producer<Item = u8>,
-{
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        <Self as Producer>::write(self, buf)
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-impl<R: RbRef> fmt::Write for Prod<R>
-where
-    Self: Producer<Item = u8>,
-{
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        <Self as Producer>::write_str(self, s)
-    }
-}
-
-impl<R: RbRef> IntoIterator for Cons<R> {
-    type Item = <Self as Observer>::Item;
-    type IntoIter = PopIter<Self, Self>;
-    fn into_iter(self) -> Self::IntoIter {
-        PopIter::new(self)
-    }
-}
-
-#[cfg(feature = "std")]
-impl<R: RbRef> io::Read for Cons<R>
-where
-    Self: Consumer<Item = u8>,
-{
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        <Self as Consumer>::read(self, buf)
-    }
-}
+impl_producer_traits!(Prod<R: RbRef>);
+impl_consumer_traits!(Cons<R: RbRef>);

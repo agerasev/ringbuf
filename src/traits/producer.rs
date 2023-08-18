@@ -133,7 +133,7 @@ pub trait Producer: Observer {
     }
 
     #[cfg(feature = "std")]
-    fn write(&mut self, buffer: &[u8]) -> io::Result<usize>
+    fn try_write(&mut self, buffer: &[u8]) -> io::Result<usize>
     where
         Self: Producer<Item = u8>,
     {
@@ -145,7 +145,7 @@ pub trait Producer: Observer {
         }
     }
 
-    fn write_str(&mut self, s: &str) -> fmt::Result
+    fn try_write_str(&mut self, s: &str) -> fmt::Result
     where
         Self: Producer<Item = u8>,
     {
@@ -205,3 +205,31 @@ where
         self.base_mut().push_slice(elems)
     }
 }
+
+macro_rules! impl_producer_traits {
+    ($type:ident $(< $( $param:tt $( : $first_bound:tt $(+ $next_bound:tt )* )? ),+ >)?) => {
+
+        #[cfg(feature = "std")]
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? std::io::Write for $type $(< $( $param ),+ >)?
+        where
+            Self: $crate::traits::Producer<Item = u8>,
+        {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                <Self as $crate::producer::Producer>::try_write(self, buf)
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+         }
+
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? core::fmt::Write for $type $(< $( $param ),+ >)?
+        where
+            Self: $crate::traits::Producer<Item = u8>,
+        {
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                <Self as $crate::producer::Producer>::try_write_str(self, s)
+            }
+         }
+    };
+ }
+pub(crate) use impl_producer_traits;
