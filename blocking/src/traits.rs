@@ -6,7 +6,7 @@ pub use ringbuf::traits::*;
 pub trait BlockingProducer: Producer {
     type Instant: Instant;
 
-    fn wait_vacant(&self, count: usize, timeout: Option<Duration>) -> bool;
+    fn wait_vacant(&mut self, count: usize, timeout: Option<Duration>) -> bool;
 
     fn set_timeout(&mut self, timeout: Option<Duration>);
     fn timeout(&self) -> Option<Duration>;
@@ -56,7 +56,7 @@ pub trait BlockingProducer: Producer {
 pub trait BlockingConsumer: Consumer {
     type Instant: Instant;
 
-    fn wait_occupied(&self, count: usize, timeout: Option<Duration>) -> bool;
+    fn wait_occupied(&mut self, count: usize, timeout: Option<Duration>) -> bool;
 
     fn set_timeout(&mut self, timeout: Option<Duration>);
     fn timeout(&self) -> Option<Duration>;

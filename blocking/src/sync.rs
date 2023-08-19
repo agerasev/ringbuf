@@ -1,17 +1,38 @@
 use core::time::Duration;
 #[cfg(feature = "std")]
-use std::sync::{Condvar, Mutex};
+use std::{
+    mem::replace,
+    sync::{Condvar, Mutex},
+};
 
+/// Elapsed time counter.
 pub trait Instant {
     fn now() -> Self;
     fn elapsed(&self) -> Duration;
 }
 
+/// Binary semaphore.
 pub trait Semaphore: Default {
     type Instant: Instant;
 
-    fn wait<F: Fn() -> bool>(&self, f: F, timeout: Option<Duration>) -> bool;
-    fn notify<F: FnOnce()>(&self, f: F);
+    /// Increment semaphore.
+    ///
+    /// Does nothing if already given.
+    fn give(&self);
+
+    /// Try decrement semaphore.
+    ///
+    /// Returns previous value.
+    ///
+    /// Does nothing if already taken.
+    fn try_take(&self) -> bool;
+
+    /// Wait for semaphore to be given and take it.
+    ///
+    /// Returns:
+    /// + on success - `true`,
+    /// + on timeout - `false`.
+    fn take(&self, timeout: Option<Duration>) -> bool;
 }
 
 #[cfg(feature = "std")]
@@ -31,34 +52,40 @@ impl Instant for StdInstant {
 #[derive(Default)]
 pub struct StdSemaphore {
     condvar: Condvar,
-    mutex: Mutex<()>,
+    mutex: Mutex<bool>,
 }
 
 #[cfg(feature = "std")]
 impl Semaphore for StdSemaphore {
     type Instant = StdInstant;
 
-    fn wait<F: Fn() -> bool>(&self, f: F, timeout: Option<Duration>) -> bool {
-        if f() {
-            return true;
-        }
-        let mut guard_slot = Some(self.mutex.lock().unwrap());
+    fn give(&self) {
+        let mut guard = self.mutex.lock().unwrap();
+        *guard = true;
+        self.condvar.notify_one();
+    }
+
+    fn try_take(&self) -> bool {
+        replace(&mut self.mutex.lock().unwrap(), false)
+    }
+    fn take(&self, timeout: Option<Duration>) -> bool {
+        let mut guard = self.mutex.lock().unwrap();
         for timeout in TimeoutIterator::<Self::Instant>::new(timeout) {
-            if f() {
+            if replace(&mut guard, false) {
                 return true;
             }
-            let guard = guard_slot.take().unwrap();
-            guard_slot.replace(match timeout {
-                Some(t) => self.condvar.wait_timeout(guard, t).unwrap().0,
-                None => self.condvar.wait(guard).unwrap(),
-            });
+            match timeout {
+                Some(t) => {
+                    let r;
+                    (guard, r) = self.condvar.wait_timeout(guard, t).unwrap();
+                    if r.timed_out() {
+                        break;
+                    }
+                }
+                None => guard = self.condvar.wait(guard).unwrap(),
+            };
         }
-        f()
-    }
-    fn notify<F: FnOnce()>(&self, f: F) {
-        let _guard = self.mutex.lock();
-        f();
-        self.condvar.notify_all();
+        replace(&mut guard, false)
     }
 }
 

@@ -71,20 +71,24 @@ impl<S: Storage, X: Semaphore> Observer for BlockingRb<S, X> {
 }
 impl<S: Storage, X: Semaphore> Producer for BlockingRb<S, X> {
     unsafe fn set_write_index(&self, value: usize) {
-        self.write.notify(|| self.base.set_write_index(value));
+        self.base.set_write_index(value);
+        self.write.give();
     }
 }
 impl<S: Storage, X: Semaphore> Consumer for BlockingRb<S, X> {
     unsafe fn set_read_index(&self, value: usize) {
-        self.read.notify(|| self.base.set_read_index(value));
+        self.base.set_read_index(value);
+        self.read.give();
     }
 }
 impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {
     unsafe fn hold_read(&self, flag: bool) {
         self.base.hold_read(flag);
+        self.read.give();
     }
     unsafe fn hold_write(&self, flag: bool) {
         self.base.hold_write(flag);
+        self.write.give();
     }
 }
 

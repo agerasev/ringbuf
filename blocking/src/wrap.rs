@@ -60,10 +60,18 @@ impl<R: BlockingRbRef> DelegateProducer for BlockingProd<R> {}
 impl<R: BlockingRbRef> BlockingProducer for BlockingProd<R> {
     type Instant = <R::Semaphore as Semaphore>::Instant;
 
-    fn wait_vacant(&self, count: usize, timeout: Option<Duration>) -> bool {
+    fn wait_vacant(&mut self, count: usize, timeout: Option<Duration>) -> bool {
         let rb = self.rb();
         debug_assert!(count <= rb.capacity().get());
-        rb.read.wait(|| rb.vacant_len() >= count, timeout)
+        rb.read.try_take();
+        if rb.vacant_len() >= count {
+            return true;
+        }
+        if rb.read.take(timeout) {
+            rb.vacant_len() >= count
+        } else {
+            false
+        }
     }
 
     fn set_timeout(&mut self, timeout: Option<Duration>) {
@@ -79,10 +87,18 @@ impl<R: BlockingRbRef> DelegateConsumer for BlockingCons<R> {}
 
 impl<R: BlockingRbRef> BlockingConsumer for BlockingCons<R> {
     type Instant = <R::Semaphore as Semaphore>::Instant;
-    fn wait_occupied(&self, count: usize, timeout: Option<Duration>) -> bool {
+    fn wait_occupied(&mut self, count: usize, timeout: Option<Duration>) -> bool {
         let rb = self.rb();
         debug_assert!(count <= rb.capacity().get());
-        rb.write.wait(|| rb.occupied_len() >= count, timeout)
+        rb.write.try_take();
+        if rb.occupied_len() >= count {
+            return true;
+        }
+        if rb.write.take(timeout) {
+            rb.occupied_len() >= count
+        } else {
+            false
+        }
     }
 
     fn set_timeout(&mut self, timeout: Option<Duration>) {
