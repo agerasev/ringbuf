@@ -1,5 +1,7 @@
 use crate::sync::{Instant, TimeoutIterator};
 use core::time::Duration;
+#[cfg(feature = "std")]
+use std::io;
 
 pub use ringbuf::traits::*;
 
@@ -51,6 +53,17 @@ pub trait BlockingProducer: Producer {
         }
         count
     }
+
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize>
+    where
+        Self: BlockingProducer<Item = u8>,
+    {
+        if self.wait_vacant(1, self.timeout()) {
+            self.try_write(buf)
+        } else {
+            Err(io::ErrorKind::TimedOut.into())
+        }
+    }
 }
 
 pub trait BlockingConsumer: Consumer {
@@ -69,7 +82,7 @@ pub trait BlockingConsumer: Consumer {
         }
     }
 
-    fn pop_iter_all(&mut self) -> PopAllIter<'_, Self> {
+    fn pop_all_iter(&mut self) -> PopAllIter<'_, Self> {
         PopAllIter::new(self, self.timeout())
     }
 
@@ -89,6 +102,17 @@ pub trait BlockingConsumer: Consumer {
             }
         }
         count
+    }
+
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>
+    where
+        Self: BlockingConsumer<Item = u8>,
+    {
+        if self.wait_occupied(1, self.timeout()) {
+            self.try_read(buf)
+        } else {
+            Err(io::ErrorKind::TimedOut.into())
+        }
     }
 }
 

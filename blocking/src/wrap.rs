@@ -15,6 +15,8 @@ use ringbuf::{
     wrap::caching::Caching,
     Obs,
 };
+#[cfg(feature = "std")]
+use std::io;
 
 pub struct BlockingWrap<R: BlockingRbRef, const P: bool, const C: bool> {
     base: Option<Caching<R, P, C>>,
@@ -106,5 +108,28 @@ impl<R: BlockingRbRef> BlockingConsumer for BlockingCons<R> {
     }
     fn timeout(&self) -> Option<Duration> {
         self.timeout
+    }
+}
+
+#[cfg(feature = "std")]
+impl<R: BlockingRbRef> io::Write for BlockingProd<R>
+where
+    Self: BlockingProducer<Item = u8>,
+{
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        <Self as BlockingProducer>::write(self, buf)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(feature = "std")]
+impl<R: BlockingRbRef> io::Read for BlockingCons<R>
+where
+    Self: BlockingConsumer<Item = u8>,
+{
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        <Self as BlockingConsumer>::read(self, buf)
     }
 }
