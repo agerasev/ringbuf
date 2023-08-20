@@ -5,7 +5,7 @@ use super::{
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
 use crate::utils::write_slice;
-use core::{fmt, mem::MaybeUninit};
+use core::mem::MaybeUninit;
 #[cfg(feature = "std")]
 use std::{
     cmp,
@@ -113,48 +113,29 @@ pub trait Producer: Observer {
     /// Reads at most `count` bytes from `Read` instance and appends them to the ring buffer.
     /// If `count` is `None` then as much as possible bytes will be read.
     ///
-    /// Returns `Ok(n)` if `read` succeeded. `n` is number of bytes been read.
-    /// `n == 0` means that either `read` returned zero or ring buffer is full.
-    ///
-    /// If `read` is failed then original error is returned. In this case it is guaranteed that no items was read from the reader.
-    /// To achieve this we read only one contiguous slice at once. So this call may read less than `remaining` items in the buffer even if the reader is ready to provide more.
-    fn read_from<S: Read>(&mut self, reader: &mut S, count: Option<usize>) -> io::Result<usize>
+    /// Returns:
+    /// + `None`: ring buffer is empty or `count` is `0`. In this case `read` isn't called at all.
+    /// + `Some(Ok(n))`: `read` succeeded. `n` is number of bytes been read. `n == 0` means that `read` also returned `0`.
+    /// + `Some(Err(e))` `read` is failed and `e` is original error. In this case it is guaranteed that no items was read from the reader.
+    ///   To achieve this we read only one contiguous slice at once. So this call may read less than `vacant_len` items in the buffer even if the reader is ready to provide more.
+    fn read_from<S: Read>(&mut self, reader: &mut S, count: Option<usize>) -> Option<io::Result<usize>>
     where
         Self: Producer<Item = u8>,
     {
         let (left, _) = self.vacant_slices_mut();
         let count = cmp::min(count.unwrap_or(left.len()), left.len());
+        if count == 0 {
+            return None;
+        }
         let left_init = unsafe { slice_assume_init_mut(&mut left[..count]) };
 
-        let read_count = reader.read(left_init)?;
+        let read_count = match reader.read(left_init) {
+            Ok(n) => n,
+            Err(e) => return Some(Err(e)),
+        };
         assert!(read_count <= count);
         unsafe { self.advance_write_index(read_count) };
-        Ok(read_count)
-    }
-
-    #[cfg(feature = "std")]
-    fn try_write(&mut self, buffer: &[u8]) -> io::Result<usize>
-    where
-        Self: Producer<Item = u8>,
-    {
-        let n = self.push_slice(buffer);
-        if n == 0 && !buffer.is_empty() {
-            Err(std::io::ErrorKind::WouldBlock.into())
-        } else {
-            Ok(n)
-        }
-    }
-
-    fn try_write_str(&mut self, s: &str) -> fmt::Result
-    where
-        Self: Producer<Item = u8>,
-    {
-        let n = self.push_slice(s.as_bytes());
-        if n != s.len() {
-            Err(fmt::Error::default())
-        } else {
-            Ok(())
-        }
+        Some(Ok(read_count))
     }
 }
 
@@ -215,7 +196,12 @@ macro_rules! impl_producer_traits {
             Self: $crate::traits::Producer<Item = u8>,
         {
             fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-                <Self as $crate::producer::Producer>::try_write(self, buf)
+                let n = self.push_slice(buf);
+                if n == 0 {
+                    Err(std::io::ErrorKind::WouldBlock.into())
+                } else {
+                    Ok(n)
+                }
             }
             fn flush(&mut self) -> std::io::Result<()> {
                 Ok(())
@@ -227,7 +213,12 @@ macro_rules! impl_producer_traits {
             Self: $crate::traits::Producer<Item = u8>,
         {
             fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                <Self as $crate::producer::Producer>::try_write_str(self, s)
+                let n = self.push_slice(s.as_bytes());
+                if n != s.len() {
+                    Err(core::fmt::Error::default())
+                } else {
+                    Ok(())
+                }
             }
          }
     };

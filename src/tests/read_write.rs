@@ -2,6 +2,12 @@ use super::Rb;
 use crate::{storage::Static, traits::*};
 use std::io;
 
+macro_rules! assert_eq_kind {
+    ($left:expr, $right:expr) => {
+        assert_eq!($left.map(|r| r.map_err(|e| e.kind())), $right);
+    };
+}
+
 #[test]
 fn from() {
     let mut rb0 = Rb::<Static<u8, 4>>::default();
@@ -13,27 +19,27 @@ fn from() {
 
     assert_eq!(prod0.push_slice(&[0, 1, 2]), 3);
 
-    assert_eq!(prod1.read_from(&mut cons0, None).unwrap(), 3);
-    assert_eq!(prod1.read_from(&mut cons0, None).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+    assert_eq_kind!(prod1.read_from(&mut cons0, None), Some(Ok(3)));
+    assert_eq_kind!(prod1.read_from(&mut cons0, None), Some(Err(io::ErrorKind::WouldBlock)));
 
     assert_eq!(cons1.pop_slice(&mut tmp), 3);
     assert_eq!(tmp[0..3], [0, 1, 2]);
 
     assert_eq!(prod0.push_slice(&[3, 4, 5]), 3);
 
-    assert_eq!(prod1.read_from(&mut cons0, None).unwrap(), 1);
+    assert_eq_kind!(prod1.read_from(&mut cons0, None), Some(Ok(1)));
     assert_eq!(cons1.pop_slice(&mut tmp), 1);
     assert_eq!(tmp[0..1], [3]);
 
-    assert_eq!(prod1.read_from(&mut cons0, None).unwrap(), 2);
+    assert_eq_kind!(prod1.read_from(&mut cons0, None), Some(Ok(2)));
     assert_eq!(cons1.pop_slice(&mut tmp), 2);
     assert_eq!(tmp[0..2], [4, 5]);
 
     assert_eq!(prod1.push_slice(&[6, 7, 8]), 3);
     assert_eq!(prod0.push_slice(&[9, 10]), 2);
 
-    assert_eq!(prod1.read_from(&mut cons0, None).unwrap(), 1);
-    assert_eq!(prod1.read_from(&mut cons0, None).unwrap(), 0);
+    assert_eq_kind!(prod1.read_from(&mut cons0, None), Some(Ok(1)));
+    assert_eq_kind!(prod1.read_from(&mut cons0, None), None);
 
     assert_eq!(cons1.pop_slice(&mut tmp), 4);
     assert_eq!(tmp[0..4], [6, 7, 8, 9]);
@@ -50,27 +56,27 @@ fn into() {
 
     assert_eq!(prod0.push_slice(&[0, 1, 2]), 3);
 
-    assert_eq!(cons0.write_into(&mut prod1, None).unwrap(), 3);
-    assert_eq!(cons0.write_into(&mut prod1, None).unwrap(), 0);
+    assert_eq_kind!(cons0.write_into(&mut prod1, None), Some(Ok(3)));
+    assert_eq_kind!(cons0.write_into(&mut prod1, None), None);
 
     assert_eq!(cons1.pop_slice(&mut tmp), 3);
     assert_eq!(tmp[0..3], [0, 1, 2]);
 
     assert_eq!(prod0.push_slice(&[3, 4, 5]), 3);
 
-    assert_eq!(cons0.write_into(&mut prod1, None).unwrap(), 1);
+    assert_eq_kind!(cons0.write_into(&mut prod1, None), Some(Ok(1)));
     assert_eq!(cons1.pop_slice(&mut tmp), 1);
     assert_eq!(tmp[0..1], [3]);
 
-    assert_eq!(cons0.write_into(&mut prod1, None).unwrap(), 2);
+    assert_eq_kind!(cons0.write_into(&mut prod1, None), Some(Ok(2)));
     assert_eq!(cons1.pop_slice(&mut tmp), 2);
     assert_eq!(tmp[0..2], [4, 5]);
 
     assert_eq!(prod1.push_slice(&[6, 7, 8]), 3);
     assert_eq!(prod0.push_slice(&[9, 10]), 2);
 
-    assert_eq!(cons0.write_into(&mut prod1, None).unwrap(), 1);
-    assert_eq!(cons0.write_into(&mut prod1, None).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+    assert_eq_kind!(cons0.write_into(&mut prod1, None), Some(Ok(1)));
+    assert_eq_kind!(cons0.write_into(&mut prod1, None), Some(Err(io::ErrorKind::WouldBlock)));
 
     assert_eq!(cons1.pop_slice(&mut tmp), 4);
     assert_eq!(tmp[0..4], [6, 7, 8, 9]);
@@ -87,16 +93,16 @@ fn count() {
 
     assert_eq!(prod0.push_slice(&[0, 1, 2, 3]), 4);
 
-    assert_eq!(prod1.read_from(&mut cons0, Some(3)).unwrap(), 3);
+    assert_eq_kind!(prod1.read_from(&mut cons0, Some(3)), Some(Ok(3)));
 
     assert_eq!(cons1.pop_slice(&mut tmp), 3);
     assert_eq!(tmp[0..3], [0, 1, 2]);
 
     assert_eq!(prod0.push_slice(&[4, 5, 6]), 3);
 
-    assert_eq!(cons0.write_into(&mut prod1, Some(3)).unwrap(), 1);
-    assert_eq!(cons0.write_into(&mut prod1, Some(2)).unwrap(), 2);
-    assert_eq!(cons0.write_into(&mut prod1, Some(2)).unwrap(), 1);
+    assert_eq_kind!(cons0.write_into(&mut prod1, Some(3)), Some(Ok(1)));
+    assert_eq_kind!(cons0.write_into(&mut prod1, Some(2)), Some(Ok(2)));
+    assert_eq_kind!(cons0.write_into(&mut prod1, Some(2)), Some(Ok(1)));
 
     assert_eq!(cons1.pop_slice(&mut tmp), 4);
     assert_eq!(tmp[0..4], [3, 4, 5, 6]);

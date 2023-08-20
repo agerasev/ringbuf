@@ -16,7 +16,7 @@ fn concurrent() {
         let mut msg = MSG;
         move || {
             while !msg.is_empty() {
-                prod.read_from(&mut msg, None).unwrap();
+                prod.read_from(&mut msg, None).transpose().unwrap();
                 yield_();
             }
         }
@@ -25,7 +25,7 @@ fn concurrent() {
     let cjh = thread::spawn(move || {
         let mut msg = Vec::new();
         while msg.last().copied() != Some(0) {
-            cons.write_into(&mut msg, None).unwrap();
+            cons.write_into(&mut msg, None).transpose().unwrap();
             yield_();
         }
         msg
