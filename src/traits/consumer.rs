@@ -183,36 +183,30 @@ pub trait Consumer: Observer {
     /// Removes at most first `count` bytes from the ring buffer and writes them into a [`Write`] instance.
     /// If `count` is `None` then as much as possible bytes will be written.
     ///
-    /// Returns `Ok(n)` if `write` succeeded. `n` is number of bytes been written.
-    /// `n == 0` means that either `write` returned zero or ring buffer is empty.
+    /// Returns:
     ///
-    /// If `write` is failed then original error is returned. In this case it is guaranteed that no items was written to the writer.
-    /// To achieve this we write only one contiguous slice at once. So this call may write less than `len` items even if the writer is ready to get more.
-    fn write_into<S: Write>(&mut self, writer: &mut S, count: Option<usize>) -> io::Result<usize>
+    /// + `None`: ring buffer is full or `count` is `0`. In this case `write` isn't called at all.
+    /// + `Some(Ok(n))`: `write` succeeded. `n` is number of bytes been written. `n == 0` means that `write` also returned `0`.
+    /// + `Some(Err(e))`: `write` is failed and `e` is original error. In this case it is guaranteed that no items was written to the writer.
+    ///    To achieve this we write only one contiguous slice at once. So this call may write less than `occupied_len` items even if the writer is ready to get more.
+    fn write_into<S: Write>(&mut self, writer: &mut S, count: Option<usize>) -> Option<io::Result<usize>>
     where
         Self: Consumer<Item = u8>,
     {
         let (left, _) = self.occupied_slices();
         let count = usize::min(count.unwrap_or(left.len()), left.len());
+        if count == 0 {
+            return None;
+        }
         let left_init = unsafe { slice_assume_init_ref(&left[..count]) };
 
-        let write_count = writer.write(left_init)?;
+        let write_count = match writer.write(left_init) {
+            Ok(n) => n,
+            Err(e) => return Some(Err(e)),
+        };
         assert!(write_count <= count);
         unsafe { self.advance_read_index(write_count) };
-        Ok(write_count)
-    }
-
-    #[cfg(feature = "std")]
-    fn try_read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize>
-    where
-        Self: Consumer<Item = u8>,
-    {
-        let n = self.pop_slice(buffer);
-        if n == 0 && !buffer.is_empty() {
-            Err(std::io::ErrorKind::WouldBlock.into())
-        } else {
-            Ok(n)
-        }
+        Some(Ok(write_count))
     }
 }
 
@@ -347,7 +341,12 @@ macro_rules! impl_consumer_traits {
             Self: $crate::traits::Consumer<Item = u8>,
         {
             fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-                <Self as $crate::traits::Consumer>::try_read(self, buf)
+                let n = self.pop_slice(buf);
+                if n == 0 {
+                    Err(std::io::ErrorKind::WouldBlock.into())
+                } else {
+                    Ok(n)
+                }
             }
         }
     };
