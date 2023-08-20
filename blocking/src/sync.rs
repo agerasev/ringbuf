@@ -5,6 +5,9 @@ use std::{
     sync::{Condvar, Mutex},
 };
 
+pub const NO_WAIT: Option<Duration> = Some(Duration::ZERO);
+pub const FOREVER: Option<Duration> = None;
+
 /// Elapsed time counter.
 pub trait Instant {
     fn now() -> Self;
@@ -33,6 +36,14 @@ pub trait Semaphore: Default {
     /// + on success - `true`,
     /// + on timeout - `false`.
     fn take(&self, timeout: Option<Duration>) -> bool;
+
+    fn take_iter(&self, timeout: Option<Duration>) -> TakeIter<Self> {
+        TakeIter {
+            reset: false,
+            semaphore: self,
+            timeout_iter: TimeoutIter::new(timeout),
+        }
+    }
 }
 
 #[cfg(feature = "std")]
@@ -70,7 +81,7 @@ impl Semaphore for StdSemaphore {
     }
     fn take(&self, timeout: Option<Duration>) -> bool {
         let mut guard = self.mutex.lock().unwrap();
-        for timeout in TimeoutIterator::<Self::Instant>::new(timeout) {
+        for timeout in TimeoutIter::<Self::Instant>::new(timeout) {
             if replace(&mut guard, false) {
                 return true;
             }
@@ -90,18 +101,18 @@ impl Semaphore for StdSemaphore {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct TimeoutIterator<I: Instant> {
+pub struct TimeoutIter<I: Instant> {
     start: I,
     timeout: Option<Duration>,
 }
 
-impl<I: Instant> TimeoutIterator<I> {
+impl<I: Instant> TimeoutIter<I> {
     pub fn new(timeout: Option<Duration>) -> Self {
         Self { start: I::now(), timeout }
     }
 }
 
-impl<I: Instant> Iterator for TimeoutIterator<I> {
+impl<I: Instant> Iterator for TimeoutIter<I> {
     type Item = Option<Duration>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.timeout {
@@ -115,5 +126,33 @@ impl<I: Instant> Iterator for TimeoutIterator<I> {
             }
             None => Some(None),
         }
+    }
+}
+
+pub struct TakeIter<'a, X: Semaphore> {
+    reset: bool,
+    semaphore: &'a X,
+    timeout_iter: TimeoutIter<X::Instant>,
+}
+
+impl<'a, X: Semaphore> Iterator for TakeIter<'a, X> {
+    type Item = ();
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.reset {
+            self.reset = false;
+            self.semaphore.try_take();
+            Some(())
+        } else if self.semaphore.take(self.timeout_iter.next()?) {
+            Some(())
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, X: Semaphore> TakeIter<'a, X> {
+    pub fn reset(mut self) -> Self {
+        self.reset = true;
+        self
     }
 }

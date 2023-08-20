@@ -1,9 +1,6 @@
 #[cfg(feature = "std")]
 use crate::sync::StdSemaphore;
-use crate::{
-    sync::Semaphore,
-    wrap::{BlockingCons, BlockingProd},
-};
+use crate::{sync::Semaphore, BlockingCons, BlockingProd};
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
 use core::{mem::MaybeUninit, num::NonZeroUsize};

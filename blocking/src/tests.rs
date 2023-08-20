@@ -30,8 +30,9 @@ fn wait() {
 
     let pjh = thread::spawn(move || {
         let mut bytes = smsg;
+        prod.set_timeout(TIMEOUT);
         while !bytes.is_empty() {
-            assert!(prod.wait_vacant(1, TIMEOUT));
+            assert!(prod.wait_vacant(1));
             let n = prod.push_slice(bytes);
             assert!(n > 0);
             bytes = &bytes[n..bytes.len()]
@@ -41,8 +42,9 @@ fn wait() {
     let cjh = thread::spawn(move || {
         let mut bytes = Vec::<u8>::new();
         let mut buffer = [0; 5];
+        cons.set_timeout(TIMEOUT);
         loop {
-            assert!(cons.wait_occupied(1, TIMEOUT));
+            assert!(cons.wait_occupied(1));
             let n = cons.pop_slice(&mut buffer);
             assert!(n > 0);
             bytes.extend_from_slice(&buffer[0..n]);
@@ -70,13 +72,13 @@ fn slice_all() {
     let pjh = thread::spawn(move || {
         let bytes = smsg;
         prod.set_timeout(TIMEOUT);
-        assert_eq!(prod.push_slice_all(bytes), bytes.len());
+        assert_eq!(prod.push_all_slice(bytes), bytes.len());
     });
 
     let cjh = thread::spawn(move || {
         let mut bytes = vec![0u8; smsg.len()];
         cons.set_timeout(TIMEOUT);
-        assert_eq!(cons.pop_slice_all(&mut bytes), bytes.len());
+        assert_eq!(cons.pop_all_slice(&mut bytes), bytes.len());
         bytes
     });
 
@@ -97,7 +99,7 @@ fn iter_all() {
     let pjh = thread::spawn(move || {
         prod.set_timeout(TIMEOUT);
         let bytes = smsg;
-        assert_eq!(prod.push_iter_all(bytes.iter().copied()), bytes.len());
+        assert_eq!(prod.push_all_iter(bytes.iter().copied()), bytes.len());
     });
 
     let cjh = thread::spawn(move || {
