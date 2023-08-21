@@ -1,6 +1,12 @@
 use super::Observer;
 use core::num::NonZeroUsize;
 
+pub trait Based {
+    type Base;
+    fn base(&self) -> &Self::Base;
+    fn base_mut(&mut self) -> &mut Self::Base;
+}
+
 /// Modulus for pointers to item in ring buffer storage.
 ///
 /// Equals to `2 * capacity`.

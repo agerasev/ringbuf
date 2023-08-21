@@ -10,8 +10,6 @@ extern crate std;
 
 /// Shortcuts for frequently used types.
 mod alias;
-/// Producer and consumer implementations.
-pub mod halves;
 /// Ring buffer implementations.
 pub mod rb;
 /// Storage types.
@@ -22,15 +20,17 @@ pub mod traits;
 mod transfer;
 /// Internal utilities.
 mod utils;
+/// Producer and consumer implementations.
+pub mod wrap;
 
 #[cfg(test)]
 mod tests;
 
 pub use alias::*;
-pub use halves::{CachingCons, CachingProd, Cons, Obs, Prod};
 pub use rb::{LocalRb, SharedRb};
 pub use traits::{consumer, producer};
 pub use transfer::transfer;
+pub use wrap::{CachingCons, CachingProd, Cons, Obs, Prod};
 
 #[cfg(feature = "bench")]
 extern crate test;

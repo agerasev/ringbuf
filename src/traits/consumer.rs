@@ -1,23 +1,13 @@
 use super::{
-    delegate::DelegateMut,
     observer::{DelegateObserver, Observer},
     utils::modulus,
 };
 use crate::utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice};
-use core::{iter::Chain, mem::MaybeUninit, ptr, slice};
+use core::{iter::Chain, marker::PhantomData, mem::MaybeUninit, ptr, slice};
 #[cfg(feature = "std")]
 use std::io::{self, Write};
 
 /// Consumer part of ring buffer.
-///
-/// # Mode
-///
-/// It can operate in immediate (by default) or postponed mode.
-/// Mode could be switched using [`Self::postponed`]/[`Self::into_postponed`] and [`Self::into_immediate`] methods.
-///
-/// + In immediate mode removed and inserted items are automatically synchronized with the other end.
-/// + In postponed mode synchronization occurs only when [`Self::sync`] or [`Self::into_immediate`] is called or when `Self` is dropped.
-///   The reason to use postponed mode is that multiple subsequent operations are performed faster due to less frequent cache synchronization.
 pub trait Consumer: Observer {
     unsafe fn set_read_index(&self, value: usize);
 
@@ -119,12 +109,11 @@ pub trait Consumer: Observer {
         count
     }
 
-    fn into_iter(self) -> IntoIter<Self> {
-        IntoIter::new(self)
-    }
-
     /// Returns an iterator that removes items one by one from the ring buffer.
-    fn pop_iter(&mut self) -> PopIter<'_, Self> {
+    fn pop_iter(&mut self) -> PopIter<&mut Self, Self>
+    where
+        Self: AsMut<Self> + AsRef<Self>,
+    {
         PopIter::new(self)
     }
 
@@ -194,94 +183,61 @@ pub trait Consumer: Observer {
     /// Removes at most first `count` bytes from the ring buffer and writes them into a [`Write`] instance.
     /// If `count` is `None` then as much as possible bytes will be written.
     ///
-    /// Returns `Ok(n)` if `write` succeeded. `n` is number of bytes been written.
-    /// `n == 0` means that either `write` returned zero or ring buffer is empty.
+    /// Returns:
     ///
-    /// If `write` is failed then original error is returned. In this case it is guaranteed that no items was written to the writer.
-    /// To achieve this we write only one contiguous slice at once. So this call may write less than `len` items even if the writer is ready to get more.
-    fn write_into<S: Write>(&mut self, writer: &mut S, count: Option<usize>) -> io::Result<usize>
+    /// + `None`: ring buffer is full or `count` is `0`. In this case `write` isn't called at all.
+    /// + `Some(Ok(n))`: `write` succeeded. `n` is number of bytes been written. `n == 0` means that `write` also returned `0`.
+    /// + `Some(Err(e))`: `write` is failed and `e` is original error. In this case it is guaranteed that no items was written to the writer.
+    ///    To achieve this we write only one contiguous slice at once. So this call may write less than `occupied_len` items even if the writer is ready to get more.
+    fn write_into<S: Write>(&mut self, writer: &mut S, count: Option<usize>) -> Option<io::Result<usize>>
     where
         Self: Consumer<Item = u8>,
     {
         let (left, _) = self.occupied_slices();
         let count = usize::min(count.unwrap_or(left.len()), left.len());
+        if count == 0 {
+            return None;
+        }
         let left_init = unsafe { slice_assume_init_ref(&left[..count]) };
 
-        let write_count = writer.write(left_init)?;
+        let write_count = match writer.write(left_init) {
+            Ok(n) => n,
+            Err(e) => return Some(Err(e)),
+        };
         assert!(write_count <= count);
         unsafe { self.advance_read_index(write_count) };
-        Ok(write_count)
-    }
-}
-
-pub struct IntoIter<C: Consumer>(C);
-impl<C: Consumer> IntoIter<C> {
-    pub fn new(inner: C) -> Self {
-        Self(inner)
-    }
-    pub fn into_inner(self) -> C {
-        self.0
-    }
-}
-impl<C: Consumer> Iterator for IntoIter<C> {
-    type Item = C::Item;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.try_pop()
-    }
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.0.occupied_len(), None)
+        Some(Ok(write_count))
     }
 }
 
 /// An iterator that removes items from the ring buffer.
-pub struct PopIter<'a, C: Consumer> {
-    target: &'a C,
-    slices: (&'a [MaybeUninit<C::Item>], &'a [MaybeUninit<C::Item>]),
-    len: usize,
+pub struct PopIter<U: AsMut<C> + AsRef<C>, C: Consumer> {
+    inner: U,
+    _ghost: PhantomData<C>,
 }
-impl<'a, C: Consumer> PopIter<'a, C> {
-    pub fn new(target: &'a mut C) -> Self {
-        let slices = target.occupied_slices();
+
+impl<U: AsMut<C> + AsRef<C>, C: Consumer> PopIter<U, C> {
+    pub fn new(inner: U) -> Self {
         Self {
-            len: slices.0.len() + slices.1.len(),
-            slices,
-            target,
+            inner,
+            _ghost: PhantomData,
         }
     }
+    pub fn into_inner(self) -> U {
+        self.inner
+    }
 }
-impl<'a, C: Consumer> Iterator for PopIter<'a, C> {
+
+impl<U: AsMut<C> + AsRef<C>, C: Consumer> Iterator for PopIter<U, C> {
     type Item = C::Item;
+
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        match self.slices.0.len() {
-            0 => None,
-            n => {
-                let item = unsafe { self.slices.0.get_unchecked(0).assume_init_read() };
-                if n == 1 {
-                    (self.slices.0, self.slices.1) = (self.slices.1, &[]);
-                } else {
-                    self.slices.0 = unsafe { self.slices.0.get_unchecked(1..n) };
-                }
-                Some(item)
-            }
-        }
+        self.inner.as_mut().try_pop()
     }
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.len(), Some(self.len()))
-    }
-}
-impl<'a, C: Consumer> ExactSizeIterator for PopIter<'a, C> {
-    fn len(&self) -> usize {
-        self.slices.0.len() + self.slices.1.len()
-    }
-}
-impl<'a, C: Consumer> Drop for PopIter<'a, C> {
-    fn drop(&mut self) {
-        unsafe { self.target.advance_read_index(self.len - self.len()) };
+        (self.inner.as_ref().occupied_len(), None)
     }
 }
 
@@ -297,29 +253,7 @@ pub type Iter<'a, C: Consumer> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a,
 #[allow(type_alias_bounds)]
 pub type IterMut<'a, C: Consumer> = Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
 
-#[macro_export]
-macro_rules! impl_consumer_traits {
-    ($type:ident $(< $( $param:tt $( : $first_bound:tt $(+ $next_bound:tt )* )? ),+ >)?) => {
-
-        #[cfg(feature = "std")]
-        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? std::io::Read for $type $(< $( $param ),+ >)?
-        where
-            Self: $crate::traits::Consumer<Item = u8>,
-        {
-            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-                use $crate::consumer::Consumer;
-                let n = self.pop_slice(buffer);
-                if n == 0 && !buffer.is_empty() {
-                    Err(std::io::ErrorKind::WouldBlock.into())
-                } else {
-                    Ok(n)
-                }
-            }
-        }
-    };
-}
-
-pub trait DelegateConsumer: DelegateObserver + DelegateMut
+pub trait DelegateConsumer: DelegateObserver
 where
     Self::Base: Consumer,
 {
@@ -390,3 +324,31 @@ where
         self.base_mut().clear()
     }
 }
+
+macro_rules! impl_consumer_traits {
+    ($type:ident $(< $( $param:tt $( : $first_bound:tt $(+ $next_bound:tt )* )? ),+ >)?) => {
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? core::iter::IntoIterator for $type $(< $( $param ),+ >)? {
+            type Item = <Self as $crate::traits::Observer>::Item;
+            type IntoIter = $crate::traits::consumer::PopIter<Self, Self>;
+            fn into_iter(self) -> Self::IntoIter {
+                $crate::traits::consumer::PopIter::new(self)
+            }
+        }
+
+        #[cfg(feature = "std")]
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? std::io::Read for $type $(< $( $param ),+ >)?
+        where
+            Self: $crate::traits::Consumer<Item = u8>,
+        {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                let n = self.pop_slice(buf);
+                if n == 0 {
+                    Err(std::io::ErrorKind::WouldBlock.into())
+                } else {
+                    Ok(n)
+                }
+            }
+        }
+    };
+}
+pub(crate) use impl_consumer_traits;

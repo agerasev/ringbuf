@@ -1,24 +1,22 @@
-use crate::halves::AsyncProd;
-
-use super::{AsyncObserver, AsyncRingBuffer};
 use core::{
     future::Future,
     iter::Peekable,
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-#[cfg(feature = "std")]
-use futures::io::AsyncWrite;
-use futures::{future::FusedFuture, Sink};
-use ringbuf::{
-    rb::traits::RbRef,
-    traits::{Observer, Producer},
-};
+use futures::future::FusedFuture;
+use ringbuf::traits::Producer;
 #[cfg(feature = "std")]
 use std::io;
 
-pub trait AsyncProducer: AsyncObserver + Producer {
-    fn register_read_waker(&self, waker: &Waker);
+pub trait AsyncProducer: Producer {
+    fn register_waker(&self, waker: &Waker);
+
+    fn close(&mut self);
+    /// Whether the corresponding consumer was closed.
+    fn is_closed(&self) -> bool {
+        !self.read_is_held()
+    }
 
     /// Push item to the ring buffer waiting asynchronously if the buffer is full.
     ///
@@ -46,7 +44,7 @@ pub trait AsyncProducer: AsyncObserver + Producer {
 
     /// Wait for the buffer to have at least `count` free places for items or to close.
     ///
-    /// Panics if `count` is greater than buffer capacity.
+    /// In debug mode panics if `count` is greater than buffer capacity.
     fn wait_vacant(&self, count: usize) -> WaitVacantFuture<'_, Self> {
         debug_assert!(count <= self.capacity().get());
         WaitVacantFuture {
@@ -69,6 +67,45 @@ pub trait AsyncProducer: AsyncObserver + Producer {
             owner: self,
             slice: Some(slice),
             count: 0,
+        }
+    }
+
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<bool> {
+        let mut waker_registered = false;
+        loop {
+            if self.is_closed() {
+                break Poll::Ready(false);
+            }
+            if !self.is_full() {
+                break Poll::Ready(true);
+            }
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.register_waker(cx.waker());
+            waker_registered = true;
+        }
+    }
+
+    #[cfg(feature = "std")]
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>>
+    where
+        Self: AsyncProducer<Item = u8> + Unpin,
+    {
+        let mut waker_registered = false;
+        loop {
+            if self.is_closed() {
+                break Poll::Ready(Ok(0));
+            }
+            let count = self.push_slice(buf);
+            if count > 0 {
+                break Poll::Ready(Ok(count));
+            }
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.register_waker(cx.waker());
+            waker_registered = true;
         }
     }
 }
@@ -101,7 +138,7 @@ impl<'a, A: AsyncProducer> Future for PushFuture<'a, A> {
             if waker_registered {
                 break Poll::Pending;
             }
-            self.owner.register_read_waker(cx.waker());
+            self.owner.register_waker(cx.waker());
             waker_registered = true;
         }
     }
@@ -147,7 +184,7 @@ where
             if waker_registered {
                 break Poll::Pending;
             }
-            self.owner.register_read_waker(cx.waker());
+            self.owner.register_waker(cx.waker());
             waker_registered = true;
         }
     }
@@ -181,7 +218,7 @@ impl<'a, A: AsyncProducer, I: Iterator<Item = A::Item>> Future for PushIterFutur
             if waker_registered {
                 break Poll::Pending;
             }
-            self.owner.register_read_waker(cx.waker());
+            self.owner.register_waker(cx.waker());
             waker_registered = true;
         }
     }
@@ -212,76 +249,8 @@ impl<'a, A: AsyncProducer> Future for WaitVacantFuture<'a, A> {
             if waker_registered {
                 break Poll::Pending;
             }
-            self.owner.register_read_waker(cx.waker());
+            self.owner.register_waker(cx.waker());
             waker_registered = true;
         }
-    }
-}
-
-impl<R: RbRef> Sink<<R::Target as Observer>::Item> for AsyncProd<R>
-where
-    R::Target: AsyncRingBuffer,
-{
-    type Error = ();
-
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        let mut waker_registered = false;
-        loop {
-            if self.is_closed() {
-                break Poll::Ready(Err(()));
-            }
-            if !self.is_full() {
-                break Poll::Ready(Ok(()));
-            }
-            if waker_registered {
-                break Poll::Pending;
-            }
-            self.register_read_waker(cx.waker());
-            waker_registered = true;
-        }
-    }
-    fn start_send(mut self: Pin<&mut Self>, item: <R::Target as Observer>::Item) -> Result<(), Self::Error> {
-        assert!(self.try_push(item).is_ok());
-        Ok(())
-    }
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        // Don't need to be flushed.
-        Poll::Ready(Ok(()))
-    }
-    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.close();
-        Poll::Ready(Ok(()))
-    }
-}
-
-#[cfg(feature = "std")]
-impl<R: RbRef> AsyncWrite for AsyncProd<R>
-where
-    R::Target: AsyncRingBuffer<Item = u8>,
-{
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        let mut waker_registered = false;
-        loop {
-            if self.is_closed() {
-                break Poll::Ready(Ok(0));
-            }
-            let count = self.push_slice(buf);
-            if count > 0 {
-                break Poll::Ready(Ok(count));
-            }
-            if waker_registered {
-                break Poll::Pending;
-            }
-            self.register_read_waker(cx.waker());
-            waker_registered = true;
-        }
-    }
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        // Don't need to be flushed.
-        Poll::Ready(Ok(()))
-    }
-    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        self.close();
-        Poll::Ready(Ok(()))
     }
 }

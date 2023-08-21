@@ -1,55 +1,40 @@
-use super::{
-    direct::Obs,
-    frozen::{FrozenCons, FrozenProd},
-};
+use super::{direct::Obs, frozen::Frozen};
 use crate::{
-    impl_consumer_traits, impl_producer_traits,
     rb::traits::{RbRef, ToRbRef},
-    traits::{Consumer, Observe, Observer, Producer},
+    traits::{
+        consumer::{impl_consumer_traits, Consumer},
+        producer::{impl_producer_traits, Producer},
+        Observer,
+    },
 };
 use core::{mem::MaybeUninit, num::NonZeroUsize};
 
-/// Caching producer of ring buffer.
-pub struct CachingProd<R: RbRef> {
-    frozen: FrozenProd<R>,
+/// Caching wrapper of ring buffer.
+pub struct Caching<R: RbRef, const P: bool, const C: bool> {
+    frozen: Frozen<R, P, C>,
 }
 
-/// Caching consumer of ring buffer.
-pub struct CachingCons<R: RbRef> {
-    frozen: FrozenCons<R>,
-}
+pub type CachingProd<R> = Caching<R, true, false>;
+pub type CachingCons<R> = Caching<R, false, true>;
 
-impl<R: RbRef> CachingProd<R> {
+impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
     /// # Safety
     ///
     /// There must be no more than one consumer wrapper.
-    pub unsafe fn new(ref_: R) -> Self {
-        Self {
-            frozen: FrozenProd::new(ref_),
-        }
+    pub fn new(rb: R) -> Self {
+        Self { frozen: Frozen::new(rb) }
     }
-}
-impl<R: RbRef> ToRbRef for CachingProd<R> {
-    type RbRef = R;
 
-    fn rb_ref(&self) -> &R {
-        self.frozen.rb_ref()
+    pub fn observe(&self) -> Obs<R> {
+        self.frozen.observe()
     }
-    fn into_rb_ref(self) -> R {
-        self.frozen.into_rb_ref()
-    }
-}
-impl<R: RbRef> CachingCons<R> {
-    /// # Safety
-    ///
-    /// There must be no more than one consumer wrapper.
-    pub unsafe fn new(ref_: R) -> Self {
-        Self {
-            frozen: FrozenCons::new(ref_),
-        }
+
+    pub fn freeze(self) -> Frozen<R, P, C> {
+        self.frozen
     }
 }
-impl<R: RbRef> ToRbRef for CachingCons<R> {
+
+impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Caching<R, P, C> {
     type RbRef = R;
 
     fn rb_ref(&self) -> &R {
@@ -60,30 +45,18 @@ impl<R: RbRef> ToRbRef for CachingCons<R> {
     }
 }
 
-impl<R: RbRef> Observer for CachingProd<R> {
-    type Item = <R::Target as Observer>::Item;
-
-    #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.frozen.capacity()
+impl<R: RbRef, const P: bool, const C: bool> AsRef<Self> for Caching<R, P, C> {
+    fn as_ref(&self) -> &Self {
+        self
     }
-
-    #[inline]
-    fn read_index(&self) -> usize {
-        self.frozen.fetch();
-        self.frozen.read_index()
-    }
-    #[inline]
-    fn write_index(&self) -> usize {
-        self.frozen.write_index()
-    }
-
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        self.frozen.unsafe_slices(start, end)
+}
+impl<R: RbRef, const P: bool, const C: bool> AsMut<Self> for Caching<R, P, C> {
+    fn as_mut(&mut self) -> &mut Self {
+        self
     }
 }
 
-impl<R: RbRef> Observer for CachingCons<R> {
+impl<R: RbRef, const P: bool, const C: bool> Observer for Caching<R, P, C> {
     type Item = <R::Target as Observer>::Item;
 
     #[inline]
@@ -93,16 +66,30 @@ impl<R: RbRef> Observer for CachingCons<R> {
 
     #[inline]
     fn read_index(&self) -> usize {
+        if P {
+            self.frozen.fetch();
+        }
         self.frozen.read_index()
     }
     #[inline]
     fn write_index(&self) -> usize {
-        self.frozen.fetch();
+        if C {
+            self.frozen.fetch();
+        }
         self.frozen.write_index()
     }
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
         self.frozen.unsafe_slices(start, end)
+    }
+
+    #[inline]
+    fn read_is_held(&self) -> bool {
+        self.frozen.read_is_held()
+    }
+    #[inline]
+    fn write_is_held(&self) -> bool {
+        self.frozen.write_is_held()
     }
 }
 
@@ -146,16 +133,3 @@ impl<R: RbRef> Consumer for CachingCons<R> {
 
 impl_producer_traits!(CachingProd<R: RbRef>);
 impl_consumer_traits!(CachingCons<R: RbRef>);
-
-impl<R: RbRef> Observe for CachingProd<R> {
-    type Obs = Obs<R>;
-    fn observe(&self) -> Self::Obs {
-        self.frozen.observe()
-    }
-}
-impl<R: RbRef> Observe for CachingCons<R> {
-    type Obs = Obs<R>;
-    fn observe(&self) -> Self::Obs {
-        self.frozen.observe()
-    }
-}

@@ -1,4 +1,4 @@
-use super::{delegate::Delegate, utils::modulus};
+use super::{utils::modulus, Based};
 use core::{mem::MaybeUninit, num::NonZeroUsize};
 
 pub trait Observer: Sized {
@@ -13,6 +13,11 @@ pub trait Observer: Sized {
     fn write_index(&self) -> usize;
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]);
+
+    /// Whether read end is held by consumer.
+    fn read_is_held(&self) -> bool;
+    /// Whether write end is held by producer.
+    fn write_is_held(&self) -> bool;
 
     /// The number of items stored in the buffer.
     ///
@@ -47,11 +52,12 @@ pub trait Observer: Sized {
     }
 }
 
-pub trait DelegateObserver: Delegate
+pub trait DelegateObserver: Based
 where
     Self::Base: Observer,
 {
 }
+
 impl<D: DelegateObserver> Observer for D
 where
     D::Base: Observer,
@@ -59,7 +65,7 @@ where
     type Item = <D::Base as Observer>::Item;
 
     #[inline]
-    fn capacity(&self) -> core::num::NonZeroUsize {
+    fn capacity(&self) -> NonZeroUsize {
         self.base().capacity()
     }
 
@@ -73,12 +79,17 @@ where
     }
 
     #[inline]
-    unsafe fn unsafe_slices(
-        &self,
-        start: usize,
-        end: usize,
-    ) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
         self.base().unsafe_slices(start, end)
+    }
+
+    #[inline]
+    fn read_is_held(&self) -> bool {
+        self.base().read_is_held()
+    }
+    #[inline]
+    fn write_is_held(&self) -> bool {
+        self.base().write_is_held()
     }
 
     #[inline]
@@ -100,9 +111,4 @@ where
     fn is_full(&self) -> bool {
         self.base().is_full()
     }
-}
-
-pub trait Observe {
-    type Obs: Observer;
-    fn observe(&self) -> Self::Obs;
 }

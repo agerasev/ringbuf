@@ -1,21 +1,15 @@
 #[cfg(feature = "std")]
 use crate::sync::StdSemaphore;
-use crate::{
-    halves::{BlockingCons, BlockingProd},
-    sync::Semaphore,
-    traits::{BlockingConsumer, BlockingProducer},
-};
+use crate::{sync::Semaphore, BlockingCons, BlockingProd};
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
-use core::time::Duration;
+use core::{mem::MaybeUninit, num::NonZeroUsize};
 #[cfg(feature = "alloc")]
 use ringbuf::traits::Split;
 use ringbuf::{
+    rb::traits::RbRef,
     storage::Storage,
-    traits::{
-        delegate::{self, Delegate},
-        Consumer, Observer, Producer, RingBuffer, SplitRef,
-    },
+    traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
     SharedRb,
 };
 
@@ -28,8 +22,8 @@ pub struct BlockingRb<S: Storage, X: Semaphore> {
 #[cfg(feature = "std")]
 pub struct BlockingRb<S: Storage, X: Semaphore = StdSemaphore> {
     base: SharedRb<S>,
-    read: X,
-    write: X,
+    pub(crate) read: X,
+    pub(crate) write: X,
 }
 
 impl<S: Storage, X: Semaphore> BlockingRb<S, X> {
@@ -42,37 +36,56 @@ impl<S: Storage, X: Semaphore> BlockingRb<S, X> {
     }
 }
 
-impl<S: Storage, X: Semaphore> Delegate for BlockingRb<S, X> {
-    type Base = SharedRb<S>;
-    fn base(&self) -> &Self::Base {
-        &self.base
+impl<S: Storage, X: Semaphore> Observer for BlockingRb<S, X> {
+    type Item = S::Item;
+
+    #[inline]
+    fn capacity(&self) -> NonZeroUsize {
+        self.base.capacity()
+    }
+
+    #[inline]
+    fn read_index(&self) -> usize {
+        self.base.read_index()
+    }
+    #[inline]
+    fn write_index(&self) -> usize {
+        self.base.write_index()
+    }
+
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
+        self.base.unsafe_slices(start, end)
+    }
+
+    #[inline]
+    fn read_is_held(&self) -> bool {
+        self.base.read_is_held()
+    }
+    #[inline]
+    fn write_is_held(&self) -> bool {
+        self.base.write_is_held()
     }
 }
-impl<S: Storage, X: Semaphore> delegate::Observer for BlockingRb<S, X> {}
 impl<S: Storage, X: Semaphore> Producer for BlockingRb<S, X> {
     unsafe fn set_write_index(&self, value: usize) {
-        self.write.notify(|| self.base.set_write_index(value));
+        self.base.set_write_index(value);
+        self.write.give();
     }
 }
 impl<S: Storage, X: Semaphore> Consumer for BlockingRb<S, X> {
     unsafe fn set_read_index(&self, value: usize) {
-        self.read.notify(|| self.base.set_read_index(value));
+        self.base.set_read_index(value);
+        self.read.give();
     }
 }
-impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {}
-
-impl<S: Storage, X: Semaphore> BlockingProducer for BlockingRb<S, X> {
-    type Instant = X::Instant;
-    fn wait_vacant(&self, count: usize, timeout: Option<Duration>) -> bool {
-        debug_assert!(count <= self.capacity().get());
-        self.read.wait(|| self.vacant_len() >= count, timeout)
+impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {
+    unsafe fn hold_read(&self, flag: bool) {
+        self.base.hold_read(flag);
+        self.read.give();
     }
-}
-impl<S: Storage, X: Semaphore> BlockingConsumer for BlockingRb<S, X> {
-    type Instant = X::Instant;
-    fn wait_occupied(&self, count: usize, timeout: Option<Duration>) -> bool {
-        debug_assert!(count <= self.capacity().get());
-        self.write.wait(|| self.occupied_len() >= count, timeout)
+    unsafe fn hold_write(&self, flag: bool) {
+        self.base.hold_write(flag);
+        self.write.give();
     }
 }
 
@@ -81,7 +94,7 @@ impl<S: Storage, X: Semaphore> SplitRef for BlockingRb<S, X> {
     type RefCons<'a> = BlockingCons<&'a Self> where Self: 'a;
 
     fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
-        unsafe { (BlockingProd::new(self), BlockingCons::new(self)) }
+        (BlockingProd::new(self), BlockingCons::new(self))
     }
 }
 #[cfg(feature = "alloc")]
@@ -91,6 +104,15 @@ impl<S: Storage, X: Semaphore> Split for BlockingRb<S, X> {
 
     fn split(self) -> (Self::Prod, Self::Cons) {
         let arc = Arc::new(self);
-        unsafe { (BlockingProd::new(arc.clone()), BlockingCons::new(arc)) }
+        (BlockingProd::new(arc.clone()), BlockingCons::new(arc))
     }
+}
+
+pub trait BlockingRbRef: RbRef<Target = BlockingRb<Self::Storage, Self::Semaphore>> {
+    type Storage: Storage;
+    type Semaphore: Semaphore;
+}
+impl<S: Storage, X: Semaphore, R: RbRef<Target = BlockingRb<S, X>>> BlockingRbRef for R {
+    type Storage = S;
+    type Semaphore = X;
 }
