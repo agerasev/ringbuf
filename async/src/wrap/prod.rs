@@ -6,11 +6,13 @@ use core::{
 #[cfg(feature = "std")]
 use futures::io::AsyncWrite;
 use futures::{ready, Sink};
+#[cfg(feature = "std")]
+use ringbuf::traits::RingBuffer;
 use ringbuf::{
     rb::traits::ToRbRef,
     traits::{
         producer::{DelegateProducer, Producer},
-        Observer, RingBuffer,
+        Observer,
     },
 };
 #[cfg(feature = "std")]

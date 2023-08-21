@@ -16,8 +16,8 @@ use ringbuf::{
 #[cfg(not(feature = "std"))]
 pub struct BlockingRb<S: Storage, X: Semaphore> {
     base: SharedRb<S>,
-    read: X,
-    write: X,
+    pub(crate) read: X,
+    pub(crate) write: X,
 }
 #[cfg(feature = "std")]
 pub struct BlockingRb<S: Storage, X: Semaphore = StdSemaphore> {

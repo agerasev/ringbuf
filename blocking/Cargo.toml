@@ -1,6 +1,6 @@
 [package]
 name = "ringbuf-blocking"
-version = "0.1.0-rc.0"
+version = "0.1.0-rc.1"
 edition.workspace = true
 authors.workspace = true
 description = "Blocking version of ringbuf"

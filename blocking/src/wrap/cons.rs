@@ -1,9 +1,11 @@
 use super::{BlockingWrap, WaitError};
 use crate::{rb::BlockingRbRef, sync::Semaphore};
 use core::time::Duration;
+#[cfg(feature = "std")]
+use ringbuf::traits::Based;
 use ringbuf::{
     rb::traits::ToRbRef,
-    traits::{consumer::DelegateConsumer, observer::DelegateObserver, Based, Consumer, Observer},
+    traits::{consumer::DelegateConsumer, observer::DelegateObserver, Consumer, Observer},
 };
 #[cfg(feature = "std")]
 use std::io;
