@@ -1,4 +1,4 @@
-use crate::{traits::*, BlockingHeapRb};
+use crate::{traits::*, wrap::WaitError, BlockingHeapRb};
 use std::{
     io::{Read, Write},
     thread,
@@ -16,7 +16,7 @@ But Rust isn't limited to low-level systems programming. It's expressive and erg
 This book fully embraces the potential of Rust to empower its users. It's a friendly and approachable text intended to help you level up not just your knowledge of Rust, but also your reach and confidence as a programmer in general. So dive in, get ready to learn-and welcome to the Rust community!
 
 - Nicholas Matsakis and Aaron Turon
-\0";
+";
 
 const TIMEOUT: Option<Duration> = Some(Duration::from_millis(1000));
 
@@ -32,7 +32,7 @@ fn wait() {
         let mut bytes = smsg;
         prod.set_timeout(TIMEOUT);
         while !bytes.is_empty() {
-            assert!(prod.wait_vacant(1));
+            assert_eq!(prod.wait_vacant(1), Ok(()));
             let n = prod.push_slice(bytes);
             assert!(n > 0);
             bytes = &bytes[n..bytes.len()]
@@ -44,13 +44,14 @@ fn wait() {
         let mut buffer = [0; 5];
         cons.set_timeout(TIMEOUT);
         loop {
-            assert!(cons.wait_occupied(1));
+            let res = cons.wait_occupied(1);
+            if let Err(WaitError::Closed) = res {
+                break;
+            }
+            assert_eq!(res, Ok(()));
             let n = cons.pop_slice(&mut buffer);
             assert!(n > 0);
             bytes.extend_from_slice(&buffer[0..n]);
-            if bytes.ends_with(&[0]) {
-                break;
-            }
         }
         bytes
     });
@@ -104,9 +105,7 @@ fn iter_all() {
 
     let cjh = thread::spawn(move || {
         cons.set_timeout(TIMEOUT);
-        let mut bytes = cons.pop_all_iter().take_while(|x| *x != 0).collect::<Vec<_>>();
-        bytes.push(0);
-        bytes
+        cons.pop_all_iter().collect::<Vec<_>>()
     });
 
     pjh.join().unwrap();
@@ -131,8 +130,8 @@ fn write_read() {
 
     let cjh = thread::spawn(move || {
         cons.set_timeout(TIMEOUT);
-        let mut bytes = vec![0; smsg.len()];
-        cons.read_exact(&mut bytes).unwrap();
+        let mut bytes = Vec::new();
+        assert_eq!(cons.read_to_end(&mut bytes).unwrap(), smsg.len());
         bytes
     });
 

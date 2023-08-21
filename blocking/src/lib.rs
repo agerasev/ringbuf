@@ -7,8 +7,6 @@ extern crate alloc;
 extern crate std;
 
 mod alias;
-pub mod cons;
-pub mod prod;
 pub mod rb;
 pub mod sync;
 pub mod wrap;
@@ -19,6 +17,5 @@ mod tests;
 pub use ringbuf::traits;
 
 pub use alias::*;
-pub use cons::BlockingCons;
-pub use prod::BlockingProd;
 pub use rb::BlockingRb;
+pub use wrap::{BlockingCons, BlockingProd};

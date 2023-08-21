@@ -1,4 +1,5 @@
-use crate::{rb::BlockingRbRef, sync::Semaphore, wrap::BlockingWrap};
+use super::{BlockingWrap, WaitError};
+use crate::{rb::BlockingRbRef, sync::Semaphore};
 use core::time::Duration;
 use ringbuf::{
     rb::traits::ToRbRef,
@@ -30,23 +31,29 @@ impl<R: BlockingRbRef> BlockingCons<R> {
         self.timeout
     }
 
-    pub fn wait_occupied(&mut self, count: usize) -> bool {
+    pub fn wait_occupied(&mut self, count: usize) -> Result<(), WaitError> {
         debug_assert!(count <= self.rb().capacity().get());
         for _ in wait_iter!(self) {
             if self.base.occupied_len() >= count {
-                return true;
+                return Ok(());
+            }
+            if self.is_closed() {
+                return Err(WaitError::Closed);
             }
         }
-        false
+        Err(WaitError::TimedOut)
     }
 
-    pub fn pop(&mut self) -> Option<<Self as Observer>::Item> {
+    pub fn pop(&mut self) -> Result<<Self as Observer>::Item, WaitError> {
         for _ in wait_iter!(self) {
             if let Some(item) = self.base.try_pop() {
-                return Some(item);
+                return Ok(item);
+            }
+            if self.is_closed() {
+                return Err(WaitError::Closed);
             }
         }
-        None
+        Err(WaitError::TimedOut)
     }
 
     pub fn pop_all_iter(&mut self) -> PopAllIter<'_, R> {
@@ -68,7 +75,7 @@ where
             slice = &mut slice[n..];
             count += n;
 
-            if slice.is_empty() {
+            if slice.is_empty() || (self.is_closed() && self.is_empty()) {
                 break;
             }
         }
@@ -87,6 +94,9 @@ where
             if n > 0 {
                 return Ok(n);
             }
+            if self.is_closed() {
+                return Ok(0);
+            }
         }
         Err(io::ErrorKind::TimedOut.into())
     }
@@ -100,6 +110,6 @@ impl<'a, R: BlockingRbRef> Iterator for PopAllIter<'a, R> {
     type Item = <R::Target as Observer>::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.owner.pop()
+        self.owner.pop().ok()
     }
 }

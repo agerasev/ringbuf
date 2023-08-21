@@ -1,4 +1,5 @@
-use crate::{rb::BlockingRbRef, sync::Semaphore, wrap::BlockingWrap};
+use super::{BlockingWrap, WaitError};
+use crate::{rb::BlockingRbRef, sync::Semaphore};
 use core::time::Duration;
 use ringbuf::{
     rb::traits::ToRbRef,
@@ -20,7 +21,7 @@ macro_rules! wait_iter {
 
 impl<R: BlockingRbRef> BlockingProd<R> {
     pub fn is_closed(&self) -> bool {
-        self.read_is_held()
+        !self.read_is_held()
     }
 
     pub fn set_timeout(&mut self, timeout: Option<Duration>) {
@@ -30,24 +31,30 @@ impl<R: BlockingRbRef> BlockingProd<R> {
         self.timeout
     }
 
-    pub fn wait_vacant(&mut self, count: usize) -> bool {
+    pub fn wait_vacant(&mut self, count: usize) -> Result<(), WaitError> {
         debug_assert!(count <= self.rb().capacity().get());
         for _ in wait_iter!(self) {
             if self.base.vacant_len() >= count {
-                return true;
+                return Ok(());
+            }
+            if self.is_closed() {
+                return Err(WaitError::Closed);
             }
         }
-        false
+        Err(WaitError::TimedOut)
     }
 
-    pub fn push(&mut self, mut item: <Self as Observer>::Item) -> Result<(), <Self as Observer>::Item> {
+    pub fn push(&mut self, mut item: <Self as Observer>::Item) -> Result<(), (WaitError, <Self as Observer>::Item)> {
         for _ in wait_iter!(self) {
             item = match self.base.try_push(item) {
                 Ok(()) => return Ok(()),
                 Err(item) => item,
             };
+            if self.is_closed() {
+                return Err((WaitError::Closed, item));
+            }
         }
-        Err(item)
+        Err((WaitError::TimedOut, item))
     }
 
     pub fn push_all_iter<I: Iterator<Item = <Self as Observer>::Item>>(&mut self, iter: I) -> usize {
@@ -57,6 +64,10 @@ impl<R: BlockingRbRef> BlockingProd<R> {
         }
         let mut count = 0;
         for _ in wait_iter!(self) {
+            if self.is_closed() {
+                break;
+            }
+
             count += self.base.push_iter(&mut iter);
 
             if iter.peek().is_none() {
@@ -77,6 +88,10 @@ where
 
         let mut count = 0;
         for _ in wait_iter!(self) {
+            if self.is_closed() {
+                break;
+            }
+
             let n = self.base.push_slice(slice);
             slice = &slice[n..];
             count += n;
@@ -96,6 +111,9 @@ where
 {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         for _ in wait_iter!(self) {
+            if self.is_closed() {
+                return Ok(0);
+            }
             let n = self.base.push_slice(buf);
             if n > 0 {
                 return Ok(n);

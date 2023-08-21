@@ -1,3 +1,6 @@
+mod cons;
+mod prod;
+
 use crate::rb::BlockingRbRef;
 use core::time::Duration;
 use ringbuf::{rb::traits::ToRbRef, traits::Based, wrap::caching::Caching, Obs};
@@ -39,3 +42,12 @@ impl<R: BlockingRbRef, const P: bool, const C: bool> ToRbRef for BlockingWrap<R,
         self.base.into_rb_ref()
     }
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum WaitError {
+    TimedOut,
+    Closed,
+}
+
+pub use cons::*;
+pub use prod::*;
