@@ -2,17 +2,17 @@
 
 [![Crates.io][crates_badge]][crates]
 [![Docs.rs][docs_badge]][docs]
-[![Github Actions][github_badge]][github]
+[![Gitlab CI][gitlab_badge]][gitlab]
 [![License][license_badge]][license]
 
 [crates_badge]: https://img.shields.io/crates/v/ringbuf.svg
 [docs_badge]: https://docs.rs/ringbuf/badge.svg
-[github_badge]: https://github.com/agerasev/ringbuf/actions/workflows/test.yml/badge.svg
+[gitlab_badge]: https://gitlab.com/agerasev/ringbuf/badges/master/pipeline.svg
 [license_badge]: https://img.shields.io/crates/l/ringbuf.svg
 
 [crates]: https://crates.io/crates/ringbuf
 [docs]: https://docs.rs/ringbuf
-[github]: https://github.com/agerasev/ringbuf/actions/workflows/test.yml
+[gitlab]: https://gitlab.com/agerasev/ringbuf/-/pipelines?scope=branches&ref=master
 [license]: #license
 
 Lock-free SPSC FIFO ring buffer with direct access to inner data.
@@ -26,7 +26,7 @@ Lock-free SPSC FIFO ring buffer with direct access to inner data.
 + `Read` and `Write` implementation.
 + Overwriting mode support.
 + Can be used without `std` and even without `alloc` (using only statically-allocated memory).
-+ [Experimental `async`/`.await` support](https://github.com/agerasev/async-ringbuf).
++ [Experimental `async`/`.await` support](./async).
 
 ## Usage
 
@@ -74,17 +74,17 @@ use ringbuf::HeapRb;
 let rb = HeapRb::<i32>::new(2);
 let (mut prod, mut cons) = rb.split();
 
-prod.push(0).unwrap();
-prod.push(1).unwrap();
-assert_eq!(prod.push(2), Err(2));
+prod.try_push(0).unwrap();
+prod.try_push(1).unwrap();
+assert_eq!(prod.try_push(2), Err(2));
 
-assert_eq!(cons.pop(), Some(0));
+assert_eq!(cons.try_pop(), Some(0));
 
-prod.push(2).unwrap();
+prod.try_push(2).unwrap();
 
-assert_eq!(cons.pop(), Some(1));
-assert_eq!(cons.pop(), Some(2));
-assert_eq!(cons.pop(), None);
+assert_eq!(cons.try_pop(), Some(1));
+assert_eq!(cons.try_pop(), Some(2));
+assert_eq!(cons.try_pop(), None);
 # }
 ```
 
@@ -98,11 +98,11 @@ const RB_SIZE: usize = 1;
 let mut rb = StaticRb::<i32, RB_SIZE>::default();
 let (mut prod, mut cons) = rb.split_ref();
 
-assert_eq!(prod.push(123), Ok(()));
-assert_eq!(prod.push(321), Err(321));
+assert_eq!(prod.try_push(123), Ok(()));
+assert_eq!(prod.try_push(321), Err(321));
 
-assert_eq!(cons.pop(), Some(123));
-assert_eq!(cons.pop(), None);
+assert_eq!(cons.try_pop(), Some(123));
+assert_eq!(cons.try_pop(), None);
 # }
 ```
 
@@ -120,9 +120,9 @@ assert_eq!(rb.push_overwrite(0), None);
 assert_eq!(rb.push_overwrite(1), None);
 assert_eq!(rb.push_overwrite(2), Some(0));
 
-assert_eq!(rb.pop(), Some(1));
-assert_eq!(rb.pop(), Some(2));
-assert_eq!(rb.pop(), None);
+assert_eq!(rb.try_pop(), Some(1));
+assert_eq!(rb.try_pop(), Some(2));
+assert_eq!(rb.try_pop(), None);
 # }
 ```
 
@@ -131,7 +131,7 @@ so to perform it concurrently you need to guard the ring buffer with [`Mutex`](`
 
 ## `async`/`.await`
 
-There is an experimental crate [`async-ringbuf`](https://github.com/agerasev/async-ringbuf)
+There is an experimental crate [`async-ringbuf`](https://gitlab.com/agerasev/async-ringbuf)
 which is built on top of `ringbuf` and implements asynchronous ring buffer operations.
 
 ## License
