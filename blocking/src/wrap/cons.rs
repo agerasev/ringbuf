@@ -4,8 +4,8 @@ use core::time::Duration;
 #[cfg(feature = "std")]
 use ringbuf::traits::Based;
 use ringbuf::{
-    rb::traits::ToRbRef,
     traits::{consumer::DelegateConsumer, observer::DelegateObserver, Consumer, Observer},
+    wrap::traits::Wrap,
 };
 #[cfg(feature = "std")]
 use std::io;
@@ -17,7 +17,7 @@ impl<R: BlockingRbRef> DelegateConsumer for BlockingCons<R> {}
 
 macro_rules! wait_iter {
     ($self:expr) => {
-        $self.rb.deref().write.take_iter($self.timeout()).reset()
+        $self.rb.rb().write.take_iter($self.timeout()).reset()
     };
 }
 
@@ -109,7 +109,7 @@ pub struct PopAllIter<'a, R: BlockingRbRef> {
 }
 
 impl<'a, R: BlockingRbRef> Iterator for PopAllIter<'a, R> {
-    type Item = <R::Target as Observer>::Item;
+    type Item = <R::Rb as Observer>::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.owner.pop().ok()

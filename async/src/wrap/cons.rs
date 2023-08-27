@@ -7,11 +7,11 @@ use core::{
 use futures::io::AsyncRead;
 use futures::Stream;
 use ringbuf::{
-    rb::traits::ToRbRef,
     traits::{
         consumer::{Consumer, DelegateConsumer},
         Observer,
     },
+    wrap::traits::Wrap,
 };
 #[cfg(feature = "std")]
 use std::io;
@@ -30,7 +30,7 @@ impl<R: AsyncRbRef> AsyncConsumer for AsyncCons<R> {
 }
 
 impl<R: AsyncRbRef> Stream for AsyncCons<R> {
-    type Item = <R::Target as Observer>::Item;
+    type Item = <R::Rb as Observer>::Item;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut waker_registered = false;

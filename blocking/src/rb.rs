@@ -108,11 +108,11 @@ impl<S: Storage, X: Semaphore> Split for BlockingRb<S, X> {
     }
 }
 
-pub trait BlockingRbRef: RbRef<Target = BlockingRb<Self::Storage, Self::Semaphore>> {
+pub trait BlockingRbRef: RbRef<Rb = BlockingRb<Self::Storage, Self::Semaphore>> {
     type Storage: Storage;
     type Semaphore: Semaphore;
 }
-impl<S: Storage, X: Semaphore, R: RbRef<Target = BlockingRb<S, X>>> BlockingRbRef for R {
+impl<S: Storage, X: Semaphore, R: RbRef<Rb = BlockingRb<S, X>>> BlockingRbRef for R {
     type Storage = S;
     type Semaphore = X;
 }

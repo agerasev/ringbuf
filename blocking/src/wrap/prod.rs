@@ -4,8 +4,8 @@ use core::time::Duration;
 #[cfg(feature = "std")]
 use ringbuf::traits::Based;
 use ringbuf::{
-    rb::traits::ToRbRef,
     traits::{observer::DelegateObserver, producer::DelegateProducer, Observer, Producer},
+    wrap::traits::Wrap,
 };
 #[cfg(feature = "std")]
 use std::io;
@@ -17,7 +17,7 @@ impl<R: BlockingRbRef> DelegateProducer for BlockingProd<R> {}
 
 macro_rules! wait_iter {
     ($self:expr) => {
-        $self.rb.deref().read.take_iter($self.timeout()).reset()
+        $self.rb.rb().read.take_iter($self.timeout()).reset()
     };
 }
 

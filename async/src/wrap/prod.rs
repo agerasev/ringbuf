@@ -9,11 +9,11 @@ use futures::{ready, Sink};
 #[cfg(feature = "std")]
 use ringbuf::traits::RingBuffer;
 use ringbuf::{
-    rb::traits::ToRbRef,
     traits::{
         producer::{DelegateProducer, Producer},
         Observer,
     },
+    wrap::traits::Wrap,
 };
 #[cfg(feature = "std")]
 use std::io;
@@ -31,7 +31,7 @@ impl<R: AsyncRbRef> AsyncProducer for AsyncProd<R> {
     }
 }
 
-impl<R: AsyncRbRef> Sink<<R::Target as Observer>::Item> for AsyncProd<R> {
+impl<R: AsyncRbRef> Sink<<R::Rb as Observer>::Item> for AsyncProd<R> {
     type Error = ();
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -41,7 +41,7 @@ impl<R: AsyncRbRef> Sink<<R::Target as Observer>::Item> for AsyncProd<R> {
             Err(())
         })
     }
-    fn start_send(mut self: Pin<&mut Self>, item: <R::Target as Observer>::Item) -> Result<(), Self::Error> {
+    fn start_send(mut self: Pin<&mut Self>, item: <R::Rb as Observer>::Item) -> Result<(), Self::Error> {
         assert!(self.try_push(item).is_ok());
         Ok(())
     }
@@ -58,7 +58,7 @@ impl<R: AsyncRbRef> Sink<<R::Target as Observer>::Item> for AsyncProd<R> {
 #[cfg(feature = "std")]
 impl<R: AsyncRbRef> AsyncWrite for AsyncProd<R>
 where
-    R::Target: RingBuffer<Item = u8>,
+    R::Rb: RingBuffer<Item = u8>,
 {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         <Self as AsyncProducer>::poll_write(self, cx, buf)

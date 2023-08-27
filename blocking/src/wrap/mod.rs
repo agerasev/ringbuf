@@ -3,7 +3,11 @@ mod prod;
 
 use crate::rb::BlockingRbRef;
 use core::time::Duration;
-use ringbuf::{rb::traits::ToRbRef, traits::Based, wrap::caching::Caching, Obs};
+use ringbuf::{
+    traits::Based,
+    wrap::{caching::Caching, traits::Wrap},
+    Obs,
+};
 
 pub struct BlockingWrap<R: BlockingRbRef, const P: bool, const C: bool> {
     pub(crate) rb: R,
@@ -33,7 +37,7 @@ impl<R: BlockingRbRef, const P: bool, const C: bool> Based for BlockingWrap<R, P
         &mut self.base
     }
 }
-impl<R: BlockingRbRef, const P: bool, const C: bool> ToRbRef for BlockingWrap<R, P, C> {
+impl<R: BlockingRbRef, const P: bool, const C: bool> Wrap for BlockingWrap<R, P, C> {
     type RbRef = R;
     fn rb_ref(&self) -> &Self::RbRef {
         &self.rb

@@ -1,6 +1,6 @@
-use super::direct::Obs;
+use super::{direct::Obs, traits::Wrap};
 use crate::{
-    rb::traits::{RbRef, ToRbRef},
+    rb::traits::RbRef,
     traits::{
         consumer::{impl_consumer_traits, Consumer},
         producer::{impl_producer_traits, Producer},
@@ -40,20 +40,20 @@ impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
     /// There must be only one instance containing the same ring buffer reference.
     pub fn new(rb: R) -> Self {
         if P {
-            assert!(!rb.deref().write_is_held());
-            unsafe { rb.deref().hold_write(true) };
+            assert!(!rb.rb().write_is_held());
+            unsafe { rb.rb().hold_write(true) };
         }
         if C {
-            assert!(!rb.deref().read_is_held());
-            unsafe { rb.deref().hold_read(true) };
+            assert!(!rb.rb().read_is_held());
+            unsafe { rb.rb().hold_read(true) };
         }
         unsafe { Self::new_unchecked(rb) }
     }
 
     pub(crate) unsafe fn new_unchecked(rb: R) -> Self {
         Self {
-            read: Cell::new(rb.deref().read_index()),
-            write: Cell::new(rb.deref().write_index()),
+            read: Cell::new(rb.rb().read_index()),
+            write: Cell::new(rb.rb().write_index()),
             rb,
         }
     }
@@ -72,7 +72,7 @@ impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Frozen<R, P, C> {
+impl<R: RbRef, const P: bool, const C: bool> Wrap for Frozen<R, P, C> {
     type RbRef = R;
 
     fn rb_ref(&self) -> &R {
@@ -142,7 +142,7 @@ impl<R: RbRef> FrozenProd<R> {
 }
 
 impl<R: RbRef, const P: bool, const C: bool> Observer for Frozen<R, P, C> {
-    type Item = <R::Target as Observer>::Item;
+    type Item = <R::Rb as Observer>::Item;
 
     #[inline]
     fn capacity(&self) -> NonZeroUsize {

@@ -1,6 +1,6 @@
-use super::{direct::Obs, frozen::Frozen};
+use super::{direct::Obs, frozen::Frozen, traits::Wrap};
 use crate::{
-    rb::traits::{RbRef, ToRbRef},
+    rb::traits::RbRef,
     traits::{
         consumer::{impl_consumer_traits, Consumer},
         producer::{impl_producer_traits, Producer},
@@ -34,7 +34,7 @@ impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> ToRbRef for Caching<R, P, C> {
+impl<R: RbRef, const P: bool, const C: bool> Wrap for Caching<R, P, C> {
     type RbRef = R;
 
     fn rb_ref(&self) -> &R {
@@ -57,7 +57,7 @@ impl<R: RbRef, const P: bool, const C: bool> AsMut<Self> for Caching<R, P, C> {
 }
 
 impl<R: RbRef, const P: bool, const C: bool> Observer for Caching<R, P, C> {
-    type Item = <R::Target as Observer>::Item;
+    type Item = <R::Rb as Observer>::Item;
 
     #[inline]
     fn capacity(&self) -> NonZeroUsize {

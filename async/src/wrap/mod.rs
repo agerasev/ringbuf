@@ -3,9 +3,8 @@ mod prod;
 
 use crate::rb::AsyncRbRef;
 use ringbuf::{
-    rb::traits::ToRbRef,
     traits::{observer::DelegateObserver, Based},
-    wrap::caching::Caching,
+    wrap::{caching::Caching, traits::Wrap},
     Obs,
 };
 
@@ -38,7 +37,7 @@ impl<R: AsyncRbRef, const P: bool, const C: bool> Based for AsyncWrap<R, P, C> {
     }
 }
 
-impl<R: AsyncRbRef, const P: bool, const C: bool> ToRbRef for AsyncWrap<R, P, C> {
+impl<R: AsyncRbRef, const P: bool, const C: bool> Wrap for AsyncWrap<R, P, C> {
     type RbRef = R;
     fn rb_ref(&self) -> &R {
         self.base().rb_ref()

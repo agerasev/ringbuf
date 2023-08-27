@@ -12,10 +12,10 @@ use ringbuf::{
     SharedRb,
 };
 
-pub trait AsyncRbRef: RbRef<Target = AsyncRb<Self::Storage>> {
+pub trait AsyncRbRef: RbRef<Rb = AsyncRb<Self::Storage>> {
     type Storage: Storage;
 }
-impl<S: Storage, R: RbRef<Target = AsyncRb<S>>> AsyncRbRef for R {
+impl<S: Storage, R: RbRef<Rb = AsyncRb<S>>> AsyncRbRef for R {
     type Storage = S;
 }
 
