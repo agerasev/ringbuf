@@ -1,6 +1,13 @@
-use crate::{async_transfer, traits::*, AsyncHeapRb};
+use crate::{
+    alias::{AsyncHeapCons, AsyncHeapProd, AsyncHeapRb},
+    async_transfer,
+    traits::*,
+};
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::{
+    marker::PhantomData,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 use futures::task::{noop_waker_ref, AtomicWaker};
 #[cfg(feature = "std")]
 use std::sync::Arc;
@@ -17,6 +24,14 @@ fn atomic_waker() {
     waker.register(noop_waker_ref());
     waker.wake();
     assert!(waker.take().is_none());
+}
+
+#[test]
+fn send_sync() {
+    struct Check<T: Send + Sync>(PhantomData<T>);
+    let _ = Check::<AsyncHeapRb<i32>>(PhantomData);
+    let _ = Check::<AsyncHeapProd<i32>>(PhantomData);
+    let _ = Check::<AsyncHeapCons<i32>>(PhantomData);
 }
 
 macro_rules! execute {

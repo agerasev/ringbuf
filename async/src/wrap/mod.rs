@@ -4,12 +4,12 @@ mod prod;
 use crate::rb::AsyncRbRef;
 use ringbuf::{
     traits::{observer::DelegateObserver, Based},
-    wrap::{caching::Caching, traits::Wrap},
+    wrap::{direct::Direct, traits::Wrap},
     Obs,
 };
 
 pub struct AsyncWrap<R: AsyncRbRef, const P: bool, const C: bool> {
-    base: Option<Caching<R, P, C>>,
+    base: Option<Direct<R, P, C>>,
 }
 
 pub type AsyncProd<R> = AsyncWrap<R, true, false>;
@@ -18,7 +18,7 @@ pub type AsyncCons<R> = AsyncWrap<R, false, true>;
 impl<R: AsyncRbRef, const P: bool, const C: bool> AsyncWrap<R, P, C> {
     pub unsafe fn new(rb: R) -> Self {
         Self {
-            base: Some(Caching::new(rb)),
+            base: Some(Direct::new(rb)),
         }
     }
 
@@ -28,7 +28,7 @@ impl<R: AsyncRbRef, const P: bool, const C: bool> AsyncWrap<R, P, C> {
 }
 
 impl<R: AsyncRbRef, const P: bool, const C: bool> Based for AsyncWrap<R, P, C> {
-    type Base = Caching<R, P, C>;
+    type Base = Direct<R, P, C>;
     fn base(&self) -> &Self::Base {
         self.base.as_ref().unwrap()
     }
