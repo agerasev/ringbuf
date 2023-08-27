@@ -69,7 +69,40 @@ pub trait Consumer: Observer {
         }
     }
 
-    /// Removes latest item from the ring buffer and returns it.
+    /// Returns a reference to the eldest item in the ring buffer, if exists.
+    #[inline]
+    fn first(&self) -> Option<&Self::Item> {
+        self.as_slices().0.first()
+    }
+    /// Returns a mutable reference to the eldest item in the ring buffer, if exists.
+    #[inline]
+    fn first_mut(&mut self) -> Option<&mut Self::Item> {
+        self.as_mut_slices().0.first_mut()
+    }
+    /// Returns a reference to the most recent item in the ring buffer, if exists.
+    ///
+    /// *Returned item may not be actually the most recent if there is a concurrent producer activity.*
+    fn last(&self) -> Option<&Self::Item> {
+        let (first, second) = self.as_slices();
+        if second.is_empty() {
+            first.last()
+        } else {
+            second.last()
+        }
+    }
+    /// Returns a mutable reference to the most recent item in the ring buffer, if exists.
+    ///
+    /// *Returned item may not be actually the most recent if there is a concurrent producer activity.*
+    fn last_mut(&mut self) -> Option<&mut Self::Item> {
+        let (first, second) = self.as_mut_slices();
+        if second.is_empty() {
+            first.last_mut()
+        } else {
+            second.last_mut()
+        }
+    }
+
+    /// Removes the eldest item from the ring buffer and returns it.
     ///
     /// Returns `None` if the ring buffer is empty.
     fn try_pop(&mut self) -> Option<Self::Item> {
