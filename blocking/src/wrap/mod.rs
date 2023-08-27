@@ -43,6 +43,17 @@ impl<R: BlockingRbRef, const P: bool, const C: bool> ToRbRef for BlockingWrap<R,
     }
 }
 
+impl<R: BlockingRbRef, const P: bool, const C: bool> AsRef<Self> for BlockingWrap<R, P, C> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+impl<R: BlockingRbRef, const P: bool, const C: bool> AsMut<Self> for BlockingWrap<R, P, C> {
+    fn as_mut(&mut self) -> &mut Self {
+        self
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum WaitError {
     TimedOut,

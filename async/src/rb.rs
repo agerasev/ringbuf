@@ -111,3 +111,14 @@ impl<S: Storage> Split for AsyncRb<S> {
         unsafe { (AsyncProd::new(arc.clone()), AsyncCons::new(arc)) }
     }
 }
+
+impl<S: Storage> AsRef<Self> for AsyncRb<S> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+impl<S: Storage> AsMut<Self> for AsyncRb<S> {
+    fn as_mut(&mut self) -> &mut Self {
+        self
+    }
+}

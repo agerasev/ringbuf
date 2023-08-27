@@ -51,3 +51,14 @@ impl<R: AsyncRbRef, const P: bool, const C: bool> ToRbRef for AsyncWrap<R, P, C>
 impl<R: AsyncRbRef, const P: bool, const C: bool> Unpin for AsyncWrap<R, P, C> {}
 
 impl<R: AsyncRbRef, const P: bool, const C: bool> DelegateObserver for AsyncWrap<R, P, C> {}
+
+impl<R: AsyncRbRef, const P: bool, const C: bool> AsRef<Self> for AsyncWrap<R, P, C> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+impl<R: AsyncRbRef, const P: bool, const C: bool> AsMut<Self> for AsyncWrap<R, P, C> {
+    fn as_mut(&mut self) -> &mut Self {
+        self
+    }
+}

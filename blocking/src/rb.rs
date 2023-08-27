@@ -116,3 +116,14 @@ impl<S: Storage, X: Semaphore, R: RbRef<Target = BlockingRb<S, X>>> BlockingRbRe
     type Storage = S;
     type Semaphore = X;
 }
+
+impl<S: Storage, X: Semaphore> AsRef<Self> for BlockingRb<S, X> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+impl<S: Storage, X: Semaphore> AsMut<Self> for BlockingRb<S, X> {
+    fn as_mut(&mut self) -> &mut Self {
+        self
+    }
+}
