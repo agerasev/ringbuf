@@ -18,4 +18,4 @@ pub use ringbuf::traits;
 
 pub use alias::*;
 pub use rb::BlockingRb;
-pub use wrap::{BlockingCons, BlockingProd};
+pub use wrap::{BlockingCons, BlockingProd, WaitError};
