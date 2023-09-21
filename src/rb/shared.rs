@@ -93,7 +93,7 @@ impl<S: Storage> Observer for SharedRb<S> {
     }
     #[inline]
     fn write_index(&self) -> usize {
-        self.write_index.load(Ordering::Relaxed)
+        self.write_index.load(Ordering::Acquire)
     }
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
@@ -121,7 +121,7 @@ impl<S: Storage> Producer for SharedRb<S> {
 impl<S: Storage> Consumer for SharedRb<S> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
-        self.read_index.store(value, Ordering::Relaxed);
+        self.read_index.store(value, Ordering::Release);
     }
 }
 
