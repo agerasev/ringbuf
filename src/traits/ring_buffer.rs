@@ -19,16 +19,20 @@ use super::{
 pub trait RingBuffer: Observer + Consumer + Producer {
     /// Tell whether read end of the ring buffer is held by consumer or not.
     ///
+    /// Returns old value.
+    ///
     /// # Safety
     ///
     /// Must not be set to `false` while consumer exists.
-    unsafe fn hold_read(&self, flag: bool);
+    unsafe fn hold_read(&self, flag: bool) -> bool;
     /// Tell whether write end of the ring buffer is held by producer or not.
+    ///
+    /// Returns old value.
     ///
     /// # Safety
     ///
     /// Must not be set to `false` while producer exists.
-    unsafe fn hold_write(&self, flag: bool);
+    unsafe fn hold_write(&self, flag: bool) -> bool;
 
     /// Pushes an item to the ring buffer overwriting the latest item if the buffer is full.
     ///
@@ -78,11 +82,11 @@ impl<D: DelegateRingBuffer> RingBuffer for D
 where
     D::Base: RingBuffer,
 {
-    unsafe fn hold_read(&self, flag: bool) {
-        self.base().hold_read(flag);
+    unsafe fn hold_read(&self, flag: bool) -> bool {
+        self.base().hold_read(flag)
     }
-    unsafe fn hold_write(&self, flag: bool) {
-        self.base().hold_write(flag);
+    unsafe fn hold_write(&self, flag: bool) -> bool {
+        self.base().hold_write(flag)
     }
 
     #[inline]

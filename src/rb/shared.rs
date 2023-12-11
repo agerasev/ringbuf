@@ -127,12 +127,12 @@ impl<S: Storage> Consumer for SharedRb<S> {
 
 impl<S: Storage> RingBuffer for SharedRb<S> {
     #[inline]
-    unsafe fn hold_read(&self, flag: bool) {
-        self.read_held.store(flag, Ordering::Relaxed)
+    unsafe fn hold_read(&self, flag: bool) -> bool {
+        self.read_held.swap(flag, Ordering::Relaxed)
     }
     #[inline]
-    unsafe fn hold_write(&self, flag: bool) {
-        self.write_held.store(flag, Ordering::Relaxed)
+    unsafe fn hold_write(&self, flag: bool) -> bool {
+        self.write_held.swap(flag, Ordering::Relaxed)
     }
 }
 

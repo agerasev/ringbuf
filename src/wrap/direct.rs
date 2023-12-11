@@ -41,12 +41,10 @@ impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
     /// There must be no more than one wrapper with the same parameter being `true`.
     pub fn new(rb: R) -> Self {
         if P {
-            assert!(!rb.rb().write_is_held());
-            unsafe { rb.rb().hold_write(true) };
+            assert!(!unsafe { rb.rb().hold_write(true) });
         }
         if C {
-            assert!(!rb.rb().read_is_held());
-            unsafe { rb.rb().hold_read(true) };
+            assert!(!unsafe { rb.rb().hold_read(true) });
         }
         Self { rb }
     }

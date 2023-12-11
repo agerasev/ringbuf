@@ -79,13 +79,15 @@ impl<S: Storage, X: Semaphore> Consumer for BlockingRb<S, X> {
     }
 }
 impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {
-    unsafe fn hold_read(&self, flag: bool) {
-        self.base.hold_read(flag);
+    unsafe fn hold_read(&self, flag: bool) -> bool {
+        let old = self.base.hold_read(flag);
         self.read.give();
+        old
     }
-    unsafe fn hold_write(&self, flag: bool) {
-        self.base.hold_write(flag);
+    unsafe fn hold_write(&self, flag: bool) -> bool {
+        let old = self.base.hold_write(flag);
         self.write.give();
+        old
     }
 }
 

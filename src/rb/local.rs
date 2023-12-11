@@ -115,12 +115,12 @@ impl<S: Storage> Consumer for LocalRb<S> {
 
 impl<S: Storage> RingBuffer for LocalRb<S> {
     #[inline]
-    unsafe fn hold_read(&self, flag: bool) {
-        self.read.held.set(flag)
+    unsafe fn hold_read(&self, flag: bool) -> bool {
+        self.read.held.replace(flag)
     }
     #[inline]
-    unsafe fn hold_write(&self, flag: bool) {
-        self.write.held.set(flag)
+    unsafe fn hold_write(&self, flag: bool) -> bool {
+        self.write.held.replace(flag)
     }
 }
 
