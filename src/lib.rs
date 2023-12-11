@@ -1,6 +1,8 @@
+//! Lock-free SPSC FIFO ring buffer with direct access to inner data.
+//!
+//! For implementation details see [`RingBuffer`](`traits::RingBuffer`) description.
 #![no_std]
 #![allow(clippy::type_complexity)]
-#![allow(clippy::missing_safety_doc)]
 #![cfg_attr(feature = "bench", feature(test))]
 
 #[cfg(feature = "alloc")]

@@ -7,7 +7,7 @@ use core::{mem::MaybeUninit, num::NonZeroUsize};
 #[cfg(feature = "alloc")]
 use ringbuf::traits::Split;
 use ringbuf::{
-    rb::traits::RbRef,
+    rb::RbRef,
     storage::Storage,
     traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
     SharedRb,

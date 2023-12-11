@@ -1,6 +1,10 @@
+//! Frozen implementation.
+//!
+//! Changes are not synchronized with the ring buffer until its explicitly requested or when dropped.
+
 use super::{direct::Obs, traits::Wrap};
 use crate::{
-    rb::traits::RbRef,
+    rb::RbRef,
     traits::{
         consumer::{impl_consumer_traits, Consumer},
         producer::{impl_producer_traits, Producer},
@@ -14,6 +18,7 @@ use core::{
     ptr,
 };
 
+/// Frozen wrapper of the ring buffer.
 pub struct Frozen<R: RbRef, const P: bool, const C: bool> {
     rb: R,
     read: Cell<usize>,
@@ -34,10 +39,6 @@ pub type FrozenCons<R> = Frozen<R, false, true>;
 
 impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
     /// Create new ring buffer cache.
-    ///
-    /// # Safety
-    ///
-    /// There must be only one instance containing the same ring buffer reference.
     pub fn new(rb: R) -> Self {
         if P {
             assert!(!rb.rb().write_is_held());
@@ -50,6 +51,11 @@ impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
         unsafe { Self::new_unchecked(rb) }
     }
 
+    /// Create wrapper without checking that such wrapper already exists.
+    ///
+    /// # Safety
+    ///
+    /// There must be maximum one instance of producer and one - of consumer.
     pub(crate) unsafe fn new_unchecked(rb: R) -> Self {
         Self {
             read: Cell::new(rb.rb().read_index()),
@@ -58,6 +64,7 @@ impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
         }
     }
 
+    /// Get ring buffer observer.
     pub fn observe(&self) -> Obs<R> {
         Obs::new(self.rb.clone())
     }

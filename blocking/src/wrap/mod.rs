@@ -5,7 +5,7 @@ use crate::rb::BlockingRbRef;
 use core::time::Duration;
 use ringbuf::{
     traits::Based,
-    wrap::{caching::Caching, traits::Wrap},
+    wrap::{caching::Caching, Wrap},
     Obs,
 };
 

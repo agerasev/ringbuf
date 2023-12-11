@@ -1,6 +1,10 @@
+/// Consumer functionality.
 pub mod consumer;
+/// Observer functionality.
 pub mod observer;
+/// Producer functionality.
 pub mod producer;
+/// Owning ring buffer functionality.
 pub mod ring_buffer;
 mod split;
 mod utils;

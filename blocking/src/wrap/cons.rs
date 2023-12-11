@@ -5,7 +5,7 @@ use core::time::Duration;
 use ringbuf::traits::Based;
 use ringbuf::{
     traits::{consumer::DelegateConsumer, observer::DelegateObserver, Consumer, Observer},
-    wrap::traits::Wrap,
+    wrap::Wrap,
 };
 #[cfg(feature = "std")]
 use std::io;

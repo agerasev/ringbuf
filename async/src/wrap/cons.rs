@@ -11,7 +11,7 @@ use ringbuf::{
         consumer::{Consumer, DelegateConsumer},
         Observer,
     },
-    wrap::traits::Wrap,
+    wrap::Wrap,
 };
 #[cfg(feature = "std")]
 use std::io;

@@ -4,7 +4,7 @@ mod prod;
 use crate::rb::AsyncRbRef;
 use ringbuf::{
     traits::{observer::DelegateObserver, Based},
-    wrap::{direct::Direct, traits::Wrap},
+    wrap::{direct::Direct, Wrap},
     Obs,
 };
 

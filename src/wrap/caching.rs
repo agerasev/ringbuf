@@ -1,6 +1,10 @@
+//! Caching implementation.
+//!
+//! Fetches changes from the ring buffer only when there is no more slots to perform requested operation.
+
 use super::{direct::Obs, frozen::Frozen, traits::Wrap};
 use crate::{
-    rb::traits::RbRef,
+    rb::RbRef,
     traits::{
         consumer::{impl_consumer_traits, Consumer},
         producer::{impl_producer_traits, Producer},
@@ -9,12 +13,14 @@ use crate::{
 };
 use core::{mem::MaybeUninit, num::NonZeroUsize};
 
-/// Caching wrapper of ring buffer.
+/// Caching wrapper of a ring buffer.
 pub struct Caching<R: RbRef, const P: bool, const C: bool> {
     frozen: Frozen<R, P, C>,
 }
 
+/// Caching producer implementation.
 pub type CachingProd<R> = Caching<R, true, false>;
+/// Caching consumer implementation.
 pub type CachingCons<R> = Caching<R, false, true>;
 
 impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
@@ -25,10 +31,12 @@ impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
         Self { frozen: Frozen::new(rb) }
     }
 
+    /// Get ring buffer observer.
     pub fn observe(&self) -> Obs<R> {
         self.frozen.observe()
     }
 
+    /// Freeze current state.
     pub fn freeze(self) -> Frozen<R, P, C> {
         self.frozen
     }

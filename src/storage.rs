@@ -6,10 +6,13 @@ use core::{cell::UnsafeCell, mem::MaybeUninit, num::NonZeroUsize, ops::Range, sl
 ///
 /// Storage items must be stored as a contiguous array.
 ///
+/// Storage is converted to internal representation before use (see [`Self::Internal`]).
+///
 /// # Safety
 ///
-/// *[`Self::len`]/[`Self::is_empty`] must always return the same value.*
+/// *[`Self::len`] must always return the same value.*
 pub unsafe trait Storage {
+    /// Stored item.
     type Item: Sized;
 
     /// Internal representation of the storage.
@@ -143,6 +146,8 @@ impl<S: Storage> Shared<S> {
     }
 }
 
+/// Static storage.
 pub type Static<T, const N: usize> = [MaybeUninit<T>; N];
+/// Heap storage.
 #[cfg(feature = "alloc")]
 pub type Heap<T> = Vec<MaybeUninit<T>>;

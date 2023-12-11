@@ -1,6 +1,6 @@
-use crate::rb::traits::RbRef;
+use crate::rb::RbRef;
 
-/// Ring buffer reference wrapper.
+/// Ring buffer wrapper that contains reference to the ring buffer inside.
 pub trait Wrap: AsRef<Self> + AsMut<Self> {
     /// Ring buffer reference type.
     type RbRef: RbRef;

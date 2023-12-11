@@ -34,6 +34,8 @@ impl End {
 }
 
 /// Ring buffer for single-threaded use only.
+///
+/// Slightly faster than multi-threaded version because it doesn't synchronize cache.
 pub struct LocalRb<S: Storage> {
     storage: Shared<S>,
     read: End,
@@ -46,7 +48,7 @@ impl<S: Storage> LocalRb<S> {
     /// # Safety
     ///
     /// The items in storage inside `read..write` range must be initialized, items outside this range must be uninitialized.
-    /// `read` and `write` positions must be valid (see [`RbBase`](`crate::ring_buffer::RbBase`)).
+    /// `read` and `write` positions must be valid (see implementation details).
     pub unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
         Self {
             storage: Shared::new(storage),

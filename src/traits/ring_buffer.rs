@@ -4,7 +4,7 @@ use super::{
     Observer,
 };
 
-/// An abstract ring buffer.
+/// An abstract ring buffer that exclusively owns its data.
 ///
 /// # Details
 ///
@@ -17,7 +17,17 @@ use super::{
 /// without using the space for an extra element in container.
 /// And obviously we cannot store more than `capacity` items in the buffer, so `write - read` modulo `2 * capacity` is not allowed to be greater than `capacity`.
 pub trait RingBuffer: Observer + Consumer + Producer {
+    /// Tell whether read end of the ring buffer is held by consumer or not.
+    ///
+    /// # Safety
+    ///
+    /// Must not be set to `false` while consumer exists.
     unsafe fn hold_read(&self, flag: bool);
+    /// Tell whether write end of the ring buffer is held by producer or not.
+    ///
+    /// # Safety
+    ///
+    /// Must not be set to `false` while producer exists.
     unsafe fn hold_write(&self, flag: bool);
 
     /// Pushes an item to the ring buffer overwriting the latest item if the buffer is full.
@@ -57,6 +67,7 @@ pub trait RingBuffer: Observer + Consumer + Producer {
     }
 }
 
+/// Trait used for delegating owning ring buffer methods.
 pub trait DelegateRingBuffer: DelegateProducer + DelegateConsumer
 where
     Self::Base: RingBuffer,

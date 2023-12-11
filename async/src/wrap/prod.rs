@@ -13,7 +13,7 @@ use ringbuf::{
         producer::{DelegateProducer, Producer},
         Observer,
     },
-    wrap::traits::Wrap,
+    wrap::Wrap,
 };
 #[cfg(feature = "std")]
 use std::io;

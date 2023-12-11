@@ -1,6 +1,9 @@
 use super::{utils::modulus, Based};
 use core::{mem::MaybeUninit, num::NonZeroUsize};
 
+/// Ring buffer observer.
+///
+/// Can observe ring buffer state but cannot safely access its data.
 pub trait Observer: Sized {
     type Item: Sized;
 
@@ -9,9 +12,20 @@ pub trait Observer: Sized {
     /// It is constant during the whole ring buffer lifetime.
     fn capacity(&self) -> NonZeroUsize;
 
+    /// Index of the last item in the ring buffer.
+    ///
+    /// Index value is in range `0..(2 * capacity)`.
     fn read_index(&self) -> usize;
+    /// Index of the next empty slot in the ring buffer.
+    ///
+    /// Index value is in range `0..(2 * capacity)`.
     fn write_index(&self) -> usize;
 
+    /// Get mutable slice between `start` and `end` indices.
+    ///
+    /// # Safety
+    ///
+    /// There must not exist overlapping slices at the same time.
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]);
 
     /// Whether read end is held by consumer.
@@ -52,6 +66,7 @@ pub trait Observer: Sized {
     }
 }
 
+/// Trait used for delegating observer methods.
 pub trait DelegateObserver: Based
 where
     Self::Base: Observer,

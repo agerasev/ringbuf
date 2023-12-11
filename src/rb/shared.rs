@@ -22,8 +22,8 @@ use crossbeam_utils::CachePadded;
 
 /// Ring buffer that can be shared between threads.
 ///
-/// Note that there is no explicit requirement of `T: Send`. Instead [`Rb`] will work just fine even with `T: !Send`
-/// until you try to send its [`Prod`] or [`Cons`] to another thread.
+/// Note that there is no explicit requirement of `T: Send`. Instead ring buffer will work just fine even with `T: !Send`
+/// until you try to send its producer or consumer to another thread.
 #[cfg_attr(
     feature = "std",
     doc = r##"
@@ -58,7 +58,7 @@ impl<S: Storage> SharedRb<S> {
     /// # Safety
     ///
     /// The items in storage inside `read..write` range must be initialized, items outside this range must be uninitialized.
-    /// `read` and `write` positions must be valid (see [`RbBase`](`crate::ring_buffer::RbBase`)).
+    /// `read` and `write` positions must be valid (see implementation details).
     pub unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
         Self {
             storage: Shared::new(storage),

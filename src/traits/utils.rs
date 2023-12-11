@@ -1,9 +1,15 @@
 use super::Observer;
 use core::num::NonZeroUsize;
 
+/// Trait that should be implemented by ring buffer wrappers.
+///
+/// Used for automatically delegating methods.
 pub trait Based {
+    /// Type the wrapper based on.
     type Base;
+    /// Reference to base.
     fn base(&self) -> &Self::Base;
+    /// Mutable reference to base.
     fn base_mut(&mut self) -> &mut Self::Base;
 }
 

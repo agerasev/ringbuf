@@ -1,6 +1,10 @@
+//! Direct implementation.
+//!
+//! All changes are synchronized with the ring buffer immediately.
+
 use super::{frozen::Frozen, traits::Wrap};
 use crate::{
-    rb::traits::RbRef,
+    rb::RbRef,
     traits::{
         consumer::{impl_consumer_traits, Consumer},
         producer::{impl_producer_traits, Producer},
@@ -13,15 +17,16 @@ use core::{
     ptr,
 };
 
+/// Direct wrapper of a ring buffer.
 pub struct Direct<R: RbRef, const P: bool, const C: bool> {
     rb: R,
 }
 
-/// Observer of ring buffer.
+/// Observer of a ring buffer.
 pub type Obs<R> = Direct<R, false, false>;
-/// Producer of ring buffer.
+/// Producer of a ring buffer.
 pub type Prod<R> = Direct<R, true, false>;
-/// Consumer of ring buffer.
+/// Consumer of a ring buffer.
 pub type Cons<R> = Direct<R, false, true>;
 
 impl<R: RbRef> Clone for Obs<R> {
@@ -46,10 +51,12 @@ impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
         Self { rb }
     }
 
+    /// Get ring buffer observer.
     pub fn observe(&self) -> Obs<R> {
         Obs { rb: self.rb.clone() }
     }
 
+    /// Freeze current state.
     pub fn freeze(self) -> Frozen<R, P, C> {
         let this = ManuallyDrop::new(self);
         unsafe { Frozen::new_unchecked(ptr::read(&this.rb)) }

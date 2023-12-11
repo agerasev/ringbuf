@@ -9,6 +9,13 @@ use std::io::{self, Write};
 
 /// Consumer part of ring buffer.
 pub trait Consumer: Observer {
+    /// Set read index.
+    ///
+    /// # Safety
+    ///
+    /// Index must go only forward, never backward. It is recommended to use [`Self::advance_read_index`] instead.
+    ///
+    /// All slots with index less than `value` must be uninitialized until write index, all slots with index equal or greater - must be initialized.
     unsafe fn set_read_index(&self, value: usize);
 
     /// Moves `read` pointer by `count` places forward.
@@ -33,7 +40,7 @@ pub trait Consumer: Observer {
     /// All items are initialized. Elements must be removed starting from the beginning of first slice.
     /// When all items are removed from the first slice then items must be removed from the beginning of the second slice.
     ///
-    /// *This method must be followed by [`Self::advance_read`] call with the number of items being removed previously as argument.*
+    /// *This method must be followed by [`Self::advance_read_index`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
     fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
         let (first, second) = unsafe { self.unsafe_slices(self.read_index(), self.write_index()) };
@@ -286,6 +293,7 @@ pub type Iter<'a, C: Consumer> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a,
 #[allow(type_alias_bounds)]
 pub type IterMut<'a, C: Consumer> = Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
 
+/// Trait used for delegating producer methods.
 pub trait DelegateConsumer: DelegateObserver
 where
     Self::Base: Consumer,
