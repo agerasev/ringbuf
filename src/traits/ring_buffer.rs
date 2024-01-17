@@ -5,17 +5,6 @@ use super::{
 };
 
 /// An abstract ring buffer that exclusively owns its data.
-///
-/// # Details
-///
-/// The ring buffer consists of an array (of `capacity` size) and two indices: `read` and `write`.
-/// When an item is extracted from the ring buffer it is taken from the `read` index and after that `read` is incremented.
-/// New item is appended to the `write` index and `write` is incremented after that.
-///
-/// The `read` and `write` indices are modulo `2 * capacity` (not just `capacity`).
-/// It allows us to distinguish situations when the buffer is empty (`read == write`) and when the buffer is full (`write - read` modulo `2 * capacity` equals to `capacity`)
-/// without using the space for an extra element in container.
-/// And obviously we cannot store more than `capacity` items in the buffer, so `write - read` modulo `2 * capacity` is not allowed to be greater than `capacity`.
 pub trait RingBuffer: Observer + Consumer + Producer {
     /// Tell whether read end of the ring buffer is held by consumer or not.
     ///

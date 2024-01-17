@@ -24,53 +24,45 @@ Lock-free SPSC FIFO ring buffer with direct access to inner data.
 + Items can be inserted and removed one by one or many at once.
 + Thread-safe direct access to the internal ring buffer memory.
 + `Read` and `Write` implementation.
-+ Overwriting mode support.
++ Overwriting insertion support.
++ Different types of buffers and underlying storages.
 + Can be used without `std` and even without `alloc` (using only statically-allocated memory).
-+ [Experimental `async`/`.await` support](./async).
++ Async and blocking versions (see [this section](#derived-crates)).
 
-## Usage
+# Usage
 
 At first you need to create the ring buffer itself. `HeapRb` is recommended but you may [choose another one](#types).
 
 After the ring buffer is created it may be splitted into pair of `Producer` and `Consumer`.
-`Producer` is used to insert items to the ring buffer, `Consumer` - to remove items from it.
-For `SharedRb` and its derivatives they can be used in different threads.
+Producer is used to insert items to the ring buffer, consumer - to remove items from it.
 
-## Types
+# Types
 
 There are several types of ring buffers provided:
 
 + `LocalRb`. Only for single-threaded use.
-+ `SharedRb`. Can be shared between threads. Its derivatives:
++ `SharedRb`. Can be shared between threads. Its frequently used instances:
   + `HeapRb`. Contents are stored in dynamic memory. *Recommended for use in most cases.*
   + `StaticRb`. Contents can be stored in statically-allocated memory.
 
-## Performance
+You may also provide your own generic parameters.
+
+# Performance
 
 `SharedRb` needs to synchronize CPU cache between CPU cores. This synchronization has some overhead.
-To avoid multiple unnecessary synchronizations you may use postponed mode of operation (see description for `Producer` and `Consumer`)
-or methods that operates many items at once (`Producer::push_slice`/`Producer::push_iter`, `Consumer::pop_slice`, etc.).
+To avoid multiple unnecessary synchronizations you may use methods that operate many items at once
+(`push_slice`/`push_iter`, `pop_slice`/`pop_iter`, etc.)
+or you can `freeze` producer or consumer and then synchronize threads manually (see items in `frozen` module).
 
-For single-threaded usage `LocalRb` is recommended because it is faster than `SharedRb` due to absence of CPU cache synchronization.
-
-### Benchmarks
-
-You may see typical performance of different methods in benchmarks:
-
-```bash
-cargo +nightly bench --features bench
-```
-
-Nightly toolchain is required.
+For single-threaded usage `LocalRb` is recommended because it is slightly faster than `SharedRb` due to absence of CPU cache synchronization.
 
 ## Examples
 
 ### Simple
 
 ```rust
-use ringbuf::HeapRb;
+use ringbuf::{traits::*, HeapRb};
 
-# fn main() {
 let rb = HeapRb::<i32>::new(2);
 let (mut prod, mut cons) = rb.split();
 
@@ -85,15 +77,13 @@ prod.try_push(2).unwrap();
 assert_eq!(cons.try_pop(), Some(1));
 assert_eq!(cons.try_pop(), Some(2));
 assert_eq!(cons.try_pop(), None);
-# }
 ```
 
 ### No heap
 
 ```rust
-use ringbuf::StaticRb;
+use ringbuf::{traits::*, StaticRb};
 
-# fn main() {
 const RB_SIZE: usize = 1;
 let mut rb = StaticRb::<i32, RB_SIZE>::default();
 let (mut prod, mut cons) = rb.split_ref();
@@ -103,7 +93,6 @@ assert_eq!(prod.try_push(321), Err(321));
 
 assert_eq!(cons.try_pop(), Some(123));
 assert_eq!(cons.try_pop(), None);
-# }
 ```
 
 ## Overwrite
@@ -111,9 +100,8 @@ assert_eq!(cons.try_pop(), None);
 Ring buffer can be used in overwriting mode when insertion overwrites the latest element if the buffer is full.
 
 ```rust
-use ringbuf::{HeapRb, Rb};
+use ringbuf::{traits::*, HeapRb};
 
-# fn main() {
 let mut rb = HeapRb::<i32>::new(2);
 
 assert_eq!(rb.push_overwrite(0), None);
@@ -123,16 +111,15 @@ assert_eq!(rb.push_overwrite(2), Some(0));
 assert_eq!(rb.try_pop(), Some(1));
 assert_eq!(rb.try_pop(), Some(2));
 assert_eq!(rb.try_pop(), None);
-# }
 ```
 
-Note that [`push_overwrite`](`Rb::push_overwrite`) requires exclusive access to the ring buffer
-so to perform it concurrently you need to guard the ring buffer with [`Mutex`](`std::sync::Mutex`) or some other lock.
+Note that `push_overwrite` requires exclusive access to the ring buffer
+so to perform it concurrently you need to guard the ring buffer with mutex or some other lock.
 
-## `async`/`.await`
+## Derived crates
 
-There is an experimental crate [`async-ringbuf`](https://gitlab.com/agerasev/async-ringbuf)
-which is built on top of `ringbuf` and implements asynchronous ring buffer operations.
++ [`ringbuf-blocking`](https://crates.io/crates/ringbuf-blocking)
++ [`async-ringbuf`](https://crates.io/crates/async-ringbuf)
 
 ## License
 
