@@ -4,4 +4,4 @@ default:
 test:
   stage: test
   script:
-    - bash ./test.sh
+    - bash ./scripts/test.sh
