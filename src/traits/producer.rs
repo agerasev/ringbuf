@@ -136,7 +136,12 @@ pub trait Producer: Observer {
         if count == 0 {
             return None;
         }
-        let left_init = unsafe { slice_assume_init_mut(&mut left[..count]) };
+
+        let buf = &mut left[..count];
+        // Initialize memory before read. It's an overhead but there's no way to read to uninit buffer in stable Rust yet.
+        // TODO: Use `reader.read_buf` when it stabilized (see https://github.com/rust-lang/rust/issues/78485).
+        buf.fill(MaybeUninit::new(0));
+        let left_init = unsafe { slice_assume_init_mut(buf) };
 
         let read_count = match reader.read(left_init) {
             Ok(n) => n,

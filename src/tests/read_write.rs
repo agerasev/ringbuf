@@ -1,6 +1,6 @@
 use super::Rb;
 use crate::{storage::Static, traits::*};
-use std::io;
+use std::io::{self, Read};
 
 macro_rules! assert_eq_kind {
     ($left:expr, $right:expr) => {
@@ -106,4 +106,29 @@ fn count() {
 
     assert_eq!(cons1.pop_slice(&mut tmp), 4);
     assert_eq!(tmp[0..4], [3, 4, 5, 6]);
+}
+
+#[test]
+fn read_from() {
+    struct Reader;
+
+    impl Read for Reader {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            for b in buf.iter_mut() {
+                // Read buffer before writing to ensure its initialized.
+                *b = b.wrapping_add(1);
+            }
+            buf.fill(2);
+            Ok(buf.len())
+        }
+    }
+
+    let mut rb = Rb::<Static<u8, 4>>::default();
+    let (mut prod, mut cons) = rb.split_ref();
+    prod.try_push(1).unwrap();
+    assert_eq!(cons.try_pop().unwrap(), 1);
+
+    assert_eq!(prod.read_from(&mut Reader, None).unwrap().unwrap(), 3);
+
+    assert!(cons.pop_iter().eq([2; 3]));
 }
