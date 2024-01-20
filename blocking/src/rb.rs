@@ -53,8 +53,11 @@ impl<S: Storage, X: Semaphore> Observer for BlockingRb<S, X> {
         self.base.write_index()
     }
 
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
         self.base.unsafe_slices(start, end)
+    }
+    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
+        self.base.unsafe_slices_mut(start, end)
     }
 
     #[inline]

@@ -1,6 +1,8 @@
 #[cfg(feature = "alloc")]
 use alloc::{boxed::Box, vec::Vec};
-use core::{cell::UnsafeCell, marker::PhantomData, mem::MaybeUninit, ops::Range, ptr, ptr::NonNull, slice};
+#[cfg(feature = "alloc")]
+use core::ptr;
+use core::{cell::UnsafeCell, marker::PhantomData, mem::MaybeUninit, ops::Range, ptr::NonNull, slice};
 
 /// Abstract storage for the ring buffer.
 ///
@@ -128,12 +130,16 @@ unsafe impl<T> Storage for Slice<T> {
     }
 }
 
+#[cfg(feature = "alloc")]
 pub struct Heap<T> {
     ptr: *mut MaybeUninit<T>,
     len: usize,
 }
+#[cfg(feature = "alloc")]
 unsafe impl<T> Send for Heap<T> where T: Send {}
+#[cfg(feature = "alloc")]
 unsafe impl<T> Sync for Heap<T> where T: Sync {}
+#[cfg(feature = "alloc")]
 unsafe impl<T> Storage for Heap<T> {
     type Item = T;
     #[inline]
@@ -154,6 +160,7 @@ impl<T> Heap<T> {
         }
     }
 }
+#[cfg(feature = "alloc")]
 impl<T> From<Box<[MaybeUninit<T>]>> for Heap<T> {
     fn from(value: Box<[MaybeUninit<T>]>) -> Self {
         Self {
@@ -162,11 +169,13 @@ impl<T> From<Box<[MaybeUninit<T>]>> for Heap<T> {
         }
     }
 }
+#[cfg(feature = "alloc")]
 impl<T> From<Heap<T>> for Box<[MaybeUninit<T>]> {
     fn from(value: Heap<T>) -> Self {
         unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(value.ptr, value.len)) }
     }
 }
+#[cfg(feature = "alloc")]
 impl<T> Drop for Heap<T> {
     fn drop(&mut self) {
         drop(unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(self.ptr, self.len)) });

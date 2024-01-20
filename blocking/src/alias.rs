@@ -1,9 +1,9 @@
 #[cfg(feature = "std")]
 use crate::sync::StdSemaphore;
 use crate::{rb::BlockingRb, sync::Semaphore};
+use ringbuf::{storage::Array, SharedRb};
 #[cfg(feature = "alloc")]
 use ringbuf::{storage::Heap, HeapRb};
-use ringbuf::{storage::Static, SharedRb};
 
 #[cfg(feature = "std")]
 pub type BlockingHeapRb<T, X = StdSemaphore> = BlockingRb<Heap<T>, X>;
@@ -18,11 +18,11 @@ impl<T, X: Semaphore> BlockingHeapRb<T, X> {
 }
 
 #[cfg(feature = "std")]
-pub type BlockingStaticRb<T, const N: usize, X = StdSemaphore> = BlockingRb<Static<T, N>, X>;
+pub type BlockingStaticRb<T, const N: usize, X = StdSemaphore> = BlockingRb<Array<T, N>, X>;
 #[cfg(all(feature = "alloc", not(feature = "std")))]
-pub type BlockingStaticRb<T, const N: usize, X> = BlockingRb<Static<T, N>, X>;
+pub type BlockingStaticRb<T, const N: usize, X> = BlockingRb<Array<T, N>, X>;
 
-impl<T, const N: usize, X: Semaphore> Default for BlockingRb<Static<T, N>, X> {
+impl<T, const N: usize, X: Semaphore> Default for BlockingRb<Array<T, N>, X> {
     fn default() -> Self {
         BlockingRb::from(SharedRb::default())
     }
