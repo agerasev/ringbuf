@@ -38,7 +38,9 @@ pub type FrozenProd<R> = Frozen<R, true, false>;
 pub type FrozenCons<R> = Frozen<R, false, true>;
 
 impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
-    /// Create new ring buffer cache.
+    /// Create a new ring buffer frozen wrapper.
+    ///
+    /// Panics if wrapper with matching rights already exists.
     pub fn new(rb: R) -> Self {
         if P {
             assert!(!unsafe { rb.rb().hold_write(true) });
@@ -53,7 +55,7 @@ impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
     ///
     /// # Safety
     ///
-    /// There must be maximum one instance of producer and one - of consumer.
+    /// There must be maximum one instance of matching rights.
     pub(crate) unsafe fn new_unchecked(rb: R) -> Self {
         Self {
             read: Cell::new(rb.rb().read_index()),

@@ -36,9 +36,9 @@ impl<R: RbRef> Clone for Obs<R> {
 }
 
 impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
-    /// # Safety
+    /// Create a new ring buffer direct wrapper.
     ///
-    /// There must be no more than one wrapper with the same parameter being `true`.
+    /// Panics if wrapper with matching rights already exists.
     pub fn new(rb: R) -> Self {
         if P {
             assert!(!unsafe { rb.rb().hold_write(true) });

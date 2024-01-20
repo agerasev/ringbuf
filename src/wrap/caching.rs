@@ -24,9 +24,9 @@ pub type CachingProd<R> = Caching<R, true, false>;
 pub type CachingCons<R> = Caching<R, false, true>;
 
 impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
-    /// # Safety
+    /// Create a new ring buffer cached wrapper.
     ///
-    /// There must be no more than one consumer wrapper.
+    /// Panics if wrapper with matching rights already exists.
     pub fn new(rb: R) -> Self {
         Self { frozen: Frozen::new(rb) }
     }
