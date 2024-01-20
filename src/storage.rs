@@ -1,6 +1,6 @@
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
-use core::{cell::UnsafeCell, mem::MaybeUninit, num::NonZeroUsize, ops::Range, slice};
+use core::{cell::UnsafeCell, mem::MaybeUninit, num::NonZeroUsize, ops::Range, ptr::NonNull, slice};
 
 /// Abstract storage for the ring buffer.
 ///
@@ -18,16 +18,22 @@ pub unsafe trait Storage {
     /// Internal representation of the storage.
     ///
     /// *Must not be aliased with its content.*
-    type Internal;
+    type Internal: ?Sized;
 
     /// Transform storage to internal representation.
-    fn into_internal(self) -> Self::Internal;
+    fn into_internal(self) -> Self::Internal
+    where
+        Self: Sized,
+        Self::Internal: Sized;
     /// Restore storage from internal representation.
     ///
     /// # Safety
     ///
     /// `this` must be a valid internal representation.
-    unsafe fn from_internal(this: Self::Internal) -> Self;
+    unsafe fn from_internal(this: Self::Internal) -> Self
+    where
+        Self: Sized,
+        Self::Internal: Sized;
 
     /// Return pointer to the beginning of the storage items.
     fn as_mut_ptr(this: &Self::Internal) -> *mut MaybeUninit<Self::Item>;
@@ -82,6 +88,35 @@ unsafe impl<T, const N: usize> Storage for [MaybeUninit<T>; N] {
     }
 }
 
+unsafe impl<T> Storage for [MaybeUninit<T>] {
+    type Item = T;
+
+    type Internal = UnsafeCell<[MaybeUninit<T>]>;
+
+    fn into_internal(self) -> Self::Internal
+    where
+        Self: Sized,
+    {
+        unreachable!()
+    }
+    unsafe fn from_internal(_this: Self::Internal) -> Self
+    where
+        Self: Sized,
+    {
+        unreachable!()
+    }
+
+    #[inline]
+    fn as_mut_ptr(this: &Self::Internal) -> *mut MaybeUninit<T> {
+        this.get() as *mut _
+    }
+
+    #[inline]
+    fn len(this: &Self::Internal) -> usize {
+        unsafe { NonNull::new_unchecked(this.get()) }.len()
+    }
+}
+
 #[cfg(feature = "alloc")]
 unsafe impl<T> Storage for Vec<MaybeUninit<T>> {
     type Item = T;
@@ -107,17 +142,21 @@ unsafe impl<T> Storage for Vec<MaybeUninit<T>> {
 }
 
 /// Wrapper for storage that provides multiple write access to it.
-pub(crate) struct Shared<S: Storage> {
+pub(crate) struct Shared<S: Storage + ?Sized> {
     internal: S::Internal,
 }
 
 unsafe impl<S: Storage> Sync for Shared<S> where S::Item: Send {}
 
-impl<S: Storage> Shared<S> {
+impl<S: Storage + ?Sized> Shared<S> {
     /// Create new storage.
     ///
     /// *Panics if storage is empty.*
-    pub fn new(storage: S) -> Self {
+    pub fn new(storage: S) -> Self
+    where
+        S: Sized,
+        S::Internal: Sized,
+    {
         let internal = storage.into_internal();
         assert!(S::len(&internal) > 0);
         Self { internal }
@@ -141,7 +180,11 @@ impl<S: Storage> Shared<S> {
     }
 
     /// Returns underlying storage.
-    pub fn into_inner(self) -> S {
+    pub fn into_inner(self) -> S
+    where
+        S: Sized,
+        S::Internal: Sized,
+    {
         unsafe { S::from_internal(self.internal) }
     }
 }
@@ -151,3 +194,5 @@ pub type Static<T, const N: usize> = [MaybeUninit<T>; N];
 /// Heap storage.
 #[cfg(feature = "alloc")]
 pub type Heap<T> = Vec<MaybeUninit<T>>;
+/// Unsized slice storage.
+pub type Slice<T> = [MaybeUninit<T>];

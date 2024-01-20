@@ -11,7 +11,7 @@ use crate::{
     wrap::{Cons, Prod},
 };
 #[cfg(feature = "alloc")]
-use alloc::rc::Rc;
+use alloc::{boxed::Box, rc::Rc};
 use core::{
     cell::Cell,
     mem::{ManuallyDrop, MaybeUninit},
@@ -36,10 +36,10 @@ impl End {
 /// Ring buffer for single-threaded use only.
 ///
 /// Slightly faster than multi-threaded version because it doesn't synchronize cache.
-pub struct LocalRb<S: Storage> {
-    storage: Shared<S>,
+pub struct LocalRb<S: Storage + ?Sized> {
     read: End,
     write: End,
+    storage: Shared<S>,
 }
 
 impl<S: Storage> LocalRb<S> {
@@ -49,11 +49,14 @@ impl<S: Storage> LocalRb<S> {
     ///
     /// The items in storage inside `read..write` range must be initialized, items outside this range must be uninitialized.
     /// `read` and `write` positions must be valid (see implementation details).
-    pub unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
+    pub unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self
+    where
+        S::Internal: Sized,
+    {
         Self {
-            storage: Shared::new(storage),
             read: End::new(read),
             write: End::new(write),
+            storage: Shared::new(storage),
         }
     }
     /// Destructures ring buffer into underlying storage and `read` and `write` indices.
@@ -61,13 +64,16 @@ impl<S: Storage> LocalRb<S> {
     /// # Safety
     ///
     /// Initialized contents of the storage must be properly dropped.
-    pub unsafe fn into_raw_parts(self) -> (S, usize, usize) {
+    pub unsafe fn into_raw_parts(self) -> (S, usize, usize)
+    where
+        S::Internal: Sized,
+    {
         let this = ManuallyDrop::new(self);
         (ptr::read(&this.storage).into_inner(), this.read_index(), this.write_index())
     }
 }
 
-impl<S: Storage> Observer for LocalRb<S> {
+impl<S: Storage + ?Sized> Observer for LocalRb<S> {
     type Item = S::Item;
 
     #[inline]
@@ -99,21 +105,21 @@ impl<S: Storage> Observer for LocalRb<S> {
     }
 }
 
-impl<S: Storage> Producer for LocalRb<S> {
+impl<S: Storage + ?Sized> Producer for LocalRb<S> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         self.write.index.set(value);
     }
 }
 
-impl<S: Storage> Consumer for LocalRb<S> {
+impl<S: Storage + ?Sized> Consumer for LocalRb<S> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
         self.read.index.set(value);
     }
 }
 
-impl<S: Storage> RingBuffer for LocalRb<S> {
+impl<S: Storage + ?Sized> RingBuffer for LocalRb<S> {
     #[inline]
     unsafe fn hold_read(&self, flag: bool) -> bool {
         self.read.held.replace(flag)
@@ -124,23 +130,43 @@ impl<S: Storage> RingBuffer for LocalRb<S> {
     }
 }
 
-impl<S: Storage> Drop for LocalRb<S> {
+impl<S: Storage + ?Sized> Drop for LocalRb<S> {
     fn drop(&mut self) {
         self.clear();
     }
 }
 
 #[cfg(feature = "alloc")]
-impl<S: Storage> Split for LocalRb<S> {
+impl<S: Storage> Split for LocalRb<S>
+where
+    S::Internal: Sized,
+{
     type Prod = Prod<Rc<Self>>;
     type Cons = Cons<Rc<Self>>;
 
     fn split(self) -> (Self::Prod, Self::Cons) {
-        let rc = Rc::new(self);
-        (Prod::new(rc.clone()), Cons::new(rc))
+        Rc::new(self).split()
     }
 }
-impl<S: Storage> SplitRef for LocalRb<S> {
+#[cfg(feature = "alloc")]
+impl<S: Storage + ?Sized> Split for Rc<LocalRb<S>> {
+    type Prod = Prod<Self>;
+    type Cons = Cons<Self>;
+
+    fn split(self) -> (Self::Prod, Self::Cons) {
+        (Prod::new(self.clone()), Cons::new(self))
+    }
+}
+#[cfg(feature = "alloc")]
+impl<S: Storage + ?Sized> Split for Box<LocalRb<S>> {
+    type Prod = Prod<Rc<LocalRb<S>>>;
+    type Cons = Cons<Rc<LocalRb<S>>>;
+
+    fn split(self) -> (Self::Prod, Self::Cons) {
+        Rc::<LocalRb<S>>::from(self).split()
+    }
+}
+impl<S: Storage + ?Sized> SplitRef for LocalRb<S> {
     type RefProd<'a> = Prod<&'a Self> where Self: 'a;
     type RefCons<'a> = Cons<&'a Self> where Self: 'a;
 
@@ -154,12 +180,12 @@ rb_impl_init!(LocalRb);
 impl_producer_traits!(LocalRb<S: Storage>);
 impl_consumer_traits!(LocalRb<S: Storage>);
 
-impl<S: Storage> AsRef<Self> for LocalRb<S> {
+impl<S: Storage + ?Sized> AsRef<Self> for LocalRb<S> {
     fn as_ref(&self) -> &Self {
         self
     }
 }
-impl<S: Storage> AsMut<Self> for LocalRb<S> {
+impl<S: Storage + ?Sized> AsMut<Self> for LocalRb<S> {
     fn as_mut(&mut self) -> &mut Self {
         self
     }

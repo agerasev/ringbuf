@@ -251,12 +251,12 @@ pub trait Consumer: Observer {
 }
 
 /// An iterator that removes items from the ring buffer.
-pub struct PopIter<U: AsMut<C> + AsRef<C>, C: Consumer> {
+pub struct PopIter<U: AsMut<C> + AsRef<C>, C: Consumer + ?Sized> {
     inner: U,
     _ghost: PhantomData<C>,
 }
 
-impl<U: AsMut<C> + AsRef<C>, C: Consumer> PopIter<U, C> {
+impl<U: AsMut<C> + AsRef<C>, C: Consumer + ?Sized> PopIter<U, C> {
     pub fn new(inner: U) -> Self {
         Self {
             inner,
@@ -368,7 +368,7 @@ where
 
 macro_rules! impl_consumer_traits {
     ($type:ident $(< $( $param:tt $( : $first_bound:tt $(+ $next_bound:tt )* )? ),+ >)?) => {
-        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? core::iter::IntoIterator for $type $(< $( $param ),+ >)? {
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? core::iter::IntoIterator for $type $(< $( $param ),+ >)? where Self: Sized {
             type Item = <Self as $crate::traits::Observer>::Item;
             type IntoIter = $crate::traits::consumer::PopIter<Self, Self>;
             fn into_iter(self) -> Self::IntoIter {

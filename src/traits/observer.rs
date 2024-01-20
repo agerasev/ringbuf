@@ -4,7 +4,7 @@ use core::{mem::MaybeUninit, num::NonZeroUsize};
 /// Ring buffer observer.
 ///
 /// Can observe ring buffer state but cannot safely access its data.
-pub trait Observer: Sized {
+pub trait Observer {
     type Item: Sized;
 
     /// Capacity of the ring buffer.

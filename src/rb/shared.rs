@@ -11,7 +11,7 @@ use crate::{
     wrap::{CachingCons, CachingProd},
 };
 #[cfg(feature = "alloc")]
-use alloc::sync::Arc;
+use alloc::{boxed::Box, sync::Arc};
 use core::{
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
@@ -44,12 +44,12 @@ thread::spawn(move || {
 ```
 "##
 )]
-pub struct SharedRb<S: Storage> {
-    storage: Shared<S>,
+pub struct SharedRb<S: Storage + ?Sized> {
     read_index: CachePadded<AtomicUsize>,
     write_index: CachePadded<AtomicUsize>,
     read_held: AtomicBool,
     write_held: AtomicBool,
+    storage: Shared<S>,
 }
 
 impl<S: Storage> SharedRb<S> {
@@ -59,7 +59,10 @@ impl<S: Storage> SharedRb<S> {
     ///
     /// The items in storage inside `read..write` range must be initialized, items outside this range must be uninitialized.
     /// `read` and `write` positions must be valid (see implementation details).
-    pub unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
+    pub unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self
+    where
+        S::Internal: Sized,
+    {
         Self {
             storage: Shared::new(storage),
             read_index: CachePadded::new(AtomicUsize::new(read)),
@@ -73,13 +76,16 @@ impl<S: Storage> SharedRb<S> {
     /// # Safety
     ///
     /// Initialized contents of the storage must be properly dropped.
-    pub unsafe fn into_raw_parts(self) -> (S, usize, usize) {
+    pub unsafe fn into_raw_parts(self) -> (S, usize, usize)
+    where
+        S::Internal: Sized,
+    {
         let this = ManuallyDrop::new(self);
         (ptr::read(&this.storage).into_inner(), this.read_index(), this.write_index())
     }
 }
 
-impl<S: Storage> Observer for SharedRb<S> {
+impl<S: Storage + ?Sized> Observer for SharedRb<S> {
     type Item = S::Item;
 
     #[inline]
@@ -111,21 +117,21 @@ impl<S: Storage> Observer for SharedRb<S> {
     }
 }
 
-impl<S: Storage> Producer for SharedRb<S> {
+impl<S: Storage + ?Sized> Producer for SharedRb<S> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         self.write_index.store(value, Ordering::Release);
     }
 }
 
-impl<S: Storage> Consumer for SharedRb<S> {
+impl<S: Storage + ?Sized> Consumer for SharedRb<S> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
         self.read_index.store(value, Ordering::Release);
     }
 }
 
-impl<S: Storage> RingBuffer for SharedRb<S> {
+impl<S: Storage + ?Sized> RingBuffer for SharedRb<S> {
     #[inline]
     unsafe fn hold_read(&self, flag: bool) -> bool {
         self.read_held.swap(flag, Ordering::Relaxed)
@@ -136,23 +142,43 @@ impl<S: Storage> RingBuffer for SharedRb<S> {
     }
 }
 
-impl<S: Storage> Drop for SharedRb<S> {
+impl<S: Storage + ?Sized> Drop for SharedRb<S> {
     fn drop(&mut self) {
         self.clear();
     }
 }
 
 #[cfg(feature = "alloc")]
-impl<S: Storage> Split for SharedRb<S> {
+impl<S: Storage> Split for SharedRb<S>
+where
+    S::Internal: Sized,
+{
     type Prod = CachingProd<Arc<Self>>;
     type Cons = CachingCons<Arc<Self>>;
 
     fn split(self) -> (Self::Prod, Self::Cons) {
-        let rc = Arc::new(self);
-        (CachingProd::new(rc.clone()), CachingCons::new(rc))
+        Arc::new(self).split()
     }
 }
-impl<S: Storage> SplitRef for SharedRb<S> {
+#[cfg(feature = "alloc")]
+impl<S: Storage + ?Sized> Split for Arc<SharedRb<S>> {
+    type Prod = CachingProd<Self>;
+    type Cons = CachingCons<Self>;
+
+    fn split(self) -> (Self::Prod, Self::Cons) {
+        (CachingProd::new(self.clone()), CachingCons::new(self))
+    }
+}
+#[cfg(feature = "alloc")]
+impl<S: Storage + ?Sized> Split for Box<SharedRb<S>> {
+    type Prod = CachingProd<Arc<SharedRb<S>>>;
+    type Cons = CachingCons<Arc<SharedRb<S>>>;
+
+    fn split(self) -> (Self::Prod, Self::Cons) {
+        Arc::<SharedRb<S>>::from(self).split()
+    }
+}
+impl<S: Storage + ?Sized> SplitRef for SharedRb<S> {
     type RefProd<'a> = CachingProd<&'a Self> where Self: 'a;
     type RefCons<'a> = CachingCons<&'a Self> where Self: 'a;
 
@@ -166,12 +192,12 @@ rb_impl_init!(SharedRb);
 impl_producer_traits!(SharedRb<S: Storage>);
 impl_consumer_traits!(SharedRb<S: Storage>);
 
-impl<S: Storage> AsRef<Self> for SharedRb<S> {
+impl<S: Storage + ?Sized> AsRef<Self> for SharedRb<S> {
     fn as_ref(&self) -> &Self {
         self
     }
 }
-impl<S: Storage> AsMut<Self> for SharedRb<S> {
+impl<S: Storage + ?Sized> AsMut<Self> for SharedRb<S> {
     fn as_mut(&mut self) -> &mut Self {
         self
     }

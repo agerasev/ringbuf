@@ -6,7 +6,7 @@ use core::num::NonZeroUsize;
 /// Used for automatically delegating methods.
 pub trait Based {
     /// Type the wrapper based on.
-    type Base;
+    type Base: ?Sized;
     /// Reference to base.
     fn base(&self) -> &Self::Base;
     /// Mutable reference to base.
@@ -17,6 +17,6 @@ pub trait Based {
 ///
 /// Equals to `2 * capacity`.
 #[inline]
-pub fn modulus(this: &impl Observer) -> NonZeroUsize {
+pub fn modulus<O: Observer + ?Sized>(this: &O) -> NonZeroUsize {
     unsafe { NonZeroUsize::new_unchecked(2 * this.capacity().get()) }
 }
