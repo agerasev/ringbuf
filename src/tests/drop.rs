@@ -1,5 +1,5 @@
 use super::Rb;
-use crate::{storage::Static, traits::*};
+use crate::{storage::Array, traits::*};
 use alloc::collections::BTreeSet;
 use core::cell::RefCell;
 
@@ -30,7 +30,7 @@ impl<'a> Drop for Dropper<'a> {
 fn single() {
     let set = RefCell::new(BTreeSet::new());
 
-    let mut rb = Rb::<Static<Dropper, 3>>::default();
+    let mut rb = Rb::<Array<Dropper, 3>>::default();
 
     assert_eq!(set.borrow().len(), 0);
 
@@ -62,7 +62,7 @@ fn single() {
 fn transaction() {
     let set = RefCell::new(BTreeSet::new());
 
-    let mut rb = Rb::<Static<Dropper, 5>>::default();
+    let mut rb = Rb::<Array<Dropper, 5>>::default();
 
     assert_eq!(set.borrow().len(), 0);
     {

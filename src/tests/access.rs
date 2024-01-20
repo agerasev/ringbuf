@@ -1,10 +1,10 @@
 use super::Rb;
-use crate::{storage::Static, traits::*};
+use crate::{storage::Array, traits::*};
 use core::mem::MaybeUninit;
 
 #[test]
 fn try_push() {
-    let mut rb = Rb::<Static<i32, 3>>::default();
+    let mut rb = Rb::<Array<i32, 3>>::default();
     let (mut prod, mut cons) = rb.split_ref();
 
     let vs_20 = (123, 456);
@@ -47,7 +47,7 @@ fn try_push() {
 #[test]
 fn pop_full() {
     const CAP: usize = 2;
-    let mut rb = Rb::<Static<i32, CAP>>::default();
+    let mut rb = Rb::<Array<i32, CAP>>::default();
     let (mut prod, mut cons) = rb.split_ref();
 
     for i in 0..CAP {
@@ -71,7 +71,7 @@ fn pop_full() {
 
 #[test]
 fn pop_empty() {
-    let mut rb = Rb::<Static<i32, 2>>::default();
+    let mut rb = Rb::<Array<i32, 2>>::default();
     let (_, cons) = rb.split_ref();
 
     {
@@ -84,7 +84,7 @@ fn pop_empty() {
 
 #[test]
 fn try_pop() {
-    let mut rb = Rb::<Static<i32, 3>>::default();
+    let mut rb = Rb::<Array<i32, 3>>::default();
     let (mut prod, mut cons) = rb.split_ref();
 
     let vs_20 = (123, 456, 789);
@@ -133,7 +133,7 @@ fn try_pop() {
 
 #[test]
 fn push_return() {
-    let mut rb = Rb::<Static<i32, 2>>::default();
+    let mut rb = Rb::<Array<i32, 2>>::default();
     let (mut prod, mut cons) = rb.split_ref();
 
     {
@@ -166,7 +166,7 @@ fn push_return() {
 
 #[test]
 fn pop_return() {
-    let mut rb = Rb::<Static<i32, 2>>::default();
+    let mut rb = Rb::<Array<i32, 2>>::default();
     let (mut prod, cons) = rb.split_ref();
 
     assert_eq!(prod.try_push(12), Ok(()));
@@ -201,7 +201,7 @@ fn pop_return() {
 
 #[test]
 fn push_pop() {
-    let mut rb = Rb::<Static<i32, 3>>::default();
+    let mut rb = Rb::<Array<i32, 3>>::default();
     let (mut prod, cons) = rb.split_ref();
 
     let vs_20 = (123, 456);

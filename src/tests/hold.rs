@@ -1,9 +1,9 @@
 use super::Rb;
-use crate::{storage::Static, traits::*, CachingCons, CachingProd, Obs};
+use crate::{storage::Array, traits::*, CachingCons, CachingProd, Obs};
 
 #[test]
 fn split_and_drop() {
-    let mut rb = Rb::<Static<i32, 2>>::default();
+    let mut rb = Rb::<Array<i32, 2>>::default();
     let (prod, cons) = rb.split_ref();
     let obs = prod.observe();
 
@@ -18,7 +18,7 @@ fn split_and_drop() {
 
 #[test]
 fn manually_hold_and_drop() {
-    let rb = Rb::<Static<i32, 2>>::default();
+    let rb = Rb::<Array<i32, 2>>::default();
     let obs = Obs::new(&rb);
     assert!(!obs.write_is_held() && !obs.read_is_held());
 
@@ -38,7 +38,7 @@ fn manually_hold_and_drop() {
 #[test]
 #[should_panic]
 fn hold_conflict() {
-    let rb = Rb::<Static<i32, 2>>::default();
+    let rb = Rb::<Array<i32, 2>>::default();
     let _prod = CachingProd::new(&rb);
     CachingProd::new(&rb);
 }

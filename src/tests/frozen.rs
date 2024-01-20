@@ -1,9 +1,9 @@
 use super::Rb;
-use crate::{storage::Static, traits::*};
+use crate::{storage::Array, traits::*};
 
 #[test]
 fn producer() {
-    let mut rb = Rb::<Static<i32, 2>>::default();
+    let mut rb = Rb::<Array<i32, 2>>::default();
     let (prod, mut cons) = rb.split_ref();
     let mut frozen_prod = prod.freeze();
     frozen_prod.try_push(0).unwrap();
@@ -40,7 +40,7 @@ fn producer() {
 
 #[test]
 fn discard() {
-    let mut rb = Rb::<Static<i32, 10>>::default();
+    let mut rb = Rb::<Array<i32, 10>>::default();
     let (prod, cons) = rb.split_ref();
     let mut frozen_prod = prod.freeze();
     frozen_prod.try_push(0).unwrap();
@@ -78,7 +78,7 @@ fn discard() {
 
 #[test]
 fn consumer() {
-    let mut rb = Rb::<Static<i32, 10>>::default();
+    let mut rb = Rb::<Array<i32, 10>>::default();
     let (mut prod, cons) = rb.split_ref();
     let mut frozen_cons = cons.freeze();
     prod.try_push(0).unwrap();

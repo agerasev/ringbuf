@@ -87,8 +87,11 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Caching<R, P, C> {
         self.frozen.write_index()
     }
 
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
         self.frozen.unsafe_slices(start, end)
+    }
+    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        self.frozen.unsafe_slices_mut(start, end)
     }
 
     #[inline]

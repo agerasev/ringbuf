@@ -1,6 +1,6 @@
 use super::Rb;
 use crate::{
-    storage::{Slice, Static},
+    storage::{Array, Slice},
     traits::*,
 };
 #[cfg(feature = "alloc")]
@@ -9,14 +9,14 @@ use alloc::boxed::Box;
 #[test]
 fn capacity() {
     const CAP: usize = 13;
-    let mut rb = Rb::<Static<i32, CAP>>::default();
+    let mut rb = Rb::<Array<i32, CAP>>::default();
     let urb = &mut rb as &mut Rb<Slice<i32>>;
     assert_eq!(urb.capacity().get(), CAP);
 }
 
 #[test]
 fn push_pop() {
-    let mut rb = Rb::<Static<i32, 1>>::default();
+    let mut rb = Rb::<Array<i32, 1>>::default();
     let urb = &mut rb as &mut Rb<Slice<i32>>;
     let (mut prod, mut cons) = urb.split_ref();
 
@@ -29,7 +29,7 @@ fn push_pop() {
 #[cfg(feature = "alloc")]
 #[test]
 fn split() {
-    let rb = Rb::<Static<i32, 1>>::default();
+    let rb = Rb::<Array<i32, 1>>::default();
     let urb = Box::new(rb) as Box<Rb<Slice<i32>>>;
     let (mut prod, mut cons) = urb.split();
 

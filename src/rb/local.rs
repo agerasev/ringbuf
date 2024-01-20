@@ -2,7 +2,7 @@ use super::{macros::rb_impl_init, utils::ranges};
 #[cfg(feature = "alloc")]
 use crate::traits::Split;
 use crate::{
-    storage::{Shared, Static, Storage},
+    storage::Storage,
     traits::{
         consumer::{impl_consumer_traits, Consumer},
         producer::{impl_producer_traits, Producer},
@@ -39,7 +39,7 @@ impl End {
 pub struct LocalRb<S: Storage + ?Sized> {
     read: End,
     write: End,
-    storage: Shared<S>,
+    storage: S,
 }
 
 impl<S: Storage> LocalRb<S> {
@@ -49,14 +49,12 @@ impl<S: Storage> LocalRb<S> {
     ///
     /// The items in storage inside `read..write` range must be initialized, items outside this range must be uninitialized.
     /// `read` and `write` positions must be valid (see implementation details).
-    pub unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self
-    where
-        S::Internal: Sized,
-    {
+    pub unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
+        assert!(!storage.is_empty());
         Self {
+            storage,
             read: End::new(read),
             write: End::new(write),
-            storage: Shared::new(storage),
         }
     }
     /// Destructures ring buffer into underlying storage and `read` and `write` indices.
@@ -64,12 +62,9 @@ impl<S: Storage> LocalRb<S> {
     /// # Safety
     ///
     /// Initialized contents of the storage must be properly dropped.
-    pub unsafe fn into_raw_parts(self) -> (S, usize, usize)
-    where
-        S::Internal: Sized,
-    {
+    pub unsafe fn into_raw_parts(self) -> (S, usize, usize) {
         let this = ManuallyDrop::new(self);
-        (ptr::read(&this.storage).into_inner(), this.read_index(), this.write_index())
+        (ptr::read(&this.storage), this.read_index(), this.write_index())
     }
 }
 
@@ -78,7 +73,7 @@ impl<S: Storage + ?Sized> Observer for LocalRb<S> {
 
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
-        self.storage.len()
+        unsafe { NonZeroUsize::new_unchecked(self.storage.len()) }
     }
 
     #[inline]
@@ -90,9 +85,13 @@ impl<S: Storage + ?Sized> Observer for LocalRb<S> {
         self.write.index.get()
     }
 
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
         let (first, second) = ranges(self.capacity(), start, end);
         (self.storage.slice(first), self.storage.slice(second))
+    }
+    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
+        let (first, second) = ranges(self.capacity(), start, end);
+        (self.storage.slice_mut(first), self.storage.slice_mut(second))
     }
 
     #[inline]
@@ -137,10 +136,7 @@ impl<S: Storage + ?Sized> Drop for LocalRb<S> {
 }
 
 #[cfg(feature = "alloc")]
-impl<S: Storage> Split for LocalRb<S>
-where
-    S::Internal: Sized,
-{
+impl<S: Storage> Split for LocalRb<S> {
     type Prod = Prod<Rc<Self>>;
     type Cons = Cons<Rc<Self>>;
 

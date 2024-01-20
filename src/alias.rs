@@ -2,7 +2,7 @@
 use super::storage::Heap;
 use super::{
     rb::SharedRb,
-    storage::Static,
+    storage::Array,
     wrap::{CachingCons, CachingProd},
 };
 #[cfg(feature = "alloc")]
@@ -11,7 +11,7 @@ use alloc::sync::Arc;
 /// Stack-allocated ring buffer with static capacity.
 ///
 /// *Capacity (`N`) must be greater than zero.*
-pub type StaticRb<T, const N: usize> = SharedRb<Static<T, N>>;
+pub type StaticRb<T, const N: usize> = SharedRb<Array<T, N>>;
 
 /// Alias for [`StaticRb`] producer.
 pub type StaticProd<'a, T, const N: usize> = CachingProd<&'a StaticRb<T, N>>;

@@ -114,8 +114,12 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Direct<R, P, C> {
         self.rb().write_index()
     }
     #[inline]
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
         self.rb().unsafe_slices(start, end)
+    }
+    #[inline]
+    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        self.rb().unsafe_slices_mut(start, end)
     }
     #[inline]
     fn read_is_held(&self) -> bool {

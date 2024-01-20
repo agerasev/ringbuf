@@ -1,8 +1,8 @@
 macro_rules! rb_impl_init {
     ($type:ident) => {
-        impl<T, const N: usize> Default for $type<Static<T, N>> {
+        impl<T, const N: usize> Default for $type<crate::storage::Array<T, N>> {
             fn default() -> Self {
-                unsafe { Self::from_raw_parts(crate::utils::uninit_array(), usize::default(), usize::default()) }
+                unsafe { Self::from_raw_parts(crate::utils::uninit_array().into(), usize::default(), usize::default()) }
             }
         }
 
@@ -18,10 +18,14 @@ macro_rules! rb_impl_init {
             ///
             /// *Panics if `capacity` is zero.*
             pub fn try_new(capacity: usize) -> Result<Self, alloc::collections::TryReserveError> {
-                let mut data = alloc::vec::Vec::new();
-                data.try_reserve_exact(capacity)?;
-                data.resize_with(capacity, core::mem::MaybeUninit::uninit);
-                Ok(unsafe { Self::from_raw_parts(data, usize::default(), usize::default()) })
+                let mut vec = alloc::vec::Vec::new();
+                vec.try_reserve_exact(capacity)?;
+                let ptr = vec.as_mut_ptr();
+                core::mem::forget(vec);
+                let data = unsafe { Box::from_raw(core::ptr::slice_from_raw_parts_mut(ptr, capacity)) };
+                assert_eq!(data.len(), capacity);
+                assert_eq!(ptr as *const _, data.as_ptr());
+                Ok(unsafe { Self::from_raw_parts(data.into(), usize::default(), usize::default()) })
             }
         }
     };
