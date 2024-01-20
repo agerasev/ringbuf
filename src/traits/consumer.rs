@@ -43,8 +43,7 @@ pub trait Consumer: Observer {
     /// *This method must be followed by [`Self::advance_read_index`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
     fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let (first, second) = unsafe { self.unsafe_slices(self.read_index(), self.write_index()) };
-        (first as &_, second as &_)
+        unsafe { self.unsafe_slices(self.read_index(), self.write_index()) }
     }
 
     /// Provides a direct mutable access to the ring buffer occupied memory.
@@ -55,7 +54,7 @@ pub trait Consumer: Observer {
     ///
     /// When some item is replaced with uninitialized value then it must not be read anymore.
     unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        self.unsafe_slices(self.read_index(), self.write_index())
+        self.unsafe_slices_mut(self.read_index(), self.write_index())
     }
 
     /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
@@ -181,9 +180,9 @@ pub trait Consumer: Observer {
     ///
     /// ```
     /// # extern crate ringbuf;
-    /// # use ringbuf::{LocalRb, storage::Static, traits::*};
+    /// # use ringbuf::{LocalRb, storage::Array, traits::*};
     /// # fn main() {
-    /// let mut rb = LocalRb::<Static<i32, 8>>::default();
+    /// let mut rb = LocalRb::<Array<i32, 8>>::default();
     ///
     /// assert_eq!(rb.push_iter(0..8), 8);
     ///
@@ -251,12 +250,12 @@ pub trait Consumer: Observer {
 }
 
 /// An iterator that removes items from the ring buffer.
-pub struct PopIter<U: AsMut<C> + AsRef<C>, C: Consumer> {
+pub struct PopIter<U: AsMut<C> + AsRef<C>, C: Consumer + ?Sized> {
     inner: U,
     _ghost: PhantomData<C>,
 }
 
-impl<U: AsMut<C> + AsRef<C>, C: Consumer> PopIter<U, C> {
+impl<U: AsMut<C> + AsRef<C>, C: Consumer + ?Sized> PopIter<U, C> {
     pub fn new(inner: U) -> Self {
         Self {
             inner,
@@ -368,7 +367,7 @@ where
 
 macro_rules! impl_consumer_traits {
     ($type:ident $(< $( $param:tt $( : $first_bound:tt $(+ $next_bound:tt )* )? ),+ >)?) => {
-        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? core::iter::IntoIterator for $type $(< $( $param ),+ >)? {
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? core::iter::IntoIterator for $type $(< $( $param ),+ >)? where Self: Sized {
             type Item = <Self as $crate::traits::Observer>::Item;
             type IntoIter = $crate::traits::consumer::PopIter<Self, Self>;
             fn into_iter(self) -> Self::IntoIter {

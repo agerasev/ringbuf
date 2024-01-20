@@ -1,4 +1,4 @@
-use crate::{storage::Static, traits::*, LocalRb, SharedRb};
+use crate::{storage::Array, traits::*, LocalRb, SharedRb};
 use test::{black_box, Bencher};
 
 const RB_SIZE: usize = 256;
@@ -6,7 +6,7 @@ const BATCH_SIZE: usize = 100;
 
 #[bench]
 fn push_pop_shared(b: &mut Bencher) {
-    let buf = SharedRb::<Static<u64, RB_SIZE>>::default();
+    let buf = SharedRb::<Array<u64, RB_SIZE>>::default();
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
     b.iter(|| {
@@ -17,7 +17,7 @@ fn push_pop_shared(b: &mut Bencher) {
 
 #[bench]
 fn push_pop_local(b: &mut Bencher) {
-    let buf = LocalRb::<Static<u64, RB_SIZE>>::default();
+    let buf = LocalRb::<Array<u64, RB_SIZE>>::default();
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
     b.iter(|| {
@@ -28,7 +28,7 @@ fn push_pop_local(b: &mut Bencher) {
 
 #[bench]
 fn push_pop_x100(b: &mut Bencher) {
-    let buf = SharedRb::<Static<u64, RB_SIZE>>::default();
+    let buf = SharedRb::<Array<u64, RB_SIZE>>::default();
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
     b.iter(|| {

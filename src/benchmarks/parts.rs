@@ -1,11 +1,11 @@
-use crate::{storage::Static, traits::*, SharedRb};
+use crate::{storage::Array, traits::*, SharedRb};
 use test::{black_box, Bencher};
 
 const RB_SIZE: usize = 256;
 
 #[bench]
 fn advance(b: &mut Bencher) {
-    let buf = SharedRb::<Static<u64, RB_SIZE>>::default();
+    let buf = SharedRb::<Array<u64, RB_SIZE>>::default();
     let (mut prod, cons) = buf.split();
     prod.push_slice(&[1; RB_SIZE / 2]);
     b.iter(|| {
@@ -16,7 +16,7 @@ fn advance(b: &mut Bencher) {
 
 #[bench]
 fn get_occupied_slices(b: &mut Bencher) {
-    let buf = SharedRb::<Static<u64, RB_SIZE>>::default();
+    let buf = SharedRb::<Array<u64, RB_SIZE>>::default();
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[0; 3 * RB_SIZE / 4]);
     cons.skip(RB_SIZE);
@@ -29,7 +29,7 @@ fn get_occupied_slices(b: &mut Bencher) {
 
 #[bench]
 fn get_vacant_slices(b: &mut Bencher) {
-    let buf = SharedRb::<Static<u64, RB_SIZE>>::default();
+    let buf = SharedRb::<Array<u64, RB_SIZE>>::default();
     let (mut prod, mut cons) = buf.split();
     prod.push_slice(&[0; 1 * RB_SIZE / 4]);
     cons.skip(RB_SIZE);

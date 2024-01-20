@@ -4,9 +4,9 @@ use crate::{
 };
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
+use ringbuf::{storage::Array, SharedRb};
 #[cfg(feature = "alloc")]
 use ringbuf::{storage::Heap, HeapRb};
-use ringbuf::{storage::Static, SharedRb};
 
 #[cfg(feature = "alloc")]
 pub type AsyncHeapRb<T> = AsyncRb<Heap<T>>;
@@ -22,11 +22,11 @@ impl<T> AsyncHeapRb<T> {
     }
 }
 
-pub type AsyncStaticRb<T, const N: usize> = AsyncRb<Static<T, N>>;
+pub type AsyncStaticRb<T, const N: usize> = AsyncRb<Array<T, N>>;
 pub type AsyncStaticProd<'a, T, const N: usize> = AsyncProd<&'a AsyncStaticRb<T, N>>;
 pub type AsyncStaticCons<'a, T, const N: usize> = AsyncCons<&'a AsyncStaticRb<T, N>>;
 
-impl<T, const N: usize> Default for AsyncRb<Static<T, N>> {
+impl<T, const N: usize> Default for AsyncRb<Array<T, N>> {
     fn default() -> Self {
         AsyncRb::from(SharedRb::default())
     }

@@ -96,7 +96,7 @@ pub trait AsyncConsumer: Consumer {
     }
 }
 
-pub struct PopFuture<'a, A: AsyncConsumer> {
+pub struct PopFuture<'a, A: AsyncConsumer + ?Sized> {
     owner: &'a mut A,
     done: bool,
 }
@@ -130,7 +130,7 @@ impl<'a, A: AsyncConsumer> Future for PopFuture<'a, A> {
     }
 }
 
-pub struct PopSliceFuture<'a, 'b, A: AsyncConsumer>
+pub struct PopSliceFuture<'a, 'b, A: AsyncConsumer + ?Sized>
 where
     A::Item: Copy,
 {
@@ -177,7 +177,7 @@ where
     }
 }
 
-pub struct WaitOccupiedFuture<'a, A: AsyncConsumer> {
+pub struct WaitOccupiedFuture<'a, A: AsyncConsumer + ?Sized> {
     owner: &'a A,
     count: usize,
     done: bool,

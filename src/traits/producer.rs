@@ -38,8 +38,7 @@ pub trait Producer: Observer {
     ///
     /// Returns a pair of slices of uninitialized memory, the second one may be empty.
     fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        let (first, second) = unsafe { self.unsafe_slices(self.write_index(), self.read_index() + self.capacity().get()) };
-        (first as &_, second as &_)
+        unsafe { self.unsafe_slices(self.write_index(), self.read_index() + self.capacity().get()) }
     }
 
     /// Mutable version of [`Self::vacant_slices`].
@@ -52,7 +51,7 @@ pub trait Producer: Observer {
     ///
     /// *Vacant slices must not be used to store any data because their contents aren't synchronized properly.*
     fn vacant_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        unsafe { self.unsafe_slices(self.write_index(), self.read_index() + self.capacity().get()) }
+        unsafe { self.unsafe_slices_mut(self.write_index(), self.read_index() + self.capacity().get()) }
     }
 
     /// Appends an item to the ring buffer.

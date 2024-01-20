@@ -140,7 +140,7 @@ impl<R: RbRef> FrozenProd<R> {
     /// Discard new items pushed since last sync.
     pub fn discard(&mut self) {
         let last_tail = self.rb().write_index();
-        let (first, second) = unsafe { self.rb().unsafe_slices(last_tail, self.write.get()) };
+        let (first, second) = unsafe { self.rb().unsafe_slices_mut(last_tail, self.write.get()) };
         for item_mut in first.iter_mut().chain(second.iter_mut()) {
             unsafe { item_mut.assume_init_drop() };
         }
@@ -165,8 +165,11 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Frozen<R, P, C> {
         self.write.get()
     }
 
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
         self.rb().unsafe_slices(start, end)
+    }
+    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        self.rb().unsafe_slices_mut(start, end)
     }
 
     #[inline]

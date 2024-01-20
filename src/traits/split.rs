@@ -1,7 +1,7 @@
-use crate::traits::{Consumer, Producer, RingBuffer};
+use crate::traits::{Consumer, Producer};
 
 /// Split the ring buffer onto producer and consumer.
-pub trait Split: RingBuffer {
+pub trait Split {
     /// Producer type.
     type Prod: Producer;
     /// Consumer type.
@@ -12,7 +12,7 @@ pub trait Split: RingBuffer {
 }
 
 /// Split the ring buffer by reference onto producer and consumer.
-pub trait SplitRef: RingBuffer {
+pub trait SplitRef {
     /// Ref producer type.
     type RefProd<'a>: Producer + 'a
     where

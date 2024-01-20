@@ -110,7 +110,7 @@ pub trait AsyncProducer: Producer {
     }
 }
 
-pub struct PushFuture<'a, A: AsyncProducer> {
+pub struct PushFuture<'a, A: AsyncProducer + ?Sized> {
     owner: &'a mut A,
     item: Option<A::Item>,
 }
@@ -144,7 +144,7 @@ impl<'a, A: AsyncProducer> Future for PushFuture<'a, A> {
     }
 }
 
-pub struct PushSliceFuture<'a, 'b, A: AsyncProducer>
+pub struct PushSliceFuture<'a, 'b, A: AsyncProducer + ?Sized>
 where
     A::Item: Copy,
 {
@@ -190,7 +190,7 @@ where
     }
 }
 
-pub struct PushIterFuture<'a, A: AsyncProducer, I: Iterator<Item = A::Item>> {
+pub struct PushIterFuture<'a, A: AsyncProducer + ?Sized, I: Iterator<Item = A::Item>> {
     owner: &'a mut A,
     iter: Option<Peekable<I>>,
 }
@@ -224,7 +224,7 @@ impl<'a, A: AsyncProducer, I: Iterator<Item = A::Item>> Future for PushIterFutur
     }
 }
 
-pub struct WaitVacantFuture<'a, A: AsyncProducer> {
+pub struct WaitVacantFuture<'a, A: AsyncProducer + ?Sized> {
     owner: &'a A,
     count: usize,
     done: bool,
