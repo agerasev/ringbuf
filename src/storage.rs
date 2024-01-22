@@ -1,8 +1,8 @@
 #[cfg(feature = "alloc")]
 use alloc::{boxed::Box, vec::Vec};
-#[cfg(feature = "alloc")]
-use core::ptr;
 use core::{cell::UnsafeCell, marker::PhantomData, mem::MaybeUninit, ops::Range, ptr::NonNull, slice};
+#[cfg(feature = "alloc")]
+use core::{mem::forget, ptr};
 
 /// Abstract storage for the ring buffer.
 ///
@@ -158,6 +158,15 @@ impl<T> Heap<T> {
             ptr: Vec::<T>::with_capacity(capacity).leak() as *mut _ as *mut MaybeUninit<T>,
             len: capacity,
         }
+    }
+}
+#[cfg(feature = "alloc")]
+impl<T> From<Vec<MaybeUninit<T>>> for Heap<T> {
+    fn from(mut value: Vec<MaybeUninit<T>>) -> Self {
+        let len = value.capacity();
+        let ptr = value.as_mut_ptr();
+        forget(value);
+        Self { ptr, len }
     }
 }
 #[cfg(feature = "alloc")]

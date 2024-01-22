@@ -1,3 +1,5 @@
+#[cfg(feature = "alloc")]
+use alloc::{boxed::Box, vec::Vec};
 use core::mem::{self, MaybeUninit};
 
 // TODO: Remove on `maybe_uninit_uninit_array` stabilization.
@@ -25,4 +27,18 @@ pub fn write_slice<'a, T: Copy>(dst: &'a mut [MaybeUninit<T>], src: &[T]) -> &'a
 pub unsafe fn write_uninit_slice<'a, T: Copy>(dst: &'a mut [T], src: &[MaybeUninit<T>]) -> &'a mut [T] {
     dst.copy_from_slice(slice_assume_init_ref(src));
     dst
+}
+
+#[cfg(feature = "alloc")]
+pub fn vec_to_uninit<T>(value: Vec<T>) -> Vec<MaybeUninit<T>> {
+    let value = mem::ManuallyDrop::new(value);
+    let ptr = &value as *const _ as *const Vec<MaybeUninit<T>>;
+    unsafe { ptr.read() }
+}
+
+#[cfg(feature = "alloc")]
+pub fn boxed_slice_to_uninit<T>(value: Box<[T]>) -> Box<[MaybeUninit<T>]> {
+    let value = mem::ManuallyDrop::new(value);
+    let ptr = &value as *const _ as *const Box<[MaybeUninit<T>]>;
+    unsafe { ptr.read() }
 }

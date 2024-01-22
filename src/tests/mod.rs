@@ -10,6 +10,8 @@ mod drop;
 mod fmt_write;
 mod frozen;
 mod hold;
+#[cfg(feature = "alloc")]
+mod init;
 mod iter;
 mod overwrite;
 #[cfg(feature = "std")]
