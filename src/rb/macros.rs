@@ -6,6 +6,13 @@ macro_rules! rb_impl_init {
             }
         }
 
+        impl<T, const N: usize> From<[T; N]> for $type<crate::storage::Array<T, N>> {
+            fn from(value: [T; N]) -> Self {
+                let (read, write) = (0, value.len());
+                unsafe { Self::from_raw_parts(crate::utils::array_to_uninit(value).into(), read, write) }
+            }
+        }
+
         #[cfg(feature = "alloc")]
         impl<T> $type<crate::storage::Heap<T>> {
             /// Creates a new instance of a ring buffer.

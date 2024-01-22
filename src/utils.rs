@@ -29,6 +29,12 @@ pub unsafe fn write_uninit_slice<'a, T: Copy>(dst: &'a mut [T], src: &[MaybeUnin
     dst
 }
 
+pub fn array_to_uninit<T, const N: usize>(value: [T; N]) -> [MaybeUninit<T>; N] {
+    let value = mem::ManuallyDrop::new(value);
+    let ptr = &value as *const _ as *const [MaybeUninit<T>; N];
+    unsafe { ptr.read() }
+}
+
 #[cfg(feature = "alloc")]
 pub fn vec_to_uninit<T>(value: Vec<T>) -> Vec<MaybeUninit<T>> {
     let value = mem::ManuallyDrop::new(value);
