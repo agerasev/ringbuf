@@ -12,6 +12,7 @@ mod frozen;
 mod hold;
 mod init;
 mod iter;
+mod new;
 mod overwrite;
 #[cfg(feature = "std")]
 mod read_write;
