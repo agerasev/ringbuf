@@ -108,11 +108,11 @@ impl<S: Storage + ?Sized> Observer for SharedRb<S> {
 
     #[inline]
     fn read_is_held(&self) -> bool {
-        self.read_held.load(Ordering::Relaxed)
+        self.read_held.load(Ordering::Acquire)
     }
     #[inline]
     fn write_is_held(&self) -> bool {
-        self.write_held.load(Ordering::Relaxed)
+        self.write_held.load(Ordering::Acquire)
     }
 }
 
@@ -133,11 +133,11 @@ impl<S: Storage + ?Sized> Consumer for SharedRb<S> {
 impl<S: Storage + ?Sized> RingBuffer for SharedRb<S> {
     #[inline]
     unsafe fn hold_read(&self, flag: bool) -> bool {
-        self.read_held.swap(flag, Ordering::Relaxed)
+        self.read_held.swap(flag, Ordering::AcqRel)
     }
     #[inline]
     unsafe fn hold_write(&self, flag: bool) -> bool {
-        self.write_held.swap(flag, Ordering::Relaxed)
+        self.write_held.swap(flag, Ordering::AcqRel)
     }
 }
 
