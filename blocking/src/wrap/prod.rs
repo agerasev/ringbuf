@@ -83,7 +83,7 @@ impl<R: BlockingRbRef> BlockingProd<R>
 where
     <Self as Observer>::Item: Copy,
 {
-    pub fn push_all_slice(&mut self, mut slice: &[<Self as Observer>::Item]) -> usize {
+    pub fn push_exact(&mut self, mut slice: &[<Self as Observer>::Item]) -> usize {
         if slice.is_empty() {
             return 0;
         }

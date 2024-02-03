@@ -1,6 +1,9 @@
 #[cfg(feature = "alloc")]
 use alloc::{boxed::Box, vec::Vec};
-use core::mem::{self, MaybeUninit};
+use core::{
+    mem::{self, MaybeUninit},
+    ptr,
+};
 
 // TODO: Remove on `maybe_uninit_uninit_array` stabilization.
 pub fn uninit_array<T, const N: usize>() -> [MaybeUninit<T>; N] {
@@ -8,10 +11,14 @@ pub fn uninit_array<T, const N: usize>() -> [MaybeUninit<T>; N] {
 }
 
 // TODO: Remove on `maybe_uninit_slice` stabilization.
+pub unsafe fn slice_as_uninit_mut<T>(slice: &mut [T]) -> &mut [MaybeUninit<T>] {
+    &mut *(slice as *mut [T] as *mut [MaybeUninit<T>])
+}
+
+// TODO: Remove on `maybe_uninit_slice` stabilization.
 pub unsafe fn slice_assume_init_ref<T>(slice: &[MaybeUninit<T>]) -> &[T] {
     &*(slice as *const [MaybeUninit<T>] as *const [T])
 }
-
 // TODO: Remove on `maybe_uninit_slice` stabilization.
 pub unsafe fn slice_assume_init_mut<T>(slice: &mut [MaybeUninit<T>]) -> &mut [T] {
     &mut *(slice as *mut [MaybeUninit<T>] as *mut [T])
@@ -24,9 +31,11 @@ pub fn write_slice<'a, T: Copy>(dst: &'a mut [MaybeUninit<T>], src: &[T]) -> &'a
     unsafe { slice_assume_init_mut(dst) }
 }
 
-pub unsafe fn write_uninit_slice<'a, T: Copy>(dst: &'a mut [T], src: &[MaybeUninit<T>]) -> &'a mut [T] {
-    dst.copy_from_slice(slice_assume_init_ref(src));
-    dst
+pub fn move_uninit_slice<T>(dst: &mut [MaybeUninit<T>], src: &[MaybeUninit<T>]) {
+    assert_eq!(dst.len(), src.len());
+    for i in 0..dst.len() {
+        unsafe { *dst.get_unchecked_mut(i) = ptr::read(src.get_unchecked(i) as *const _) };
+    }
 }
 
 pub fn array_to_uninit<T, const N: usize>(value: [T; N]) -> [MaybeUninit<T>; N] {

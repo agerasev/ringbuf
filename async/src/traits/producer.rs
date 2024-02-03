@@ -59,7 +59,7 @@ pub trait AsyncProducer: Producer {
     /// Future returns:
     /// + `Ok` - all slice contents are copied.
     /// + `Err(count)` - the corresponding consumer was dropped, number of copied items returned.
-    fn push_slice_all<'a: 'b, 'b>(&'a mut self, slice: &'b [Self::Item]) -> PushSliceFuture<'a, 'b, Self>
+    fn push_exact<'a: 'b, 'b>(&'a mut self, slice: &'b [Self::Item]) -> PushSliceFuture<'a, 'b, Self>
     where
         Self::Item: Copy,
     {

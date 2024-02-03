@@ -43,7 +43,7 @@ pub trait AsyncConsumer: Consumer {
     /// Future returns:
     /// + `Ok` - the whole slice is filled with the items from the buffer.
     /// + `Err(count)` - the buffer is empty and the corresponding producer was dropped, number of items copied to slice is returned.
-    fn pop_slice_all<'a: 'b, 'b>(&'a mut self, slice: &'b mut [Self::Item]) -> PopSliceFuture<'a, 'b, Self>
+    fn pop_exact<'a: 'b, 'b>(&'a mut self, slice: &'b mut [Self::Item]) -> PopSliceFuture<'a, 'b, Self>
     where
         Self::Item: Copy,
     {
@@ -51,6 +51,14 @@ pub trait AsyncConsumer: Consumer {
             owner: self,
             slice: Some(slice),
             count: 0,
+        }
+    }
+
+    #[cfg(feature = "alloc")]
+    fn pop_until_end<'a: 'b, 'b>(&'a mut self, vec: &'b mut alloc::vec::Vec<Self::Item>) -> PopVecFuture<'a, 'b, Self> {
+        PopVecFuture {
+            owner: self,
+            vec: Some(vec),
         }
     }
 
@@ -168,6 +176,53 @@ where
                 break Poll::Ready(Err(self.count));
             }
             self.slice.replace(slice);
+            if waker_registered {
+                break Poll::Pending;
+            }
+            self.owner.register_waker(cx.waker());
+            waker_registered = true;
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+pub struct PopVecFuture<'a, 'b, A: AsyncConsumer + ?Sized> {
+    owner: &'a mut A,
+    vec: Option<&'b mut alloc::vec::Vec<A::Item>>,
+}
+#[cfg(feature = "alloc")]
+impl<'a, 'b, A: AsyncConsumer> Unpin for PopVecFuture<'a, 'b, A> {}
+#[cfg(feature = "alloc")]
+impl<'a, 'b, A: AsyncConsumer> FusedFuture for PopVecFuture<'a, 'b, A> {
+    fn is_terminated(&self) -> bool {
+        self.vec.is_none()
+    }
+}
+#[cfg(feature = "alloc")]
+impl<'a, 'b, A: AsyncConsumer> Future for PopVecFuture<'a, 'b, A> {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut waker_registered = false;
+        loop {
+            let closed = self.owner.is_closed();
+            let vec = self.vec.take().unwrap();
+
+            loop {
+                if vec.len() == vec.capacity() {
+                    vec.reserve(vec.capacity().max(16));
+                }
+                let n = self.owner.pop_slice_uninit(vec.spare_capacity_mut());
+                if n == 0 {
+                    break;
+                }
+                unsafe { vec.set_len(vec.len() + n) };
+            }
+
+            if closed {
+                break Poll::Ready(());
+            }
+            self.vec.replace(vec);
             if waker_registered {
                 break Poll::Pending;
             }

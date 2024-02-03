@@ -71,14 +71,33 @@ fn push_pop_slice() {
         async move {
             let mut prod = prod;
             let data = (0..COUNT).collect::<Vec<_>>();
-            prod.push_slice_all(&data).await.unwrap();
+            prod.push_exact(&data).await.unwrap();
         },
         async move {
             let mut cons = cons;
             let mut data = [0; COUNT + 1];
-            let count = cons.pop_slice_all(&mut data).await.unwrap_err();
+            let count = cons.pop_exact(&mut data).await.unwrap_err();
             assert_eq!(count, COUNT);
             assert!(data.into_iter().take(COUNT).eq(0..COUNT));
+        },
+    );
+}
+
+#[test]
+fn push_pop_vec() {
+    let (prod, cons) = AsyncHeapRb::<usize>::new(3).split();
+    execute!(
+        async move {
+            let mut prod = prod;
+            let data = (0..COUNT).collect::<Vec<_>>();
+            prod.push_exact(&data).await.unwrap();
+        },
+        async move {
+            let mut cons = cons;
+            let mut data = Vec::new();
+            cons.pop_until_end(&mut data).await;
+            assert_eq!(data.len(), COUNT);
+            assert!(data.into_iter().eq(0..COUNT));
         },
     );
 }

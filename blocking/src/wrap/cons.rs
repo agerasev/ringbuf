@@ -67,7 +67,7 @@ impl<R: BlockingRbRef> BlockingCons<R>
 where
     <Self as Observer>::Item: Copy,
 {
-    pub fn pop_all_slice(&mut self, mut slice: &mut [<Self as Observer>::Item]) -> usize {
+    pub fn pop_exact(&mut self, mut slice: &mut [<Self as Observer>::Item]) -> usize {
         if slice.is_empty() {
             return 0;
         }
@@ -82,6 +82,28 @@ where
             }
         }
         count
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn pop_until_end(&mut self, vec: &mut alloc::vec::Vec<<Self as Observer>::Item>) {
+        if self.is_closed() && self.is_empty() {
+            return;
+        }
+        for _ in wait_iter!(self) {
+            loop {
+                if vec.len() == vec.capacity() {
+                    vec.reserve(vec.capacity().max(16));
+                }
+                let n = self.base.pop_slice_uninit(vec.spare_capacity_mut());
+                if n == 0 {
+                    break;
+                }
+                unsafe { vec.set_len(vec.len() + n) };
+            }
+            if self.is_closed() && self.is_empty() {
+                break;
+            }
+        }
     }
 }
 

@@ -2,7 +2,7 @@ use super::{
     observer::{DelegateObserver, Observer},
     utils::modulus,
 };
-use crate::utils::{slice_assume_init_mut, slice_assume_init_ref, write_uninit_slice};
+use crate::utils::{move_uninit_slice, slice_as_uninit_mut, slice_assume_init_mut, slice_assume_init_ref};
 use core::{iter::Chain, marker::PhantomData, mem::MaybeUninit, ptr, slice};
 #[cfg(feature = "std")]
 use std::io::{self, Write};
@@ -121,6 +121,30 @@ pub trait Consumer: Observer {
         }
     }
 
+    /// Removes items from the ring buffer and writes them into an uninit slice.
+    ///
+    /// Returns count of items been removed.
+    fn pop_slice_uninit(&mut self, elems: &mut [MaybeUninit<Self::Item>]) -> usize {
+        let (left, right) = self.occupied_slices();
+        let count = if elems.len() < left.len() {
+            move_uninit_slice(elems, unsafe { left.get_unchecked(..elems.len()) });
+            elems.len()
+        } else {
+            let (left_elems, elems) = elems.split_at_mut(left.len());
+            move_uninit_slice(left_elems, left);
+            left.len()
+                + if elems.len() < right.len() {
+                    move_uninit_slice(elems, unsafe { right.get_unchecked(..elems.len()) });
+                    elems.len()
+                } else {
+                    move_uninit_slice(unsafe { elems.get_unchecked_mut(..right.len()) }, right);
+                    right.len()
+                }
+        };
+        unsafe { self.advance_read_index(count) };
+        count
+    }
+
     /// Removes items from the ring buffer and writes them into a slice.
     ///
     /// Returns count of items been removed.
@@ -128,24 +152,7 @@ pub trait Consumer: Observer {
     where
         Self::Item: Copy,
     {
-        let (left, right) = self.occupied_slices();
-        let count = if elems.len() < left.len() {
-            unsafe { write_uninit_slice(elems, left.get_unchecked(..elems.len())) };
-            elems.len()
-        } else {
-            let (left_elems, elems) = elems.split_at_mut(left.len());
-            unsafe { write_uninit_slice(left_elems, left) };
-            left.len()
-                + if elems.len() < right.len() {
-                    unsafe { write_uninit_slice(elems, right.get_unchecked(..elems.len())) };
-                    elems.len()
-                } else {
-                    unsafe { write_uninit_slice(elems.get_unchecked_mut(..right.len()), right) };
-                    right.len()
-                }
-        };
-        unsafe { self.advance_read_index(count) };
-        count
+        self.pop_slice_uninit(unsafe { slice_as_uninit_mut(elems) })
     }
 
     /// Returns an iterator that removes items one by one from the ring buffer.

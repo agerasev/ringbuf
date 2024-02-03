@@ -1,6 +1,7 @@
 use crate::{traits::*, wrap::WaitError, BlockingHeapRb};
 use std::{
     io::{Read, Write},
+    sync::Arc,
     thread,
     time::Duration,
     vec,
@@ -17,6 +18,7 @@ This book fully embraces the potential of Rust to empower its users. It's a frie
 
 - Nicholas Matsakis and Aaron Turon
 ";
+const N_REP: usize = 10;
 
 const TIMEOUT: Option<Duration> = Some(Duration::from_millis(1000));
 
@@ -26,16 +28,19 @@ fn wait() {
     let rb = BlockingHeapRb::<u8>::new(7);
     let (mut prod, mut cons) = rb.split();
 
-    let smsg = THE_BOOK_FOREWORD;
+    let smsg = Arc::new(THE_BOOK_FOREWORD.repeat(N_REP));
 
-    let pjh = thread::spawn(move || {
-        let mut bytes = smsg;
-        prod.set_timeout(TIMEOUT);
-        while !bytes.is_empty() {
-            assert_eq!(prod.wait_vacant(1), Ok(()));
-            let n = prod.push_slice(bytes);
-            assert!(n > 0);
-            bytes = &bytes[n..bytes.len()]
+    let pjh = thread::spawn({
+        let smsg = smsg.clone();
+        move || {
+            let mut bytes = smsg.as_slice();
+            prod.set_timeout(TIMEOUT);
+            while !bytes.is_empty() {
+                assert_eq!(prod.wait_vacant(1), Ok(()));
+                let n = prod.push_slice(bytes);
+                assert!(n > 0);
+                bytes = &bytes[n..bytes.len()]
+            }
         }
     });
 
@@ -59,7 +64,7 @@ fn wait() {
     pjh.join().unwrap();
     let rmsg = cjh.join().unwrap();
 
-    assert_eq!(smsg, rmsg);
+    assert_eq!(*smsg, rmsg);
 }
 
 #[test]
@@ -68,25 +73,65 @@ fn slice_all() {
     let rb = BlockingHeapRb::<u8>::new(7);
     let (mut prod, mut cons) = rb.split();
 
-    let smsg = THE_BOOK_FOREWORD;
+    let smsg = Arc::new(THE_BOOK_FOREWORD.repeat(N_REP));
 
-    let pjh = thread::spawn(move || {
-        let bytes = smsg;
-        prod.set_timeout(TIMEOUT);
-        assert_eq!(prod.push_all_slice(bytes), bytes.len());
+    let pjh = thread::spawn({
+        let smsg = smsg.clone();
+        move || {
+            let bytes = smsg;
+            prod.set_timeout(TIMEOUT);
+            assert_eq!(prod.push_exact(&bytes), bytes.len());
+        }
     });
 
-    let cjh = thread::spawn(move || {
-        let mut bytes = vec![0u8; smsg.len()];
-        cons.set_timeout(TIMEOUT);
-        assert_eq!(cons.pop_all_slice(&mut bytes), bytes.len());
-        bytes
+    let cjh = thread::spawn({
+        let smsg = smsg.clone();
+        move || {
+            let mut bytes = vec![0u8; smsg.len()];
+            cons.set_timeout(TIMEOUT);
+            assert_eq!(cons.pop_exact(&mut bytes), bytes.len());
+            bytes
+        }
     });
 
     pjh.join().unwrap();
     let rmsg = cjh.join().unwrap();
 
-    assert_eq!(smsg, rmsg);
+    assert_eq!(*smsg, rmsg);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn vec_all() {
+    let rb = BlockingHeapRb::<u8>::new(7);
+    let (mut prod, mut cons) = rb.split();
+
+    let smsg = Arc::new(THE_BOOK_FOREWORD.repeat(N_REP));
+
+    let pjh = thread::spawn({
+        let smsg = smsg.clone();
+        move || {
+            let bytes = smsg;
+            prod.set_timeout(TIMEOUT);
+            assert_eq!(prod.push_exact(&bytes), bytes.len());
+        }
+    });
+
+    let cjh = thread::spawn({
+        let smsg = smsg.clone();
+        move || {
+            let mut bytes = Vec::new();
+            cons.set_timeout(TIMEOUT);
+            cons.pop_until_end(&mut bytes);
+            assert_eq!(bytes.len(), smsg.len());
+            bytes
+        }
+    });
+
+    pjh.join().unwrap();
+    let rmsg = cjh.join().unwrap();
+
+    assert_eq!(*smsg, rmsg);
 }
 
 #[test]
@@ -95,12 +140,15 @@ fn iter_all() {
     let rb = BlockingHeapRb::<u8>::new(7);
     let (mut prod, mut cons) = rb.split();
 
-    let smsg = THE_BOOK_FOREWORD;
+    let smsg = Arc::new(THE_BOOK_FOREWORD.repeat(N_REP));
 
-    let pjh = thread::spawn(move || {
-        prod.set_timeout(TIMEOUT);
-        let bytes = smsg;
-        assert_eq!(prod.push_all_iter(bytes.iter().copied()), bytes.len());
+    let pjh = thread::spawn({
+        let smsg = smsg.clone();
+        move || {
+            prod.set_timeout(TIMEOUT);
+            let bytes = smsg;
+            assert_eq!(prod.push_all_iter(bytes.iter().copied()), bytes.len());
+        }
     });
 
     let cjh = thread::spawn(move || {
@@ -111,7 +159,7 @@ fn iter_all() {
     pjh.join().unwrap();
     let rmsg = cjh.join().unwrap();
 
-    assert_eq!(smsg, rmsg);
+    assert_eq!(*smsg, rmsg);
 }
 
 #[test]
@@ -120,23 +168,29 @@ fn write_read() {
     let rb = BlockingHeapRb::<u8>::new(7);
     let (mut prod, mut cons) = rb.split();
 
-    let smsg = THE_BOOK_FOREWORD;
+    let smsg = Arc::new(THE_BOOK_FOREWORD.repeat(N_REP));
 
-    let pjh = thread::spawn(move || {
-        prod.set_timeout(TIMEOUT);
-        let bytes = smsg;
-        prod.write_all(bytes).unwrap();
+    let pjh = thread::spawn({
+        let smsg = smsg.clone();
+        move || {
+            prod.set_timeout(TIMEOUT);
+            let bytes = smsg;
+            prod.write_all(&bytes).unwrap();
+        }
     });
 
-    let cjh = thread::spawn(move || {
-        cons.set_timeout(TIMEOUT);
-        let mut bytes = Vec::new();
-        assert_eq!(cons.read_to_end(&mut bytes).unwrap(), smsg.len());
-        bytes
+    let cjh = thread::spawn({
+        let smsg = smsg.clone();
+        move || {
+            cons.set_timeout(TIMEOUT);
+            let mut bytes = Vec::new();
+            assert_eq!(cons.read_to_end(&mut bytes).unwrap(), smsg.len());
+            bytes
+        }
     });
 
     pjh.join().unwrap();
     let rmsg = cjh.join().unwrap();
 
-    assert_eq!(smsg, rmsg);
+    assert_eq!(*smsg, rmsg);
 }
