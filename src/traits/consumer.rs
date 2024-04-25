@@ -3,7 +3,7 @@ use super::{
     utils::modulus,
 };
 use crate::utils::{move_uninit_slice, slice_as_uninit_mut, slice_assume_init_mut, slice_assume_init_ref};
-use core::{iter::Chain, marker::PhantomData, mem::MaybeUninit, ptr, slice};
+use core::{iter::Chain, mem::MaybeUninit, ptr, slice};
 #[cfg(feature = "std")]
 use std::io::{self, Write};
 
@@ -156,10 +156,7 @@ pub trait Consumer: Observer {
     }
 
     /// Returns an iterator that removes items one by one from the ring buffer.
-    fn pop_iter(&mut self) -> PopIter<&mut Self, Self>
-    where
-        Self: AsMut<Self> + AsRef<Self>,
-    {
+    fn pop_iter(&mut self) -> PopIter<Self> {
         PopIter::new(self)
     }
 
@@ -256,36 +253,89 @@ pub trait Consumer: Observer {
     }
 }
 
-/// An iterator that removes items from the ring buffer.
-pub struct PopIter<U: AsMut<C> + AsRef<C>, C: Consumer + ?Sized> {
-    inner: U,
-    _ghost: PhantomData<C>,
+/// Owning ring buffer iterator.
+pub struct IntoIter<C: Consumer + ?Sized> {
+    inner: C,
 }
 
-impl<U: AsMut<C> + AsRef<C>, C: Consumer + ?Sized> PopIter<U, C> {
-    pub fn new(inner: U) -> Self {
-        Self {
-            inner,
-            _ghost: PhantomData,
-        }
+impl<C: Consumer> IntoIter<C> {
+    pub fn new(inner: C) -> Self {
+        Self { inner }
     }
-    pub fn into_inner(self) -> U {
+    pub fn into_inner(self) -> C {
         self.inner
     }
 }
 
-impl<U: AsMut<C> + AsRef<C>, C: Consumer> Iterator for PopIter<U, C> {
+impl<C: Consumer> Iterator for IntoIter<C> {
     type Item = C::Item;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.as_mut().try_pop()
+        self.inner.try_pop()
     }
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.inner.as_ref().occupied_len(), None)
+        (self.inner.occupied_len(), None)
     }
 }
+
+/// An iterator that removes items from the ring buffer.
+///
+/// Producer will see removed items only when iterator is dropped or [`PopIter::commit`] is called.
+pub struct PopIter<'a, C: Consumer + ?Sized> {
+    inner: &'a C,
+    iter: Chain<slice::Iter<'a, MaybeUninit<C::Item>>, slice::Iter<'a, MaybeUninit<C::Item>>>,
+    count: usize,
+    len: usize,
+}
+
+impl<'a, C: Consumer + ?Sized> Drop for PopIter<'a, C> {
+    fn drop(&mut self) {
+        self.commit();
+    }
+}
+
+impl<'a, C: Consumer + ?Sized> PopIter<'a, C> {
+    /// Create an iterator.
+    pub fn new(inner: &'a mut C) -> Self {
+        let (len, iter) = {
+            let (left, right) = inner.occupied_slices();
+            (left.len() + right.len(), left.iter().chain(right))
+        };
+        Self {
+            inner,
+            iter,
+            count: 0,
+            len,
+        }
+    }
+
+    /// Send information about removed items to the ring buffer.
+    pub fn commit(&mut self) {
+        unsafe { self.inner.advance_read_index(self.count) };
+        self.count = 0;
+    }
+}
+
+impl<'a, C: Consumer> Iterator for PopIter<'a, C> {
+    type Item = C::Item;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|item| {
+            self.count += 1;
+            unsafe { item.assume_init_read() }
+        })
+    }
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remain = self.len - self.count;
+        (remain, Some(remain))
+    }
+}
+
+impl<'a, C: Consumer> ExactSizeIterator for PopIter<'a, C> {}
 
 /// Iterator over ring buffer contents.
 ///
@@ -376,9 +426,9 @@ macro_rules! impl_consumer_traits {
     ($type:ident $(< $( $param:tt $( : $first_bound:tt $(+ $next_bound:tt )* )? ),+ >)?) => {
         impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? core::iter::IntoIterator for $type $(< $( $param ),+ >)? where Self: Sized {
             type Item = <Self as $crate::traits::Observer>::Item;
-            type IntoIter = $crate::traits::consumer::PopIter<Self, Self>;
+            type IntoIter = $crate::traits::consumer::IntoIter<Self>;
             fn into_iter(self) -> Self::IntoIter {
-                $crate::traits::consumer::PopIter::new(self)
+                $crate::traits::consumer::IntoIter::new(self)
             }
         }
 

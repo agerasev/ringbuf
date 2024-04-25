@@ -8,8 +8,6 @@ use core::{mem::forget, ptr};
 ///
 /// Storage items must be stored as a contiguous array.
 ///
-/// Storage is converted to internal representation before use (see [`Self::Internal`]).
-///
 /// # Safety
 ///
 /// Must not alias with its contents
