@@ -1,6 +1,6 @@
 [package]
 name = "async-ringbuf"
-version = "0.2.0-rc.5"
+version = "0.2.0"
 edition.workspace = true
 authors.workspace = true
 description = "Async SPSC FIFO ring buffer"
@@ -19,11 +19,11 @@ bench = ["std"]
 
 [dependencies]
 ringbuf = { workspace = true }
-futures = { version = "0.3.23", default-features = false }
+futures = { version = "0.3.30", default-features = false }
 
 [dev-dependencies]
-futures = { version = "0.3.23", features = ["executor", "thread-pool"] }
-tokio = { version = "1.29.1", features = ["full"] }
+futures = { version = "0.3.30", features = ["executor", "thread-pool"] }
+tokio = { version = "1.37.0", features = ["full"] }
 
 [[example]]
 name = "simple"
