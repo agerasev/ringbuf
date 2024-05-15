@@ -1,13 +1,12 @@
 use crate::{storage::Heap, traits::*, SharedRb};
-use std::{thread, thread::sleep, time::Duration, vec::Vec};
+use std::{cell::Cell, thread, thread::sleep, time::Duration, vec::Vec};
 
-#[cfg(feature = "std")]
+fn yield_() {
+    sleep(Duration::from_millis(1));
+}
+
 #[test]
 fn concurrent() {
-    fn yield_() {
-        sleep(Duration::from_millis(1));
-    }
-
     const MSG: &[u8] = b"The quick brown fox jumps over the lazy dog\0";
     let rb = SharedRb::<Heap<u8>>::new(4);
     let (mut prod, mut cons) = rb.split();
@@ -33,4 +32,39 @@ fn concurrent() {
 
     pjh.join().unwrap();
     assert_eq!(cjh.join().unwrap(), MSG);
+}
+
+#[test]
+fn non_sync() {
+    const N: i32 = 256;
+
+    let rb = SharedRb::<Heap<Cell<i32>>>::new(4);
+    let (mut prod, mut cons) = rb.split();
+
+    let pjh = thread::spawn({
+        move || {
+            for i in 0..N {
+                while prod.try_push(Cell::new(i)).is_err() {
+                    yield_();
+                }
+            }
+        }
+    });
+
+    let cjh = thread::spawn(move || {
+        for i in 0..N {
+            assert_eq!(
+                i,
+                loop {
+                    match cons.try_pop() {
+                        Some(i) => break i.get(),
+                        None => yield_(),
+                    }
+                }
+            );
+        }
+    });
+
+    pjh.join().unwrap();
+    cjh.join().unwrap();
 }

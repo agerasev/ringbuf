@@ -26,6 +26,8 @@ pub trait Observer {
     /// # Safety
     ///
     /// Slice must not overlap with any mutable slice existing at the same time.
+    ///
+    /// Non-`Sync` items must not be accessed from multiple threads at the same time.
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]);
 
     /// Get mutable slice between `start` and `end` indices.

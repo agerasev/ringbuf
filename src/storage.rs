@@ -38,6 +38,8 @@ pub unsafe trait Storage {
     /// # Safety
     ///
     /// Slice must not overlab with existing mutable slices.
+    ///
+    /// Non-`Sync` items must not be accessed concurrently.
     unsafe fn slice(&self, range: Range<usize>) -> &[MaybeUninit<Self::Item>] {
         slice::from_raw_parts(self.as_ptr().add(range.start), range.len())
     }
@@ -57,8 +59,8 @@ pub struct Ref<'a, T> {
     ptr: *mut MaybeUninit<T>,
     len: usize,
 }
-unsafe impl<'a, T> Send for Ref<'a, T> where T: Sync {}
-unsafe impl<'a, T> Sync for Ref<'a, T> where T: Sync {}
+unsafe impl<'a, T> Send for Ref<'a, T> where T: Send {}
+unsafe impl<'a, T> Sync for Ref<'a, T> where T: Send {}
 unsafe impl<'a, T> Storage for Ref<'a, T> {
     type Item = T;
     #[inline]
@@ -88,7 +90,7 @@ impl<'a, T> From<Ref<'a, T>> for &'a mut [MaybeUninit<T>] {
 pub struct Owning<T: ?Sized> {
     data: UnsafeCell<T>,
 }
-unsafe impl<T: ?Sized> Sync for Owning<T> where T: Sync {}
+unsafe impl<T: ?Sized> Sync for Owning<T> where T: Send {}
 impl<T> From<T> for Owning<T> {
     fn from(value: T) -> Self {
         Self {
@@ -136,7 +138,7 @@ pub struct Heap<T> {
 #[cfg(feature = "alloc")]
 unsafe impl<T> Send for Heap<T> where T: Send {}
 #[cfg(feature = "alloc")]
-unsafe impl<T> Sync for Heap<T> where T: Sync {}
+unsafe impl<T> Sync for Heap<T> where T: Send {}
 #[cfg(feature = "alloc")]
 unsafe impl<T> Storage for Heap<T> {
     type Item = T;
@@ -186,5 +188,21 @@ impl<T> From<Heap<T>> for Box<[MaybeUninit<T>]> {
 impl<T> Drop for Heap<T> {
     fn drop(&mut self) {
         drop(unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(self.ptr, self.len)) });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::{cell::Cell, marker::PhantomData};
+
+    struct Check<S: Storage + Send + Sync + ?Sized>(PhantomData<S>);
+
+    #[allow(dead_code)]
+    fn check_send_sync() {
+        let _: Check<Ref<Cell<i32>>>;
+        let _: Check<Array<Cell<i32>, 4>>;
+        let _: Check<Slice<Cell<i32>>>;
+        let _: Check<Heap<Cell<i32>>>;
     }
 }
