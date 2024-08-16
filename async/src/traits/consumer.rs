@@ -29,6 +29,8 @@ pub trait AsyncConsumer: Consumer {
     /// Wait for the buffer to contain at least `count` items or to close.
     ///
     /// In debug mode panics if `count` is greater than buffer capacity.
+    ///
+    /// The method takes `&mut self` because only single [`WaitOccupiedFuture`] is allowed at a time.
     fn wait_occupied(&mut self, count: usize) -> WaitOccupiedFuture<'_, Self> {
         debug_assert!(count <= self.capacity().get());
         WaitOccupiedFuture {

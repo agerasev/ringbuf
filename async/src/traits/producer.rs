@@ -45,7 +45,9 @@ pub trait AsyncProducer: Producer {
     /// Wait for the buffer to have at least `count` free places for items or to close.
     ///
     /// In debug mode panics if `count` is greater than buffer capacity.
-    fn wait_vacant(&self, count: usize) -> WaitVacantFuture<'_, Self> {
+    ///
+    /// The method takes `&mut self` because only single [`WaitVacantFuture`] is allowed at a time.
+    fn wait_vacant(&mut self, count: usize) -> WaitVacantFuture<'_, Self> {
         debug_assert!(count <= self.capacity().get());
         WaitVacantFuture {
             owner: self,
