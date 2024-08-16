@@ -2,16 +2,19 @@
 
 [![Crates.io][crates_badge]][crates]
 [![Docs.rs][docs_badge]][docs]
+[![Github Actions][github_badge]][github]
 [![Gitlab CI][gitlab_badge]][gitlab]
 [![License][license_badge]][license]
 
 [crates_badge]: https://img.shields.io/crates/v/ringbuf.svg
 [docs_badge]: https://docs.rs/ringbuf/badge.svg
+[github_badge]: https://github.com/agerasev/ringbuf/actions/workflows/test.yml/badge.svg
 [gitlab_badge]: https://gitlab.com/agerasev/ringbuf/badges/master/pipeline.svg
 [license_badge]: https://img.shields.io/crates/l/ringbuf.svg
 
 [crates]: https://crates.io/crates/ringbuf
 [docs]: https://docs.rs/ringbuf
+[github]: https://github.com/agerasev/ringbuf/actions/workflows/test.yml
 [gitlab]: https://gitlab.com/agerasev/ringbuf/-/pipelines?scope=branches&ref=master
 [license]: #license
 
