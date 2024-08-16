@@ -7,14 +7,14 @@ readme = "README.md"
 license = "MIT/Apache-2.0"
 
 [workspace.dependencies]
-ringbuf = { path = ".", version = "0.4.2" }
+ringbuf = { path = ".", version = "0.4.3" }
 
 [workspace]
 members = ["async", "blocking"]
 
 [package]
 name = "ringbuf"
-version = "0.4.2"
+version = "0.4.3"
 edition.workspace = true
 authors.workspace = true
 description = "Lock-free SPSC FIFO ring buffer with direct access to inner data"

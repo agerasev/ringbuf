@@ -121,10 +121,21 @@ pub trait Consumer: Observer {
         }
     }
 
-    /// Removes items from the ring buffer and writes them into an uninit slice.
+    /// Returns the reference to the eldest item without removing it from the buffer.
     ///
-    /// Returns count of items been removed.
-    fn pop_slice_uninit(&mut self, elems: &mut [MaybeUninit<Self::Item>]) -> usize {
+    /// Returns `None` if the ring buffer is empty.
+    fn try_peek(&self) -> Option<&Self::Item> {
+        if !self.is_empty() {
+            Some(unsafe { self.occupied_slices().0.get_unchecked(0).assume_init_ref() })
+        } else {
+            None
+        }
+    }
+
+    /// Copies items from the ring buffer to an uninit slice without removing them from the ring buffer.
+    ///
+    /// Returns a number of items being copied.
+    fn peek_slice_uninit(&self, elems: &mut [MaybeUninit<Self::Item>]) -> usize {
         let (left, right) = self.occupied_slices();
         let count = if elems.len() < left.len() {
             move_uninit_slice(elems, unsafe { left.get_unchecked(..elems.len()) });
@@ -141,6 +152,24 @@ pub trait Consumer: Observer {
                     right.len()
                 }
         };
+        count
+    }
+
+    /// Copies items from the ring buffer to a slice without removing them from the ring buffer.
+    ///
+    /// Returns a number of items being copied.
+    fn peek_slice(&self, elems: &mut [Self::Item]) -> usize
+    where
+        Self::Item: Copy,
+    {
+        self.peek_slice_uninit(unsafe { slice_as_uninit_mut(elems) })
+    }
+
+    /// Removes items from the ring buffer and writes them into an uninit slice.
+    ///
+    /// Returns count of items been removed.
+    fn pop_slice_uninit(&mut self, elems: &mut [MaybeUninit<Self::Item>]) -> usize {
+        let count = self.peek_slice_uninit(elems);
         unsafe { self.advance_read_index(count) };
         count
     }
