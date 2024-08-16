@@ -93,6 +93,11 @@ pub struct Owning<T: ?Sized> {
 unsafe impl<T: ?Sized> Sync for Owning<T> where T: Send {}
 impl<T> From<T> for Owning<T> {
     fn from(value: T) -> Self {
+        Self::new(value)
+    }
+}
+impl<T> Owning<T> {
+    pub const fn new(value: T) -> Self {
         Self {
             data: UnsafeCell::new(value),
         }

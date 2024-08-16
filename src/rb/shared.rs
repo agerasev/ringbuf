@@ -59,8 +59,9 @@ impl<S: Storage> SharedRb<S> {
     ///
     /// The items in storage inside `read..write` range must be initialized, items outside this range must be uninitialized.
     /// `read` and `write` positions must be valid (see implementation details).
-    pub unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
-        assert!(!storage.is_empty());
+    ///
+    /// `storage` length must be non-zero.
+    pub const unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
         Self {
             storage,
             read_index: CachePadded::new(AtomicUsize::new(read)),
