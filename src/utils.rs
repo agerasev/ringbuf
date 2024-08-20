@@ -6,7 +6,7 @@ use core::{
 };
 
 // TODO: Remove on `maybe_uninit_uninit_array` stabilization.
-pub const fn uninit_array<T, const N: usize>() -> [MaybeUninit<T>; N] {
+pub fn uninit_array<T, const N: usize>() -> [MaybeUninit<T>; N] {
     unsafe { MaybeUninit::<[MaybeUninit<T>; N]>::uninit().assume_init() }
 }
 
@@ -39,20 +39,21 @@ pub fn move_uninit_slice<T>(dst: &mut [MaybeUninit<T>], src: &[MaybeUninit<T>]) 
 }
 
 pub fn array_to_uninit<T, const N: usize>(value: [T; N]) -> [MaybeUninit<T>; N] {
-    let value = MaybeUninit::new(value);
-    let this = &value as *const _ as *const [MaybeUninit<T>; N];
-    unsafe { this.read() }
+    let value = mem::ManuallyDrop::new(value);
+    let ptr = &value as *const _ as *const [MaybeUninit<T>; N];
+    unsafe { ptr.read() }
 }
 
 #[cfg(feature = "alloc")]
-pub fn vec_to_uninit<T>(mut value: Vec<T>) -> Vec<MaybeUninit<T>> {
-    let (ptr, len, cap) = (value.as_mut_ptr() as *mut MaybeUninit<T>, value.len(), value.capacity());
-    mem::forget(value);
-    unsafe { Vec::from_raw_parts(ptr, len, cap) }
+pub fn vec_to_uninit<T>(value: Vec<T>) -> Vec<MaybeUninit<T>> {
+    let value = mem::ManuallyDrop::new(value);
+    let ptr = &value as *const _ as *const Vec<MaybeUninit<T>>;
+    unsafe { ptr.read() }
 }
 
 #[cfg(feature = "alloc")]
 pub fn boxed_slice_to_uninit<T>(value: Box<[T]>) -> Box<[MaybeUninit<T>]> {
-    let ptr = Box::into_raw(value) as *mut [MaybeUninit<T>];
-    unsafe { Box::from_raw(ptr) }
+    let value = mem::ManuallyDrop::new(value);
+    let ptr = &value as *const _ as *const Box<[MaybeUninit<T>]>;
+    unsafe { ptr.read() }
 }

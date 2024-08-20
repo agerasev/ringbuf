@@ -25,7 +25,7 @@ struct End {
 }
 
 impl End {
-    const fn new(index: usize) -> Self {
+    fn new(index: usize) -> Self {
         Self {
             index: Cell::new(index),
             held: Cell::new(false),
@@ -49,9 +49,8 @@ impl<S: Storage> LocalRb<S> {
     ///
     /// The items in storage inside `read..write` range must be initialized, items outside this range must be uninitialized.
     /// `read` and `write` positions must be valid (see implementation details).
-    ///
-    /// `storage` length must be non-zero.
-    pub const unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
+    pub unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
+        assert!(!storage.is_empty());
         Self {
             storage,
             read: End::new(read),

@@ -3,9 +3,6 @@ use crate::{storage::Array, traits::*};
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
-#[allow(clippy::declare_interior_mutable_const)]
-const _RB: Rb<Array<i32, 4>> = Rb::<Array<i32, 4>>::new();
-
 #[test]
 fn new_static() {
     let rb = Rb::<Array<i32, 2>>::default();

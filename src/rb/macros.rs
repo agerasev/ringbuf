@@ -2,12 +2,7 @@ macro_rules! rb_impl_init {
     ($type:ident) => {
         impl<T, const N: usize> Default for $type<crate::storage::Array<T, N>> {
             fn default() -> Self {
-                Self::new()
-            }
-        }
-        impl<T, const N: usize> $type<crate::storage::Array<T, N>> {
-            pub const fn new() -> Self {
-                unsafe { Self::from_raw_parts(crate::storage::Array::new(crate::utils::uninit_array()), 0, 0) }
+                unsafe { Self::from_raw_parts(crate::utils::uninit_array().into(), usize::default(), usize::default()) }
             }
         }
 
