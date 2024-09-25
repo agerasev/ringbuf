@@ -19,15 +19,16 @@ macro_rules! rb_impl_init {
             ///
             /// *Panics if allocation failed or `capacity` is zero.*
             pub fn new(capacity: usize) -> Self {
-                Self::try_new(capacity).unwrap()
+                unsafe { Self::from_raw_parts(crate::storage::Heap::<T>::new(capacity), usize::default(), usize::default()) }
             }
             /// Creates a new instance of a ring buffer returning an error if allocation failed.
             ///
             /// *Panics if `capacity` is zero.*
             pub fn try_new(capacity: usize) -> Result<Self, alloc::collections::TryReserveError> {
-                let mut vec = alloc::vec::Vec::new();
+                let mut vec = alloc::vec::Vec::<core::mem::MaybeUninit<T>>::new();
                 vec.try_reserve_exact(capacity)?;
-                Ok(unsafe { Self::from_raw_parts(vec.into(), usize::default(), usize::default()) })
+                unsafe { vec.set_len(capacity) };
+                Ok(unsafe { Self::from_raw_parts(vec.into_boxed_slice().into(), usize::default(), usize::default()) })
             }
         }
 

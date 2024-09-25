@@ -2,7 +2,7 @@
 use alloc::{boxed::Box, vec::Vec};
 use core::{cell::UnsafeCell, marker::PhantomData, mem::MaybeUninit, ops::Range, ptr::NonNull, slice};
 #[cfg(feature = "alloc")]
-use core::{mem::forget, ptr};
+use core::{mem::ManuallyDrop, ptr};
 
 /// Abstract storage for the ring buffer.
 ///
@@ -104,7 +104,7 @@ unsafe impl<T, const N: usize> Storage for Array<T, N> {
     type Item = T;
     #[inline]
     fn as_mut_ptr(&self) -> *mut MaybeUninit<T> {
-        self.data.get() as *mut _
+        self.data.get().cast()
     }
     #[inline]
     fn len(&self) -> usize {
@@ -122,7 +122,7 @@ unsafe impl<T> Storage for Slice<T> {
     type Item = T;
     #[inline]
     fn as_mut_ptr(&self) -> *mut MaybeUninit<T> {
-        self.data.get() as *mut _
+        self.data.get().cast()
     }
     #[inline]
     fn len(&self) -> usize {
@@ -153,20 +153,25 @@ unsafe impl<T> Storage for Heap<T> {
 }
 #[cfg(feature = "alloc")]
 impl<T> Heap<T> {
+    /// Create a new heap storage with exact capacity.
     pub fn new(capacity: usize) -> Self {
-        Self {
-            ptr: Vec::<T>::with_capacity(capacity).leak() as *mut _ as *mut MaybeUninit<T>,
-            len: capacity,
-        }
+        let mut data = Vec::<MaybeUninit<T>>::with_capacity(capacity);
+        // `data.capacity()` is not guaranteed to be equal to `capacity`.
+        // We enforce that by `set_len` and converting to boxed slice.
+        unsafe { data.set_len(capacity) };
+        Self::from(data.into_boxed_slice())
     }
 }
 #[cfg(feature = "alloc")]
 impl<T> From<Vec<MaybeUninit<T>>> for Heap<T> {
     fn from(mut value: Vec<MaybeUninit<T>>) -> Self {
-        let len = value.capacity();
-        let ptr = value.as_mut_ptr();
-        forget(value);
-        Self { ptr, len }
+        // Convert `value` to boxed slice of length equals to `value.capacity()`
+        // except for zero-sized types - for them length will be `value.len()` because `Vec::capacity` for ZST is undefined
+        // (see <https://doc.rust-lang.org/std/vec/struct.Vec.html#guarantees>).
+        if size_of::<T>() != 0 {
+            unsafe { value.set_len(value.capacity()) };
+        }
+        Self::from(value.into_boxed_slice())
     }
 }
 #[cfg(feature = "alloc")]
@@ -174,13 +179,14 @@ impl<T> From<Box<[MaybeUninit<T>]>> for Heap<T> {
     fn from(value: Box<[MaybeUninit<T>]>) -> Self {
         Self {
             len: value.len(),
-            ptr: Box::into_raw(value) as *mut MaybeUninit<T>,
+            ptr: Box::into_raw(value).cast(),
         }
     }
 }
 #[cfg(feature = "alloc")]
 impl<T> From<Heap<T>> for Box<[MaybeUninit<T>]> {
     fn from(value: Heap<T>) -> Self {
+        let value = ManuallyDrop::new(value);
         unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(value.ptr, value.len)) }
     }
 }

@@ -19,13 +19,13 @@ use core::{
     ptr,
 };
 
-struct End {
+struct Endpoint {
     index: Cell<usize>,
     held: Cell<bool>,
 }
 
-impl End {
-    fn new(index: usize) -> Self {
+impl Endpoint {
+    const fn new(index: usize) -> Self {
         Self {
             index: Cell::new(index),
             held: Cell::new(false),
@@ -37,8 +37,8 @@ impl End {
 ///
 /// Slightly faster than multi-threaded version because it doesn't synchronize cache.
 pub struct LocalRb<S: Storage + ?Sized> {
-    read: End,
-    write: End,
+    read: Endpoint,
+    write: Endpoint,
     storage: S,
 }
 
@@ -53,8 +53,8 @@ impl<S: Storage> LocalRb<S> {
         assert!(!storage.is_empty());
         Self {
             storage,
-            read: End::new(read),
-            write: End::new(write),
+            read: Endpoint::new(read),
+            write: Endpoint::new(write),
         }
     }
     /// Destructures ring buffer into underlying storage and `read` and `write` indices.
