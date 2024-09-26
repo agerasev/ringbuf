@@ -16,9 +16,9 @@ use core::{
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
     ptr,
-    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use crossbeam_utils::CachePadded;
+use portable_atomic::{AtomicBool, AtomicUsize, Ordering};
 
 /// Ring buffer that can be shared between threads.
 ///

@@ -31,6 +31,7 @@ Lock-free SPSC FIFO ring buffer with direct access to inner data.
 + Different types of buffers and underlying storages.
 + Can be used without `std` and even without `alloc` (using only statically-allocated memory).
 + Async and blocking versions (see [this section](#derived-crates)).
++ Uses the `portable-atomic` crate to allow usage on smaller systems without CAS operations.
 
 # Usage
 
