@@ -168,7 +168,7 @@ impl<T> From<Vec<MaybeUninit<T>>> for Heap<T> {
         // Convert `value` to boxed slice of length equals to `value.capacity()`
         // except for zero-sized types - for them length will be `value.len()` because `Vec::capacity` for ZST is undefined
         // (see <https://doc.rust-lang.org/std/vec/struct.Vec.html#guarantees>).
-        if size_of::<T>() != 0 {
+        if core::mem::size_of::<T>() != 0 {
             unsafe { value.set_len(value.capacity()) };
         }
         Self::from(value.into_boxed_slice())
