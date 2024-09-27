@@ -2,6 +2,7 @@
 
 cargo test && \
 cargo test --features test_local && \
+cargo test --features portable-atomic && \
 cargo check --no-default-features --features alloc && \
 cargo check --no-default-features && \
 cd async && \
