@@ -12,13 +12,16 @@ use crate::{
 };
 #[cfg(feature = "alloc")]
 use alloc::{boxed::Box, sync::Arc};
+#[cfg(not(feature = "portable-atomic"))]
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use core::{
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
     ptr,
-    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use crossbeam_utils::CachePadded;
+#[cfg(feature = "portable-atomic")]
+use portable_atomic::{AtomicBool, AtomicUsize, Ordering};
 
 /// Ring buffer that can be shared between threads.
 ///
