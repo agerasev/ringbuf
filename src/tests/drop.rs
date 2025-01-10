@@ -18,7 +18,7 @@ impl<'a> Dropper<'a> {
     }
 }
 
-impl<'a> Drop for Dropper<'a> {
+impl Drop for Dropper<'_> {
     fn drop(&mut self) {
         if !self.set.borrow_mut().remove(&self.id) {
             panic!("value {} already removed", self.id);
@@ -30,7 +30,7 @@ impl<'a> Drop for Dropper<'a> {
 fn single() {
     let set = RefCell::new(BTreeSet::new());
 
-    let mut rb = Rb::<Array<Dropper, 3>>::default();
+    let rb = Rb::<Array<Dropper, 3>>::default();
 
     assert_eq!(set.borrow().len(), 0);
 
@@ -62,7 +62,7 @@ fn single() {
 fn transaction() {
     let set = RefCell::new(BTreeSet::new());
 
-    let mut rb = Rb::<Array<Dropper, 5>>::default();
+    let rb = Rb::<Array<Dropper, 5>>::default();
 
     assert_eq!(set.borrow().len(), 0);
     {
