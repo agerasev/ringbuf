@@ -23,5 +23,5 @@ pub trait SplitRef {
         Self: 'a;
 
     /// Perform splitting by reference.
-    fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>);
+    fn split_ref(&self) -> (Self::RefProd<'_>, Self::RefCons<'_>);
 }
