@@ -110,13 +110,13 @@ pub struct PopFuture<'a, A: AsyncConsumer + ?Sized> {
     owner: &'a mut A,
     done: bool,
 }
-impl<'a, A: AsyncConsumer> Unpin for PopFuture<'a, A> {}
-impl<'a, A: AsyncConsumer> FusedFuture for PopFuture<'a, A> {
+impl<A: AsyncConsumer> Unpin for PopFuture<'_, A> {}
+impl<A: AsyncConsumer> FusedFuture for PopFuture<'_, A> {
     fn is_terminated(&self) -> bool {
         self.done || self.owner.is_closed()
     }
 }
-impl<'a, A: AsyncConsumer> Future for PopFuture<'a, A> {
+impl<A: AsyncConsumer> Future for PopFuture<'_, A> {
     type Output = Option<A::Item>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -148,8 +148,8 @@ where
     slice: Option<&'b mut [A::Item]>,
     count: usize,
 }
-impl<'a, 'b, A: AsyncConsumer> Unpin for PopSliceFuture<'a, 'b, A> where A::Item: Copy {}
-impl<'a, 'b, A: AsyncConsumer> FusedFuture for PopSliceFuture<'a, 'b, A>
+impl<A: AsyncConsumer> Unpin for PopSliceFuture<'_, '_, A> where A::Item: Copy {}
+impl<A: AsyncConsumer> FusedFuture for PopSliceFuture<'_, '_, A>
 where
     A::Item: Copy,
 {
@@ -157,7 +157,7 @@ where
         self.slice.is_none()
     }
 }
-impl<'a, 'b, A: AsyncConsumer> Future for PopSliceFuture<'a, 'b, A>
+impl<A: AsyncConsumer> Future for PopSliceFuture<'_, '_, A>
 where
     A::Item: Copy,
 {
@@ -193,15 +193,15 @@ pub struct PopVecFuture<'a, 'b, A: AsyncConsumer + ?Sized> {
     vec: Option<&'b mut alloc::vec::Vec<A::Item>>,
 }
 #[cfg(feature = "alloc")]
-impl<'a, 'b, A: AsyncConsumer> Unpin for PopVecFuture<'a, 'b, A> {}
+impl<A: AsyncConsumer> Unpin for PopVecFuture<'_, '_, A> {}
 #[cfg(feature = "alloc")]
-impl<'a, 'b, A: AsyncConsumer> FusedFuture for PopVecFuture<'a, 'b, A> {
+impl<A: AsyncConsumer> FusedFuture for PopVecFuture<'_, '_, A> {
     fn is_terminated(&self) -> bool {
         self.vec.is_none()
     }
 }
 #[cfg(feature = "alloc")]
-impl<'a, 'b, A: AsyncConsumer> Future for PopVecFuture<'a, 'b, A> {
+impl<A: AsyncConsumer> Future for PopVecFuture<'_, '_, A> {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -239,13 +239,13 @@ pub struct WaitOccupiedFuture<'a, A: AsyncConsumer + ?Sized> {
     count: usize,
     done: bool,
 }
-impl<'a, A: AsyncConsumer> Unpin for WaitOccupiedFuture<'a, A> {}
-impl<'a, A: AsyncConsumer> FusedFuture for WaitOccupiedFuture<'a, A> {
+impl<A: AsyncConsumer> Unpin for WaitOccupiedFuture<'_, A> {}
+impl<A: AsyncConsumer> FusedFuture for WaitOccupiedFuture<'_, A> {
     fn is_terminated(&self) -> bool {
         self.done
     }
 }
-impl<'a, A: AsyncConsumer> Future for WaitOccupiedFuture<'a, A> {
+impl<A: AsyncConsumer> Future for WaitOccupiedFuture<'_, A> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

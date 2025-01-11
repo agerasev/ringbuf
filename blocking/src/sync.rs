@@ -135,7 +135,7 @@ pub struct TakeIter<'a, X: Semaphore> {
     timeout_iter: TimeoutIter<X::Instant>,
 }
 
-impl<'a, X: Semaphore> Iterator for TakeIter<'a, X> {
+impl<X: Semaphore> Iterator for TakeIter<'_, X> {
     type Item = ();
     fn next(&mut self) -> Option<Self::Item> {
         if self.reset {
@@ -150,7 +150,7 @@ impl<'a, X: Semaphore> Iterator for TakeIter<'a, X> {
     }
 }
 
-impl<'a, X: Semaphore> TakeIter<'a, X> {
+impl<X: Semaphore> TakeIter<'_, X> {
     pub fn reset(mut self) -> Self {
         self.reset = true;
         self

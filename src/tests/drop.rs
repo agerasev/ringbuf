@@ -18,7 +18,7 @@ impl<'a> Dropper<'a> {
     }
 }
 
-impl<'a> Drop for Dropper<'a> {
+impl Drop for Dropper<'_> {
     fn drop(&mut self) {
         if !self.set.borrow_mut().remove(&self.id) {
             panic!("value {} already removed", self.id);

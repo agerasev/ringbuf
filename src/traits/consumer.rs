@@ -319,7 +319,7 @@ pub struct PopIter<'a, C: Consumer + ?Sized> {
     len: usize,
 }
 
-impl<'a, C: Consumer + ?Sized> Drop for PopIter<'a, C> {
+impl<C: Consumer + ?Sized> Drop for PopIter<'_, C> {
     fn drop(&mut self) {
         self.commit();
     }
@@ -347,7 +347,7 @@ impl<'a, C: Consumer + ?Sized> PopIter<'a, C> {
     }
 }
 
-impl<'a, C: Consumer> Iterator for PopIter<'a, C> {
+impl<C: Consumer> Iterator for PopIter<'_, C> {
     type Item = C::Item;
 
     #[inline]
@@ -364,7 +364,7 @@ impl<'a, C: Consumer> Iterator for PopIter<'a, C> {
     }
 }
 
-impl<'a, C: Consumer> ExactSizeIterator for PopIter<'a, C> {}
+impl<C: Consumer> ExactSizeIterator for PopIter<'_, C> {}
 
 /// Iterator over ring buffer contents.
 ///

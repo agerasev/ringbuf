@@ -16,7 +16,7 @@ pub unsafe trait RbRef: Clone + AsRef<Self::Rb> {
     }
 }
 
-unsafe impl<'a, B: RingBuffer + AsRef<B> + ?Sized> RbRef for &'a B {
+unsafe impl<B: RingBuffer + AsRef<B> + ?Sized> RbRef for &B {
     type Rb = B;
 }
 #[cfg(feature = "alloc")]

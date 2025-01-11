@@ -130,7 +130,7 @@ pub struct PopAllIter<'a, R: BlockingRbRef> {
     owner: &'a mut BlockingCons<R>,
 }
 
-impl<'a, R: BlockingRbRef> Iterator for PopAllIter<'a, R> {
+impl<R: BlockingRbRef> Iterator for PopAllIter<'_, R> {
     type Item = <R::Rb as Observer>::Item;
 
     fn next(&mut self) -> Option<Self::Item> {

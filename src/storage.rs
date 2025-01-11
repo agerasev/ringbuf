@@ -59,9 +59,9 @@ pub struct Ref<'a, T> {
     ptr: *mut MaybeUninit<T>,
     len: usize,
 }
-unsafe impl<'a, T> Send for Ref<'a, T> where T: Send {}
-unsafe impl<'a, T> Sync for Ref<'a, T> where T: Send {}
-unsafe impl<'a, T> Storage for Ref<'a, T> {
+unsafe impl<T> Send for Ref<'_, T> where T: Send {}
+unsafe impl<T> Sync for Ref<'_, T> where T: Send {}
+unsafe impl<T> Storage for Ref<'_, T> {
     type Item = T;
     #[inline]
     fn as_mut_ptr(&self) -> *mut MaybeUninit<T> {

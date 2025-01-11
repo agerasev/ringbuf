@@ -116,13 +116,13 @@ pub struct PushFuture<'a, A: AsyncProducer + ?Sized> {
     owner: &'a mut A,
     item: Option<A::Item>,
 }
-impl<'a, A: AsyncProducer> Unpin for PushFuture<'a, A> {}
-impl<'a, A: AsyncProducer> FusedFuture for PushFuture<'a, A> {
+impl<A: AsyncProducer> Unpin for PushFuture<'_, A> {}
+impl<A: AsyncProducer> FusedFuture for PushFuture<'_, A> {
     fn is_terminated(&self) -> bool {
         self.item.is_none()
     }
 }
-impl<'a, A: AsyncProducer> Future for PushFuture<'a, A> {
+impl<A: AsyncProducer> Future for PushFuture<'_, A> {
     type Output = Result<(), A::Item>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -154,8 +154,8 @@ where
     slice: Option<&'b [A::Item]>,
     count: usize,
 }
-impl<'a, 'b, A: AsyncProducer> Unpin for PushSliceFuture<'a, 'b, A> where A::Item: Copy {}
-impl<'a, 'b, A: AsyncProducer> FusedFuture for PushSliceFuture<'a, 'b, A>
+impl<A: AsyncProducer> Unpin for PushSliceFuture<'_, '_, A> where A::Item: Copy {}
+impl<A: AsyncProducer> FusedFuture for PushSliceFuture<'_, '_, A>
 where
     A::Item: Copy,
 {
@@ -163,7 +163,7 @@ where
         self.slice.is_none()
     }
 }
-impl<'a, 'b, A: AsyncProducer> Future for PushSliceFuture<'a, 'b, A>
+impl<A: AsyncProducer> Future for PushSliceFuture<'_, '_, A>
 where
     A::Item: Copy,
 {
@@ -196,13 +196,13 @@ pub struct PushIterFuture<'a, A: AsyncProducer + ?Sized, I: Iterator<Item = A::I
     owner: &'a mut A,
     iter: Option<Peekable<I>>,
 }
-impl<'a, A: AsyncProducer, I: Iterator<Item = A::Item>> Unpin for PushIterFuture<'a, A, I> {}
-impl<'a, A: AsyncProducer, I: Iterator<Item = A::Item>> FusedFuture for PushIterFuture<'a, A, I> {
+impl<A: AsyncProducer, I: Iterator<Item = A::Item>> Unpin for PushIterFuture<'_, A, I> {}
+impl<A: AsyncProducer, I: Iterator<Item = A::Item>> FusedFuture for PushIterFuture<'_, A, I> {
     fn is_terminated(&self) -> bool {
         self.iter.is_none() || self.owner.is_closed()
     }
 }
-impl<'a, A: AsyncProducer, I: Iterator<Item = A::Item>> Future for PushIterFuture<'a, A, I> {
+impl<A: AsyncProducer, I: Iterator<Item = A::Item>> Future for PushIterFuture<'_, A, I> {
     type Output = bool;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -231,13 +231,13 @@ pub struct WaitVacantFuture<'a, A: AsyncProducer + ?Sized> {
     count: usize,
     done: bool,
 }
-impl<'a, A: AsyncProducer> Unpin for WaitVacantFuture<'a, A> {}
-impl<'a, A: AsyncProducer> FusedFuture for WaitVacantFuture<'a, A> {
+impl<A: AsyncProducer> Unpin for WaitVacantFuture<'_, A> {}
+impl<A: AsyncProducer> FusedFuture for WaitVacantFuture<'_, A> {
     fn is_terminated(&self) -> bool {
         self.done
     }
 }
-impl<'a, A: AsyncProducer> Future for WaitVacantFuture<'a, A> {
+impl<A: AsyncProducer> Future for WaitVacantFuture<'_, A> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

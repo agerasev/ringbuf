@@ -18,7 +18,7 @@ pub async fn async_transfer<T, As: AsyncConsumer<Item = T>, Ad: AsyncProducer<It
     let mut actual_count = 0;
     // TODO: Transfer multiple items at once.
     loop {
-        if count.as_ref().map_or(false, |n| actual_count == *n) {
+        if count.as_ref().is_some_and(|n| actual_count == *n) {
             break;
         }
         actual_count += 1;
