@@ -36,7 +36,7 @@ crossbeam-utils = { version = "0.8", default-features = false }
 portable-atomic = { version = "1", default-features = false, optional = true }
 
 [dev-dependencies]
-once_mut = "0.1.0"
+lock-free-static = "0.2.1"
 
 [[example]]
 name = "simple"

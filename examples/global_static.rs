@@ -1,14 +1,14 @@
 #![no_std]
 
-use once_mut::once_mut;
+use lock_free_static::OnceMut;
 use ringbuf::{traits::*, StaticRb};
 
-once_mut! {
-    static mut RB: StaticRb::<i32, 1> = StaticRb::default();
-}
+static RB: OnceMut<StaticRb<i32, 1>> = OnceMut::new();
 
 fn main() {
-    let (mut prod, mut cons) = RB.take().unwrap().split_ref();
+    RB.set(StaticRb::default()).ok().expect("RB already initialized");
+
+    let (mut prod, mut cons) = RB.get_mut().expect("Mutable reference to RB already taken").split_ref();
 
     assert_eq!(prod.try_push(123), Ok(()));
     assert_eq!(prod.try_push(321), Err(321));
