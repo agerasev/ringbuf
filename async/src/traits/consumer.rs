@@ -248,12 +248,13 @@ impl<A: AsyncConsumer> FusedFuture for WaitOccupiedFuture<'_, A> {
 impl<A: AsyncConsumer> Future for WaitOccupiedFuture<'_, A> {
     type Output = ();
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut waker_registered = false;
         loop {
             assert!(!self.done);
             let closed = self.owner.is_closed();
             if self.count <= self.owner.occupied_len() || closed {
+                self.done = true;
                 break Poll::Ready(());
             }
             if waker_registered {
