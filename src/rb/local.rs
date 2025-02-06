@@ -166,7 +166,7 @@ impl<S: Storage + ?Sized> SplitRef for LocalRb<S> {
     type RefProd<'a> = Prod<&'a Self> where Self: 'a;
     type RefCons<'a> = Cons<&'a Self> where Self: 'a;
 
-    fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
+    fn split_ref(&self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
         (Prod::new(self), Cons::new(self))
     }
 }

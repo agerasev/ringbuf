@@ -30,7 +30,7 @@ impl Drop for Dropper<'_> {
 fn single() {
     let set = RefCell::new(BTreeSet::new());
 
-    let mut rb = Rb::<Array<Dropper, 3>>::default();
+    let rb = Rb::<Array<Dropper, 3>>::default();
 
     assert_eq!(set.borrow().len(), 0);
 
@@ -62,7 +62,7 @@ fn single() {
 fn transaction() {
     let set = RefCell::new(BTreeSet::new());
 
-    let mut rb = Rb::<Array<Dropper, 5>>::default();
+    let rb = Rb::<Array<Dropper, 5>>::default();
 
     assert_eq!(set.borrow().len(), 0);
     {
