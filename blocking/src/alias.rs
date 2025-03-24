@@ -5,6 +5,11 @@ use ringbuf::{storage::Array, SharedRb};
 #[cfg(feature = "alloc")]
 use ringbuf::{storage::Heap, HeapRb};
 
+#[cfg(all(feature = "alloc", not(feature = "portable-atomic")))]
+pub use alloc::sync::Arc;
+#[cfg(all(feature = "alloc", feature = "portable-atomic"))]
+pub use portable_atomic_util::Arc;
+
 #[cfg(feature = "std")]
 pub type BlockingHeapRb<T, X = StdSemaphore> = BlockingRb<Heap<T>, X>;
 #[cfg(all(feature = "alloc", not(feature = "std")))]
