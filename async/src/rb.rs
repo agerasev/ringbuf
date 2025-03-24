@@ -1,8 +1,8 @@
-use crate::wrap::{AsyncCons, AsyncProd};
 #[cfg(feature = "alloc")]
-use alloc::sync::Arc;
+use crate::alias::Arc;
+use crate::wrap::{AsyncCons, AsyncProd};
 use core::{mem::MaybeUninit, num::NonZeroUsize};
-use futures::task::AtomicWaker;
+use futures_util::task::AtomicWaker;
 #[cfg(feature = "alloc")]
 use ringbuf::traits::Split;
 use ringbuf::{
@@ -99,8 +99,14 @@ impl<S: Storage> RingBuffer for AsyncRb<S> {
 }
 
 impl<S: Storage> SplitRef for AsyncRb<S> {
-    type RefProd<'a> = AsyncProd<&'a Self> where Self:  'a;
-    type RefCons<'a> = AsyncCons<&'a Self> where Self:  'a;
+    type RefProd<'a>
+        = AsyncProd<&'a Self>
+    where
+        Self: 'a;
+    type RefCons<'a>
+        = AsyncCons<&'a Self>
+    where
+        Self: 'a;
 
     fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
         unsafe { (AsyncProd::new(self), AsyncCons::new(self)) }

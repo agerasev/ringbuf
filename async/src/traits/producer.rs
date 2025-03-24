@@ -4,7 +4,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-use futures::future::FusedFuture;
+use futures_util::future::FusedFuture;
 use ringbuf::traits::Producer;
 #[cfg(feature = "std")]
 use std::io;

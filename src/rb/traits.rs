@@ -1,6 +1,6 @@
 use crate::traits::RingBuffer;
 #[cfg(feature = "alloc")]
-use alloc::{rc::Rc, sync::Arc};
+use {crate::alias::Arc, alloc::rc::Rc};
 
 /// Abstract pointer to the owning ring buffer.
 ///

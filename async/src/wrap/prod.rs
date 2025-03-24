@@ -4,8 +4,8 @@ use core::{
     task::{Context, Poll},
 };
 #[cfg(feature = "std")]
-use futures::io::AsyncWrite;
-use futures::{ready, Sink};
+use futures_util::io::AsyncWrite;
+use futures_util::{ready, Sink};
 #[cfg(feature = "std")]
 use ringbuf::traits::RingBuffer;
 use ringbuf::{

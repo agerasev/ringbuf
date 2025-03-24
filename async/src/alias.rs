@@ -2,11 +2,14 @@ use crate::{
     rb::AsyncRb,
     wrap::{AsyncCons, AsyncProd},
 };
-#[cfg(feature = "alloc")]
-use alloc::sync::Arc;
 use ringbuf::{storage::Array, SharedRb};
 #[cfg(feature = "alloc")]
 use ringbuf::{storage::Heap, HeapRb};
+
+#[cfg(all(feature = "alloc", not(feature = "portable-atomic")))]
+pub use alloc::sync::Arc;
+#[cfg(all(feature = "alloc", feature = "portable-atomic"))]
+pub use portable_atomic_util::Arc;
 
 #[cfg(feature = "alloc")]
 pub type AsyncHeapRb<T> = AsyncRb<Heap<T>>;

@@ -1,8 +1,8 @@
+#[cfg(feature = "alloc")]
+use crate::alias::Arc;
 #[cfg(feature = "std")]
 use crate::sync::StdSemaphore;
 use crate::{sync::Semaphore, BlockingCons, BlockingProd};
-#[cfg(feature = "alloc")]
-use alloc::sync::Arc;
 use core::{mem::MaybeUninit, num::NonZeroUsize};
 #[cfg(feature = "alloc")]
 use ringbuf::traits::Split;
@@ -95,8 +95,14 @@ impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {
 }
 
 impl<S: Storage, X: Semaphore> SplitRef for BlockingRb<S, X> {
-    type RefProd<'a> = BlockingProd<&'a Self> where Self: 'a;
-    type RefCons<'a> = BlockingCons<&'a Self> where Self: 'a;
+    type RefProd<'a>
+        = BlockingProd<&'a Self>
+    where
+        Self: 'a;
+    type RefCons<'a>
+        = BlockingCons<&'a Self>
+    where
+        Self: 'a;
 
     fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
         (BlockingProd::new(self), BlockingCons::new(self))

@@ -4,8 +4,8 @@ use core::{
     task::{Context, Poll},
 };
 #[cfg(feature = "std")]
-use futures::io::AsyncRead;
-use futures::Stream;
+use futures_util::io::AsyncRead;
+use futures_util::Stream;
 use ringbuf::{
     traits::{
         consumer::{Consumer, DelegateConsumer},

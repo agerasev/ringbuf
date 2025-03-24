@@ -10,18 +10,19 @@ use crate::{
     },
     wrap::{CachingCons, CachingProd},
 };
-#[cfg(feature = "alloc")]
-use alloc::{boxed::Box, sync::Arc};
-#[cfg(not(feature = "portable-atomic"))]
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use core::{
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
     ptr,
 };
 use crossbeam_utils::CachePadded;
+
+#[cfg(not(feature = "portable-atomic"))]
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 #[cfg(feature = "portable-atomic")]
 use portable_atomic::{AtomicBool, AtomicUsize, Ordering};
+#[cfg(feature = "alloc")]
+use {crate::alias::Arc, alloc::boxed::Box};
 
 /// Ring buffer that can be shared between threads.
 ///
@@ -178,8 +179,14 @@ impl<S: Storage + ?Sized> Split for Box<SharedRb<S>> {
     }
 }
 impl<S: Storage + ?Sized> SplitRef for SharedRb<S> {
-    type RefProd<'a> = CachingProd<&'a Self> where Self: 'a;
-    type RefCons<'a> = CachingCons<&'a Self> where Self: 'a;
+    type RefProd<'a>
+        = CachingProd<&'a Self>
+    where
+        Self: 'a;
+    type RefCons<'a>
+        = CachingCons<&'a Self>
+    where
+        Self: 'a;
 
     fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
         (CachingProd::new(self), CachingCons::new(self))
