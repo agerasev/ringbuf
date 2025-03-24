@@ -2,7 +2,7 @@
 use crate::alias::Arc;
 use crate::wrap::{AsyncCons, AsyncProd};
 use core::{mem::MaybeUninit, num::NonZeroUsize};
-use futures::task::AtomicWaker;
+use futures_util::task::AtomicWaker;
 #[cfg(feature = "alloc")]
 use ringbuf::traits::Split;
 use ringbuf::{

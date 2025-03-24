@@ -14,7 +14,11 @@ license.workspace = true
 default = ["std"]
 alloc = ["ringbuf/alloc"]
 std = ["ringbuf/std", "alloc"]
-portable-atomic = ["ringbuf/portable-atomic", "dep:portable-atomic", "dep:portable-atomic-util"]
+portable-atomic = [
+    "ringbuf/portable-atomic",
+    "dep:portable-atomic",
+    "dep:portable-atomic-util",
+]
 
 [dependencies]
 ringbuf = { workspace = true }
