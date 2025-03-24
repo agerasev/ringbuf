@@ -1,5 +1,6 @@
 #!/bin/sh
 
+rustup target add thumbv6m-none-eabi && \
 cargo test && \
 cargo test --features test_local && \
 cargo test --features portable-atomic && \

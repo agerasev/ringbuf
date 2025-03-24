@@ -26,14 +26,16 @@ license.workspace = true
 
 [features]
 default = ["std"]
-std = ["alloc", "portable-atomic?/std"]
-alloc = []
+std = ["alloc", "portable-atomic?/std", "portable-atomic-util?/std"]
+portable-atomic = ["dep:portable-atomic", "dep:portable-atomic-util"]
+alloc = ["portable-atomic-util?/alloc"]
 bench = []
 test_local = []
 
 [dependencies]
 crossbeam-utils = { version = "0.8", default-features = false }
 portable-atomic = { version = "1", default-features = false, optional = true }
+portable-atomic-util = { version = "0.2", default-features = false, optional = true }
 
 [dev-dependencies]
 lock-free-static = "0.2.1"

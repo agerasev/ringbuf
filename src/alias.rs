@@ -5,8 +5,11 @@ use super::{
     storage::Array,
     wrap::{CachingCons, CachingProd},
 };
-#[cfg(feature = "alloc")]
-use alloc::sync::Arc;
+
+#[cfg(all(feature = "alloc", not(feature = "portable-atomic")))]
+pub use alloc::sync::Arc;
+#[cfg(all(feature = "alloc", feature = "portable-atomic"))]
+pub use portable_atomic_util::Arc;
 
 /// Stack-allocated ring buffer with static capacity.
 ///
