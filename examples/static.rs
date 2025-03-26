@@ -4,7 +4,7 @@ use ringbuf::{traits::*, StaticRb};
 
 fn main() {
     const RB_SIZE: usize = 1;
-    let mut rb = StaticRb::<i32, RB_SIZE>::default();
+    let rb = StaticRb::<i32, RB_SIZE>::default();
     let (mut prod, mut cons) = rb.split_ref();
 
     assert_eq!(prod.try_push(123), Ok(()));

@@ -108,7 +108,7 @@ impl<S: Storage> SplitRef for AsyncRb<S> {
     where
         Self: 'a;
 
-    fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
+    fn split_ref(&self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
         unsafe { (AsyncProd::new(self), AsyncCons::new(self)) }
     }
 }

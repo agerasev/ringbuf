@@ -188,7 +188,7 @@ impl<S: Storage + ?Sized> SplitRef for SharedRb<S> {
     where
         Self: 'a;
 
-    fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
+    fn split_ref(&self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
         (CachingProd::new(self), CachingCons::new(self))
     }
 }
