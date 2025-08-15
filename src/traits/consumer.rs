@@ -30,7 +30,7 @@ pub trait Consumer: Observer {
     }
 
     /// Provides a direct access to the ring buffer occupied memory.
-    /// The difference from [`Self::as_slices`] is that this method provides slices of [`MaybeUninit`], so items may be moved out of slices.  
+    /// The difference from [`Self::as_slices`] is that this method provides slices of [`MaybeUninit`], so items may be moved out of slices.
     ///
     /// Returns a pair of slices of stored items, the second one may be empty.
     /// Elements with lower indices in slice are older. First slice contains older items that second one.
@@ -185,7 +185,7 @@ pub trait Consumer: Observer {
     }
 
     /// Returns an iterator that removes items one by one from the ring buffer.
-    fn pop_iter(&mut self) -> PopIter<Self> {
+    fn pop_iter(&mut self) -> PopIter<'_, Self> {
         PopIter::new(self)
     }
 
@@ -260,7 +260,7 @@ pub trait Consumer: Observer {
     /// + `None`: ring buffer is full or `count` is `0`. In this case `write` isn't called at all.
     /// + `Some(Ok(n))`: `write` succeeded. `n` is number of bytes been written. `n == 0` means that `write` also returned `0`.
     /// + `Some(Err(e))`: `write` is failed and `e` is original error. In this case it is guaranteed that no items was written to the writer.
-    ///    To achieve this we write only one contiguous slice at once. So this call may write less than `occupied_len` items even if the writer is ready to get more.
+    ///   To achieve this we write only one contiguous slice at once. So this call may write less than `occupied_len` items even if the writer is ready to get more.
     fn write_into<S: Write>(&mut self, writer: &mut S, count: Option<usize>) -> Option<io::Result<usize>>
     where
         Self: Consumer<Item = u8>,

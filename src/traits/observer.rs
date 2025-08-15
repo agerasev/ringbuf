@@ -35,6 +35,7 @@ pub trait Observer {
     /// # Safety
     ///
     /// There must not exist overlapping slices at the same time.
+    #[allow(clippy::mut_from_ref)]
     unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]);
 
     /// Whether read end is held by consumer.

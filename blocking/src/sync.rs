@@ -37,7 +37,7 @@ pub trait Semaphore: Default {
     /// + on timeout - `false`.
     fn take(&self, timeout: Option<Duration>) -> bool;
 
-    fn take_iter(&self, timeout: Option<Duration>) -> TakeIter<Self> {
+    fn take_iter(&self, timeout: Option<Duration>) -> TakeIter<'_, Self> {
         TakeIter {
             reset: false,
             semaphore: self,
