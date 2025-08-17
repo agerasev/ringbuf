@@ -3,7 +3,7 @@ use crate::{storage::Array, traits::*, transfer};
 
 #[test]
 fn push_pop_slice() {
-    let mut rb = Rb::<Array<i32, 4>>::default();
+    let rb = Rb::<Array<i32, 4>>::default();
     let (mut prod, mut cons) = rb.split_ref();
 
     let mut tmp = [0; 5];
@@ -28,8 +28,8 @@ fn push_pop_slice() {
 
 #[test]
 fn move_slice() {
-    let mut rb0 = Rb::<Array<i32, 4>>::default();
-    let mut rb1 = Rb::<Array<i32, 4>>::default();
+    let rb0 = Rb::<Array<i32, 4>>::default();
+    let rb1 = Rb::<Array<i32, 4>>::default();
     let (mut prod0, mut cons0) = rb0.split_ref();
     let (mut prod1, mut cons1) = rb1.split_ref();
 
@@ -62,8 +62,8 @@ fn move_slice() {
 
 #[test]
 fn move_slice_count() {
-    let mut rb0 = Rb::<Array<i32, 4>>::default();
-    let mut rb1 = Rb::<Array<i32, 4>>::default();
+    let rb0 = Rb::<Array<i32, 4>>::default();
+    let rb1 = Rb::<Array<i32, 4>>::default();
     let (mut prod0, mut cons0) = rb0.split_ref();
     let (mut prod1, mut cons1) = rb1.split_ref();
 

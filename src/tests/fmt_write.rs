@@ -4,7 +4,7 @@ use core::fmt::Write;
 
 #[test]
 fn write() {
-    let mut rb = Rb::<Array<u8, 40>>::default();
+    let rb = Rb::<Array<u8, 40>>::default();
 
     let (mut prod, cons) = rb.split_ref();
 
@@ -17,7 +17,7 @@ fn write() {
 
 #[test]
 fn write_overflow() {
-    let mut rb = Rb::<Array<u8, 10>>::default();
+    let rb = Rb::<Array<u8, 10>>::default();
 
     let (mut prod, mut cons) = rb.split_ref();
 

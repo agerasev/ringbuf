@@ -7,7 +7,7 @@ use alloc::{boxed::Box, vec::Vec};
 
 #[test]
 fn from_array() {
-    let mut rb = Rb::from([123, 321]);
+    let rb = Rb::from([123, 321]);
     let (mut prod, mut cons) = rb.split_ref();
 
     assert_eq!(prod.capacity().get(), 2);
