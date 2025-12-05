@@ -122,7 +122,7 @@ pub trait Producer: Observer {
     /// If `count` is `None` then as much as possible bytes will be read.
     ///
     /// Returns:
-    /// + `None`: ring buffer is empty or `count` is `0`. In this case `read` isn't called at all.
+    /// + `None`: ring buffer is full or `count` is `0`. In this case `read` isn't called at all.
     /// + `Some(Ok(n))`: `read` succeeded. `n` is number of bytes been read. `n == 0` means that `read` also returned `0`.
     /// + `Some(Err(e))` `read` is failed and `e` is original error. In this case it is guaranteed that no items was read from the reader.
     ///   To achieve this we read only one contiguous slice at once. So this call may read less than `vacant_len` items in the buffer even if the reader is ready to provide more.
