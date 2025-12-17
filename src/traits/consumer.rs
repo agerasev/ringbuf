@@ -257,7 +257,7 @@ pub trait Consumer: Observer {
     ///
     /// Returns:
     ///
-    /// + `None`: ring buffer is full or `count` is `0`. In this case `write` isn't called at all.
+    /// + `None`: ring buffer is empty or `count` is `0`. In this case `write` isn't called at all.
     /// + `Some(Ok(n))`: `write` succeeded. `n` is number of bytes been written. `n == 0` means that `write` also returned `0`.
     /// + `Some(Err(e))`: `write` is failed and `e` is original error. In this case it is guaranteed that no items was written to the writer.
     ///   To achieve this we write only one contiguous slice at once. So this call may write less than `occupied_len` items even if the writer is ready to get more.
