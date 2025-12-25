@@ -6,10 +6,10 @@ use futures_util::task::AtomicWaker;
 #[cfg(feature = "alloc")]
 use ringbuf::traits::Split;
 use ringbuf::{
+    SharedRb,
     rb::RbRef,
     storage::Storage,
     traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
-    SharedRb,
 };
 
 pub trait AsyncRbRef: RbRef<Rb = AsyncRb<Self::Storage>> {
@@ -55,10 +55,10 @@ impl<S: Storage> Observer for AsyncRb<S> {
     }
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
-        self.base.unsafe_slices(start, end)
+        unsafe { self.base.unsafe_slices(start, end) }
     }
     unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        self.base.unsafe_slices_mut(start, end)
+        unsafe { self.base.unsafe_slices_mut(start, end) }
     }
 
     #[inline]
@@ -73,26 +73,26 @@ impl<S: Storage> Observer for AsyncRb<S> {
 
 impl<S: Storage> Producer for AsyncRb<S> {
     unsafe fn set_write_index(&self, value: usize) {
-        self.base.set_write_index(value);
+        unsafe { self.base.set_write_index(value) };
         self.write.wake();
     }
 }
 impl<S: Storage> Consumer for AsyncRb<S> {
     unsafe fn set_read_index(&self, value: usize) {
-        self.base.set_read_index(value);
+        unsafe { self.base.set_read_index(value) };
         self.read.wake();
     }
 }
 impl<S: Storage> RingBuffer for AsyncRb<S> {
     #[inline]
     unsafe fn hold_read(&self, flag: bool) -> bool {
-        let old = self.base.hold_read(flag);
+        let old = unsafe { self.base.hold_read(flag) };
         self.read.wake();
         old
     }
     #[inline]
     unsafe fn hold_write(&self, flag: bool) -> bool {
-        let old = self.base.hold_write(flag);
+        let old = unsafe { self.base.hold_write(flag) };
         self.write.wake();
         old
     }

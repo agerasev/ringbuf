@@ -4,9 +4,9 @@ use crate::traits::Split;
 use crate::{
     storage::Storage,
     traits::{
-        consumer::{impl_consumer_traits, Consumer},
-        producer::{impl_producer_traits, Producer},
         Observer, RingBuffer, SplitRef,
+        consumer::{Consumer, impl_consumer_traits},
+        producer::{Producer, impl_producer_traits},
     },
     wrap::{CachingCons, CachingProd},
 };
@@ -80,7 +80,7 @@ impl<S: Storage> SharedRb<S> {
     /// Initialized contents of the storage must be properly dropped.
     pub unsafe fn into_raw_parts(self) -> (S, usize, usize) {
         let this = ManuallyDrop::new(self);
-        (ptr::read(&this.storage), this.read_index(), this.write_index())
+        (unsafe { ptr::read(&this.storage) }, this.read_index(), this.write_index())
     }
 }
 
@@ -103,11 +103,11 @@ impl<S: Storage + ?Sized> Observer for SharedRb<S> {
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
         let (first, second) = ranges(self.capacity(), start, end);
-        (self.storage.slice(first), self.storage.slice(second))
+        unsafe { (self.storage.slice(first), self.storage.slice(second)) }
     }
     unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
         let (first, second) = ranges(self.capacity(), start, end);
-        (self.storage.slice_mut(first), self.storage.slice_mut(second))
+        unsafe { (self.storage.slice_mut(first), self.storage.slice_mut(second)) }
     }
 
     #[inline]

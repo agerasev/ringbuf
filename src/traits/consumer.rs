@@ -26,7 +26,7 @@ pub trait Consumer: Observer {
     ///
     /// Must not be called concurrently.
     unsafe fn advance_read_index(&self, count: usize) {
-        self.set_read_index((self.read_index() + count) % modulus(self));
+        unsafe { self.set_read_index((self.read_index() + count) % modulus(self)) };
     }
 
     /// Provides a direct access to the ring buffer occupied memory.
@@ -54,7 +54,7 @@ pub trait Consumer: Observer {
     ///
     /// When some item is replaced with uninitialized value then it must not be read anymore.
     unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        self.unsafe_slices_mut(self.read_index(), self.write_index())
+        unsafe { self.unsafe_slices_mut(self.read_index(), self.write_index()) }
     }
 
     /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
@@ -90,22 +90,14 @@ pub trait Consumer: Observer {
     /// *Returned item may not be actually the most recent if there is a concurrent producer activity.*
     fn last(&self) -> Option<&Self::Item> {
         let (first, second) = self.as_slices();
-        if second.is_empty() {
-            first.last()
-        } else {
-            second.last()
-        }
+        if second.is_empty() { first.last() } else { second.last() }
     }
     /// Returns a mutable reference to the most recent item in the ring buffer, if exists.
     ///
     /// *Returned item may not be actually the most recent if there is a concurrent producer activity.*
     fn last_mut(&mut self) -> Option<&mut Self::Item> {
         let (first, second) = self.as_mut_slices();
-        if second.is_empty() {
-            first.last_mut()
-        } else {
-            second.last_mut()
-        }
+        if second.is_empty() { first.last_mut() } else { second.last_mut() }
     }
 
     /// Removes the eldest item from the ring buffer and returns it.
@@ -137,7 +129,7 @@ pub trait Consumer: Observer {
     /// Returns a number of items being copied.
     fn peek_slice_uninit(&self, elems: &mut [MaybeUninit<Self::Item>]) -> usize {
         let (left, right) = self.occupied_slices();
-        let count = if elems.len() < left.len() {
+        if elems.len() < left.len() {
             move_uninit_slice(elems, unsafe { left.get_unchecked(..elems.len()) });
             elems.len()
         } else {
@@ -151,8 +143,7 @@ pub trait Consumer: Observer {
                     move_uninit_slice(unsafe { elems.get_unchecked_mut(..right.len()) }, right);
                     right.len()
                 }
-        };
-        count
+        }
     }
 
     /// Copies items from the ring buffer to a slice without removing them from the ring buffer.
@@ -390,11 +381,11 @@ where
 {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
-        self.base().set_read_index(value)
+        unsafe { self.base().set_read_index(value) }
     }
     #[inline]
     unsafe fn advance_read_index(&self, count: usize) {
-        self.base().advance_read_index(count)
+        unsafe { self.base().advance_read_index(count) }
     }
 
     #[inline]
@@ -404,7 +395,7 @@ where
 
     #[inline]
     unsafe fn occupied_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
-        self.base_mut().occupied_slices_mut()
+        unsafe { self.base_mut().occupied_slices_mut() }
     }
 
     #[inline]

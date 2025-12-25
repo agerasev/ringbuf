@@ -14,10 +14,10 @@ pub fn transfer<T, C: Consumer<Item = T>, P: Producer<Item = T>>(src: &mut C, ds
 
     let mut actual_count = 0;
     for (src_elem, dst_place) in src_iter.zip(dst_iter) {
-        if let Some(count) = count {
-            if actual_count >= count {
-                break;
-            }
+        if let Some(count) = count
+            && actual_count >= count
+        {
+            break;
         }
         unsafe { dst_place.write(src_elem.as_ptr().read()) };
         actual_count += 1;

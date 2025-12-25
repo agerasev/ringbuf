@@ -1,7 +1,7 @@
 use super::{
+    Observer,
     consumer::{Consumer, DelegateConsumer},
     producer::{DelegateProducer, Producer},
-    Observer,
 };
 
 /// An abstract ring buffer that exclusively owns its data.
@@ -72,10 +72,10 @@ where
     D::Base: RingBuffer,
 {
     unsafe fn hold_read(&self, flag: bool) -> bool {
-        self.base().hold_read(flag)
+        unsafe { self.base().hold_read(flag) }
     }
     unsafe fn hold_write(&self, flag: bool) -> bool {
-        self.base().hold_write(flag)
+        unsafe { self.base().hold_write(flag) }
     }
 
     #[inline]

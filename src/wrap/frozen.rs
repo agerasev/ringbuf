@@ -6,9 +6,9 @@ use super::{direct::Obs, traits::Wrap};
 use crate::{
     rb::RbRef,
     traits::{
-        consumer::{impl_consumer_traits, Consumer},
-        producer::{impl_producer_traits, Producer},
         Observer, RingBuffer,
+        consumer::{Consumer, impl_consumer_traits},
+        producer::{Producer, impl_producer_traits},
     },
 };
 use core::{
@@ -71,10 +71,10 @@ impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
 
     unsafe fn close(&mut self) {
         if P {
-            self.rb().hold_write(false);
+            unsafe { self.rb().hold_write(false) };
         }
         if C {
-            self.rb().hold_read(false);
+            unsafe { self.rb().hold_read(false) };
         }
     }
 }
@@ -166,10 +166,10 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Frozen<R, P, C> {
     }
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        self.rb().unsafe_slices(start, end)
+        unsafe { self.rb().unsafe_slices(start, end) }
     }
     unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        self.rb().unsafe_slices_mut(start, end)
+        unsafe { self.rb().unsafe_slices_mut(start, end) }
     }
 
     #[inline]

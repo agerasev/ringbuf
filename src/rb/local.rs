@@ -4,9 +4,9 @@ use crate::traits::Split;
 use crate::{
     storage::Storage,
     traits::{
-        consumer::{impl_consumer_traits, Consumer},
-        producer::{impl_producer_traits, Producer},
         Observer, RingBuffer, SplitRef,
+        consumer::{Consumer, impl_consumer_traits},
+        producer::{Producer, impl_producer_traits},
     },
     wrap::{Cons, Prod},
 };
@@ -64,7 +64,7 @@ impl<S: Storage> LocalRb<S> {
     /// Initialized contents of the storage must be properly dropped.
     pub unsafe fn into_raw_parts(self) -> (S, usize, usize) {
         let this = ManuallyDrop::new(self);
-        (ptr::read(&this.storage), this.read_index(), this.write_index())
+        (unsafe { ptr::read(&this.storage) }, this.read_index(), this.write_index())
     }
 }
 
@@ -87,11 +87,11 @@ impl<S: Storage + ?Sized> Observer for LocalRb<S> {
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
         let (first, second) = ranges(self.capacity(), start, end);
-        (self.storage.slice(first), self.storage.slice(second))
+        unsafe { (self.storage.slice(first), self.storage.slice(second)) }
     }
     unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
         let (first, second) = ranges(self.capacity(), start, end);
-        (self.storage.slice_mut(first), self.storage.slice_mut(second))
+        unsafe { (self.storage.slice_mut(first), self.storage.slice_mut(second)) }
     }
 
     #[inline]
@@ -163,8 +163,14 @@ impl<S: Storage + ?Sized> Split for Box<LocalRb<S>> {
     }
 }
 impl<S: Storage + ?Sized> SplitRef for LocalRb<S> {
-    type RefProd<'a> = Prod<&'a Self> where Self: 'a;
-    type RefCons<'a> = Cons<&'a Self> where Self: 'a;
+    type RefProd<'a>
+        = Prod<&'a Self>
+    where
+        Self: 'a;
+    type RefCons<'a>
+        = Cons<&'a Self>
+    where
+        Self: 'a;
 
     fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
         (Prod::new(self), Cons::new(self))

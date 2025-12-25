@@ -1,6 +1,6 @@
 [package]
 name = "async-ringbuf"
-version = "0.3.4"
+version = "0.3.5"
 edition.workspace = true
 authors.workspace = true
 description = "Async SPSC FIFO ring buffer"
@@ -9,7 +9,6 @@ repository.workspace = true
 keywords = ["async", "spsc", "ring-buffer", "rb", "fifo"]
 categories = ["asynchronous", "concurrency", "data-structures", "no-std"]
 license.workspace = true
-resolver = "2"
 
 [features]
 default = ["alloc", "std"]

@@ -1,5 +1,5 @@
 [workspace.package]
-edition = "2021"
+edition = "2024"
 authors = ["Alexey Gerasev <alexey.gerasev@gmail.com>"]
 homepage = "https://github.com/agerasev/ringbuf"
 repository = "https://github.com/agerasev/ringbuf.git"
@@ -14,7 +14,7 @@ members = ["async", "blocking"]
 
 [package]
 name = "ringbuf"
-version = "0.4.8"
+version = "0.4.9"
 edition.workspace = true
 authors.workspace = true
 description = "Lock-free SPSC FIFO ring buffer with direct access to inner data"

@@ -1,4 +1,4 @@
-use super::{utils::modulus, Based};
+use super::{Based, utils::modulus};
 use core::{mem::MaybeUninit, num::NonZeroUsize};
 
 /// Ring buffer observer.
@@ -105,11 +105,11 @@ where
 
     #[inline]
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        self.base().unsafe_slices(start, end)
+        unsafe { self.base().unsafe_slices(start, end) }
     }
     #[inline]
     unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        self.base().unsafe_slices_mut(start, end)
+        unsafe { self.base().unsafe_slices_mut(start, end) }
     }
 
     #[inline]

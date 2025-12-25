@@ -6,9 +6,9 @@ use super::{frozen::Frozen, traits::Wrap};
 use crate::{
     rb::RbRef,
     traits::{
-        consumer::{impl_consumer_traits, Consumer},
-        producer::{impl_producer_traits, Producer},
         Observer, RingBuffer,
+        consumer::{Consumer, impl_consumer_traits},
+        producer::{Producer, impl_producer_traits},
     },
 };
 use core::{
@@ -65,10 +65,10 @@ impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
     /// Must not be used after this call.
     unsafe fn close(&mut self) {
         if P {
-            self.rb().hold_write(false);
+            unsafe { self.rb().hold_write(false) };
         }
         if C {
-            self.rb().hold_read(false);
+            unsafe { self.rb().hold_read(false) };
         }
     }
 }
@@ -115,11 +115,11 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Direct<R, P, C> {
     }
     #[inline]
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        self.rb().unsafe_slices(start, end)
+        unsafe { self.rb().unsafe_slices(start, end) }
     }
     #[inline]
     unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        self.rb().unsafe_slices_mut(start, end)
+        unsafe { self.rb().unsafe_slices_mut(start, end) }
     }
     #[inline]
     fn read_is_held(&self) -> bool {
@@ -134,14 +134,14 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Direct<R, P, C> {
 impl<R: RbRef> Producer for Prod<R> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
-        self.rb().set_write_index(value)
+        unsafe { self.rb().set_write_index(value) }
     }
 }
 
 impl<R: RbRef> Consumer for Cons<R> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
-        self.rb().set_read_index(value)
+        unsafe { self.rb().set_read_index(value) }
     }
 }
 

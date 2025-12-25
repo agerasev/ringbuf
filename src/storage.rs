@@ -41,7 +41,7 @@ pub unsafe trait Storage {
     ///
     /// Non-`Sync` items must not be accessed concurrently.
     unsafe fn slice(&self, range: Range<usize>) -> &[MaybeUninit<Self::Item>] {
-        slice::from_raw_parts(self.as_ptr().add(range.start), range.len())
+        unsafe { slice::from_raw_parts(self.as_ptr().add(range.start), range.len()) }
     }
     /// Returns a mutable slice of storage in specified `range`.
     ///
@@ -50,7 +50,7 @@ pub unsafe trait Storage {
     /// Slices must not overlap.
     #[allow(clippy::mut_from_ref)]
     unsafe fn slice_mut(&self, range: Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
-        slice::from_raw_parts_mut(self.as_mut_ptr().add(range.start), range.len())
+        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr().add(range.start), range.len()) }
     }
 }
 

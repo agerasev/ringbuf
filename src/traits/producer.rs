@@ -31,7 +31,7 @@ pub trait Producer: Observer {
     ///
     /// Must not be called concurrently.
     unsafe fn advance_write_index(&self, count: usize) {
-        self.set_write_index((self.write_index() + count) % modulus(self));
+        unsafe { self.set_write_index((self.write_index() + count) % modulus(self)) };
     }
 
     /// Provides a direct access to the ring buffer vacant memory.
@@ -165,11 +165,11 @@ where
 {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
-        self.base().set_write_index(value)
+        unsafe { self.base().set_write_index(value) }
     }
     #[inline]
     unsafe fn advance_write_index(&self, count: usize) {
-        self.base().advance_write_index(count)
+        unsafe { self.base().advance_write_index(count) }
     }
 
     #[inline]

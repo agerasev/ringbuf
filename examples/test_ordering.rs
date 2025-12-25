@@ -1,7 +1,7 @@
 //! This example checks atomic operations ordering on weak-ordered architectures (e.g. aarch64).
 //! If there are some bugs with ordering the test *may* fail.
 
-use ringbuf::{storage::Heap, traits::*, SharedRb};
+use ringbuf::{SharedRb, storage::Heap, traits::*};
 use std::thread;
 
 fn main() {
@@ -11,8 +11,8 @@ fn main() {
     let rb = SharedRb::<Heap<u8>>::new(17);
     let (mut prod, mut cons) = rb.split();
 
+    #[allow(unused_variables, unused_assignments)]
     let pjh = thread::spawn(move || {
-        #[allow(unused_variables)]
         let mut i = 0;
         let mut y = msg.next();
         while let Some(x) = y {

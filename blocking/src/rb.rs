@@ -2,15 +2,15 @@
 use crate::alias::Arc;
 #[cfg(feature = "std")]
 use crate::sync::StdSemaphore;
-use crate::{sync::Semaphore, BlockingCons, BlockingProd};
+use crate::{BlockingCons, BlockingProd, sync::Semaphore};
 use core::{mem::MaybeUninit, num::NonZeroUsize};
 #[cfg(feature = "alloc")]
 use ringbuf::traits::Split;
 use ringbuf::{
+    SharedRb,
     rb::RbRef,
     storage::Storage,
     traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
-    SharedRb,
 };
 
 #[cfg(not(feature = "std"))]
@@ -54,10 +54,10 @@ impl<S: Storage, X: Semaphore> Observer for BlockingRb<S, X> {
     }
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
-        self.base.unsafe_slices(start, end)
+        unsafe { self.base.unsafe_slices(start, end) }
     }
     unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        self.base.unsafe_slices_mut(start, end)
+        unsafe { self.base.unsafe_slices_mut(start, end) }
     }
 
     #[inline]
@@ -71,24 +71,24 @@ impl<S: Storage, X: Semaphore> Observer for BlockingRb<S, X> {
 }
 impl<S: Storage, X: Semaphore> Producer for BlockingRb<S, X> {
     unsafe fn set_write_index(&self, value: usize) {
-        self.base.set_write_index(value);
+        unsafe { self.base.set_write_index(value) };
         self.write.give();
     }
 }
 impl<S: Storage, X: Semaphore> Consumer for BlockingRb<S, X> {
     unsafe fn set_read_index(&self, value: usize) {
-        self.base.set_read_index(value);
+        unsafe { self.base.set_read_index(value) };
         self.read.give();
     }
 }
 impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {
     unsafe fn hold_read(&self, flag: bool) -> bool {
-        let old = self.base.hold_read(flag);
+        let old = unsafe { self.base.hold_read(flag) };
         self.read.give();
         old
     }
     unsafe fn hold_write(&self, flag: bool) -> bool {
-        let old = self.base.hold_write(flag);
+        let old = unsafe { self.base.hold_write(flag) };
         self.write.give();
         old
     }

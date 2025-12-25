@@ -6,9 +6,9 @@ use super::{direct::Obs, frozen::Frozen, traits::Wrap};
 use crate::{
     rb::RbRef,
     traits::{
-        consumer::{impl_consumer_traits, Consumer},
-        producer::{impl_producer_traits, Producer},
         Observer,
+        consumer::{Consumer, impl_consumer_traits},
+        producer::{Producer, impl_producer_traits},
     },
 };
 use core::{mem::MaybeUninit, num::NonZeroUsize};
@@ -88,10 +88,10 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Caching<R, P, C> {
     }
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        self.frozen.unsafe_slices(start, end)
+        unsafe { self.frozen.unsafe_slices(start, end) }
     }
     unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        self.frozen.unsafe_slices_mut(start, end)
+        unsafe { self.frozen.unsafe_slices_mut(start, end) }
     }
 
     #[inline]
@@ -107,7 +107,7 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Caching<R, P, C> {
 impl<R: RbRef> Producer for CachingProd<R> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
-        self.frozen.set_write_index(value);
+        unsafe { self.frozen.set_write_index(value) };
         self.frozen.commit();
     }
 
@@ -126,7 +126,7 @@ impl<R: RbRef> Producer for CachingProd<R> {
 impl<R: RbRef> Consumer for CachingCons<R> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
-        self.frozen.set_read_index(value);
+        unsafe { self.frozen.set_read_index(value) };
         self.frozen.commit();
     }
 
