@@ -104,7 +104,7 @@ impl<S: Storage, X: Semaphore> SplitRef for BlockingRb<S, X> {
     where
         Self: 'a;
 
-    fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
+    fn split_ref(&self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
         (BlockingProd::new(self), BlockingCons::new(self))
     }
 }

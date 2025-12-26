@@ -10,8 +10,8 @@ macro_rules! assert_eq_kind {
 
 #[test]
 fn from() {
-    let mut rb0 = Rb::<Array<u8, 4>>::default();
-    let mut rb1 = Rb::<Array<u8, 4>>::default();
+    let rb0 = Rb::<Array<u8, 4>>::default();
+    let rb1 = Rb::<Array<u8, 4>>::default();
     let (mut prod0, mut cons0) = rb0.split_ref();
     let (mut prod1, mut cons1) = rb1.split_ref();
 
@@ -47,8 +47,8 @@ fn from() {
 
 #[test]
 fn into() {
-    let mut rb0 = Rb::<Array<u8, 4>>::default();
-    let mut rb1 = Rb::<Array<u8, 4>>::default();
+    let rb0 = Rb::<Array<u8, 4>>::default();
+    let rb1 = Rb::<Array<u8, 4>>::default();
     let (mut prod0, mut cons0) = rb0.split_ref();
     let (mut prod1, mut cons1) = rb1.split_ref();
 
@@ -84,8 +84,8 @@ fn into() {
 
 #[test]
 fn count() {
-    let mut rb0 = Rb::<Array<u8, 4>>::default();
-    let mut rb1 = Rb::<Array<u8, 4>>::default();
+    let rb0 = Rb::<Array<u8, 4>>::default();
+    let rb1 = Rb::<Array<u8, 4>>::default();
     let (mut prod0, mut cons0) = rb0.split_ref();
     let (mut prod1, mut cons1) = rb1.split_ref();
 
@@ -123,7 +123,7 @@ fn read_from() {
         }
     }
 
-    let mut rb = Rb::<Array<u8, 4>>::default();
+    let rb = Rb::<Array<u8, 4>>::default();
     let (mut prod, mut cons) = rb.split_ref();
     prod.try_push(1).unwrap();
     assert_eq!(cons.try_pop().unwrap(), 1);

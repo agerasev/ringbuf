@@ -14,7 +14,7 @@ fn capacity() {
 #[test]
 fn split_capacity() {
     const CAP: usize = 13;
-    let mut rb = Rb::<Array<i32, CAP>>::default();
+    let rb = Rb::<Array<i32, CAP>>::default();
     let (prod, cons) = rb.split_ref();
 
     assert_eq!(prod.capacity().get(), CAP);
@@ -23,7 +23,7 @@ fn split_capacity() {
 
 #[test]
 fn try_push() {
-    let mut rb = Rb::<Array<i32, 2>>::default();
+    let rb = Rb::<Array<i32, 2>>::default();
     let (mut prod, _) = rb.split_ref();
 
     assert_eq!(indices(prod.observe()), (0, 0));
@@ -40,7 +40,7 @@ fn try_push() {
 
 #[test]
 fn pop_empty() {
-    let mut rb = Rb::<Array<i32, 2>>::default();
+    let rb = Rb::<Array<i32, 2>>::default();
     let (_, mut cons) = rb.split_ref();
 
     assert_eq!(indices(cons.observe()), (0, 0));
@@ -52,7 +52,7 @@ fn pop_empty() {
 #[test]
 fn push_pop_one() {
     const CAP: usize = 2;
-    let mut rb = Rb::<Array<i32, CAP>>::default();
+    let rb = Rb::<Array<i32, CAP>>::default();
     let (mut prod, mut cons) = rb.split_ref();
 
     const MOD: usize = 2 * CAP;
@@ -74,7 +74,7 @@ fn push_pop_one() {
 #[test]
 fn push_pop_all() {
     const CAP: usize = 2;
-    let mut rb = Rb::<Array<i32, CAP>>::default();
+    let rb = Rb::<Array<i32, CAP>>::default();
     let (mut prod, mut cons) = rb.split_ref();
 
     const MOD: usize = 2 * CAP;
@@ -104,7 +104,7 @@ fn push_pop_all() {
 
 #[test]
 fn empty_full() {
-    let mut rb = Rb::<Array<i32, 1>>::default();
+    let rb = Rb::<Array<i32, 1>>::default();
     let (mut prod, cons) = rb.split_ref();
 
     assert!(prod.is_empty());
@@ -122,7 +122,7 @@ fn empty_full() {
 
 #[test]
 fn len_remaining() {
-    let mut rb = Rb::<Array<i32, 2>>::default();
+    let rb = Rb::<Array<i32, 2>>::default();
     let (mut prod, mut cons) = rb.split_ref();
 
     assert_eq!(prod.occupied_len(), 0);

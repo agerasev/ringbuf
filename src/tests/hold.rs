@@ -3,7 +3,7 @@ use crate::{storage::Array, traits::*, CachingCons, CachingProd, Obs};
 
 #[test]
 fn split_and_drop() {
-    let mut rb = Rb::<Array<i32, 2>>::default();
+    let rb = Rb::<Array<i32, 2>>::default();
     let (prod, cons) = rb.split_ref();
     let obs = prod.observe();
 
