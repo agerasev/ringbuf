@@ -7,6 +7,7 @@ mod access;
 mod basic;
 #[cfg(feature = "alloc")]
 mod drop;
+mod dyn_compat;
 mod fmt_write;
 mod frozen;
 mod hold;

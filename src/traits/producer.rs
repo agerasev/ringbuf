@@ -76,7 +76,10 @@ pub trait Producer: Observer {
     ///
     /// *Inserted items are committed to the ring buffer all at once in the end,*
     /// *e.g. when buffer is full or iterator has ended.*
-    fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, mut iter: I) -> usize {
+    fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, mut iter: I) -> usize
+    where
+        Self: Sized,
+    {
         let (left, right) = self.vacant_slices_mut();
         let mut count = 0;
         for place in left.iter_mut().chain(right.iter_mut()) {
@@ -128,7 +131,7 @@ pub trait Producer: Observer {
     ///   To achieve this we read only one contiguous slice at once. So this call may read less than `vacant_len` items in the buffer even if the reader is ready to provide more.
     fn read_from<S: Read>(&mut self, reader: &mut S, count: Option<usize>) -> Option<io::Result<usize>>
     where
-        Self: Producer<Item = u8>,
+        Self: Producer<Item = u8> + Sized,
     {
         let (left, _) = self.vacant_slices_mut();
         let count = cmp::min(count.unwrap_or(left.len()), left.len());
@@ -188,8 +191,18 @@ where
     }
 
     #[inline]
-    fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, iter: I) -> usize {
-        self.base_mut().push_iter(iter)
+    fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, iter: I) -> usize
+    where
+        Self: Sized,
+    {
+        let mut count = 0;
+        for item in iter {
+            if self.try_push(item).is_err() {
+                break;
+            }
+            count += 1;
+        }
+        count
     }
 
     #[inline]
