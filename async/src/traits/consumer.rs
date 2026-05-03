@@ -22,6 +22,10 @@ pub trait AsyncConsumer: Consumer {
     /// Future returns:
     /// + `Some(item)` - an item is taken.
     /// + `None` - the buffer is empty and the corresponding producer was dropped.
+    ///
+    /// # Cancel safety
+    ///
+    /// If future is cancelled then no item removed from the ring buffer.
     fn pop(&mut self) -> PopFuture<'_, Self> {
         PopFuture { owner: self, done: false }
     }
@@ -31,6 +35,10 @@ pub trait AsyncConsumer: Consumer {
     /// In debug mode panics if `count` is greater than buffer capacity.
     ///
     /// The method takes `&mut self` because only single [`WaitOccupiedFuture`] is allowed at a time.
+    ///
+    /// # Cancel safety
+    ///
+    /// The future can be safely cancelled.
     fn wait_occupied(&mut self, count: usize) -> WaitOccupiedFuture<'_, Self> {
         debug_assert!(count <= self.capacity().get());
         WaitOccupiedFuture {
@@ -40,11 +48,16 @@ pub trait AsyncConsumer: Consumer {
         }
     }
 
-    /// Pop item from the ring buffer waiting asynchronously if the buffer is empty.
+    /// Fill slice with items from the ring buffer waiting asynchronously until slice filled or corresponding producer closed.
     ///
     /// Future returns:
     /// + `Ok` - the whole slice is filled with the items from the buffer.
     /// + `Err(count)` - the buffer is empty and the corresponding producer was dropped, number of items copied to slice is returned.
+    ///
+    /// # Cancel safety
+    ///
+    /// If future is cancelled then slice can be partially filled.
+    /// The number of items already copied can be examined by [`PopSliceFuture::count`].
     fn pop_exact<'a: 'b, 'b>(&'a mut self, slice: &'b mut [Self::Item]) -> PopSliceFuture<'a, 'b, Self>
     where
         Self::Item: Copy,
@@ -56,6 +69,11 @@ pub trait AsyncConsumer: Consumer {
         }
     }
 
+    /// Fill `vec` with items from the ring buffer waiting asynchronously until corresponding producer closed.
+    ///
+    /// # Cancel safety
+    ///
+    /// If future is cancelled then `vec` contains items taken from RB before cancellation.
     #[cfg(feature = "alloc")]
     fn pop_until_end<'a: 'b, 'b>(&'a mut self, vec: &'b mut alloc::vec::Vec<Self::Item>) -> PopVecFuture<'a, 'b, Self> {
         PopVecFuture {
@@ -64,6 +82,7 @@ pub trait AsyncConsumer: Consumer {
         }
     }
 
+    /// Poll for the next item in the ring buffer.
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>>
     where
         Self: Unpin,
@@ -85,6 +104,7 @@ pub trait AsyncConsumer: Consumer {
         }
     }
 
+    /// Poll reading bytes from byte buffer.
     #[cfg(feature = "std")]
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>>
     where
@@ -106,6 +126,9 @@ pub trait AsyncConsumer: Consumer {
     }
 }
 
+/// # Cancel safety
+///
+/// If future is cancelled then no item removed from the ring buffer.
 pub struct PopFuture<'a, A: AsyncConsumer + ?Sized> {
     owner: &'a mut A,
     done: bool,
@@ -140,6 +163,9 @@ impl<A: AsyncConsumer> Future for PopFuture<'_, A> {
     }
 }
 
+/// # Cancel safety
+///
+/// If future is cancelled then slice can be partially filled.
 pub struct PopSliceFuture<'a, 'b, A: AsyncConsumer + ?Sized>
 where
     A::Item: Copy,
@@ -186,7 +212,19 @@ where
         }
     }
 }
+impl<A: AsyncConsumer> PopSliceFuture<'_, '_, A>
+where
+    A::Item: Copy,
+{
+    /// Number of items already copied from the ring buufer to the slice provided.
+    pub fn count(&self) -> usize {
+        self.count
+    }
+}
 
+/// # Cancel safety
+///
+/// If future is cancelled then `vec` contains items taken from RB before cancellation.
 #[cfg(feature = "alloc")]
 pub struct PopVecFuture<'a, 'b, A: AsyncConsumer + ?Sized> {
     owner: &'a mut A,
@@ -234,6 +272,9 @@ impl<A: AsyncConsumer> Future for PopVecFuture<'_, '_, A> {
     }
 }
 
+/// # Cancel safety
+///
+/// The future can be safely cancelled.
 pub struct WaitOccupiedFuture<'a, A: AsyncConsumer + ?Sized> {
     owner: &'a A,
     count: usize,

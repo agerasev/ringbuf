@@ -9,7 +9,10 @@ use crate::{consumer::AsyncConsumer, producer::AsyncProducer};
 /// except the situation when `src` or `dst` is closed or the future is dropped before completion.
 ///
 /// If `count` is `None` then transfer will be performed until the one or another ring buffer is closed.
-/// Transfer also safely stopped if the future is dropped.
+///
+/// # Cancel safety
+///
+/// Transfer safely stops if the future is dropped.
 pub async fn async_transfer<T, As: AsyncConsumer<Item = T>, Ad: AsyncProducer<Item = T>>(
     src: &mut As,
     dst: &mut Ad,

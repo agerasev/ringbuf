@@ -23,6 +23,10 @@ pub trait AsyncProducer: Producer {
     /// Future returns:
     /// + `Ok` - item successfully pushed.
     /// + `Err(item)` - the corresponding consumer was dropped, item is returned back.
+    ///
+    /// # Cancel safety
+    ///
+    /// If future is cancelled no item pushed to the RB.
     fn push(&mut self, item: Self::Item) -> PushFuture<'_, Self> {
         PushFuture {
             owner: self,
@@ -33,8 +37,14 @@ pub trait AsyncProducer: Producer {
     /// Push items from iterator waiting asynchronously if the buffer is full.
     ///
     /// Future returns:
-    /// + `Ok` - iterator ended.
-    /// + `Err(iter)` - the corresponding consumer was dropped, remaining iterator is returned back.
+    /// + `true` - iterator ended.
+    /// + `false` - the corresponding consumer was dropped.
+    ///
+    /// # Cancel safety
+    ///
+    /// If future is cancelled then remaining items are left in iterator.
+    /// You can get the iterator by using [`PushIterFuture::inner`], [`PushIterFuture::inner_mut`] and [`PushIterFuture::into_inner`].
+    /// *Note that the iterator is [`Peekable`].*
     fn push_iter_all<I: Iterator<Item = Self::Item>>(&mut self, iter: I) -> PushIterFuture<'_, Self, I> {
         PushIterFuture {
             owner: self,
@@ -47,6 +57,10 @@ pub trait AsyncProducer: Producer {
     /// In debug mode panics if `count` is greater than buffer capacity.
     ///
     /// The method takes `&mut self` because only single [`WaitVacantFuture`] is allowed at a time.
+    ///
+    /// # Cancel safety
+    ///
+    /// You can safely cancel this future.
     fn wait_vacant(&mut self, count: usize) -> WaitVacantFuture<'_, Self> {
         debug_assert!(count <= self.capacity().get());
         WaitVacantFuture {
@@ -61,6 +75,11 @@ pub trait AsyncProducer: Producer {
     /// Future returns:
     /// + `Ok` - all slice contents are copied.
     /// + `Err(count)` - the corresponding consumer was dropped, number of copied items returned.
+    ///
+    /// # Cancel safety
+    ///
+    /// On cancel the slice can be copied partially.
+    /// The number of items already copied can be examined by [`PushSliceFuture::count`].
     fn push_exact<'a: 'b, 'b>(&'a mut self, slice: &'b [Self::Item]) -> PushSliceFuture<'a, 'b, Self>
     where
         Self::Item: Copy,
@@ -72,6 +91,7 @@ pub trait AsyncProducer: Producer {
         }
     }
 
+    /// Poll the ring buffer has free slot for at least one item and the corresponding consumer is not closed.
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<bool> {
         let mut waker_registered = false;
         loop {
@@ -89,6 +109,7 @@ pub trait AsyncProducer: Producer {
         }
     }
 
+    /// Poll writing bytes into byte buffer.
     #[cfg(feature = "std")]
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>>
     where
@@ -112,6 +133,9 @@ pub trait AsyncProducer: Producer {
     }
 }
 
+/// # Cancel safety
+///
+/// If future is cancelled no item pushed to the RB.
 pub struct PushFuture<'a, A: AsyncProducer + ?Sized> {
     owner: &'a mut A,
     item: Option<A::Item>,
@@ -146,6 +170,9 @@ impl<A: AsyncProducer> Future for PushFuture<'_, A> {
     }
 }
 
+/// # Cancel safety
+///
+/// On cancel the slice can be copied partially.
 pub struct PushSliceFuture<'a, 'b, A: AsyncProducer + ?Sized>
 where
     A::Item: Copy,
@@ -191,7 +218,18 @@ where
         }
     }
 }
+impl<A: AsyncProducer> PushSliceFuture<'_, '_, A>
+where
+    A::Item: Copy,
+{
+    pub fn count(&self) -> usize {
+        self.count
+    }
+}
 
+/// # Cancel safety
+///
+/// If future is cancelled then remaining items are left in iterator.
 pub struct PushIterFuture<'a, A: AsyncProducer + ?Sized, I: Iterator<Item = A::Item>> {
     owner: &'a mut A,
     iter: Option<Peekable<I>>,
@@ -225,7 +263,21 @@ impl<A: AsyncProducer, I: Iterator<Item = A::Item>> Future for PushIterFuture<'_
         }
     }
 }
+impl<A: AsyncProducer, I: Iterator<Item = A::Item>> PushIterFuture<'_, A, I> {
+    pub fn inner(&self) -> &Peekable<I> {
+        self.iter.as_ref().unwrap()
+    }
+    pub fn inner_mut(&mut self) -> &mut Peekable<I> {
+        self.iter.as_mut().unwrap()
+    }
+    pub fn into_inner(self) -> Peekable<I> {
+        self.iter.unwrap()
+    }
+}
 
+/// # Cancel safety
+///
+/// You can safely cancel this future.
 pub struct WaitVacantFuture<'a, A: AsyncProducer + ?Sized> {
     owner: &'a A,
     count: usize,
