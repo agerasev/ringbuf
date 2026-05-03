@@ -23,7 +23,7 @@ pub trait RingBuffer: Observer + Consumer + Producer {
     /// Must not be set to `false` while producer exists.
     unsafe fn hold_write(&self, flag: bool) -> bool;
 
-    /// Pushes an item to the ring buffer overwriting the latest item if the buffer is full.
+    /// Pushes an item to the ring buffer overwriting the least recent item if the buffer is full.
     ///
     /// Returns overwritten item if overwriting took place.
     fn push_overwrite(&mut self, elem: Self::Item) -> Option<Self::Item> {
