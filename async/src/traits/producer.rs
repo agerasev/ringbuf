@@ -136,6 +136,7 @@ pub trait AsyncProducer: Producer {
 /// # Cancel safety
 ///
 /// If future is cancelled no item pushed to the RB.
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct PushFuture<'a, A: AsyncProducer + ?Sized> {
     owner: &'a mut A,
     item: Option<A::Item>,
@@ -173,6 +174,7 @@ impl<A: AsyncProducer> Future for PushFuture<'_, A> {
 /// # Cancel safety
 ///
 /// On cancel the slice can be copied partially.
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct PushSliceFuture<'a, 'b, A: AsyncProducer + ?Sized>
 where
     A::Item: Copy,
@@ -230,6 +232,7 @@ where
 /// # Cancel safety
 ///
 /// If future is cancelled then remaining items are left in iterator.
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct PushIterFuture<'a, A: AsyncProducer + ?Sized, I: Iterator<Item = A::Item>> {
     owner: &'a mut A,
     iter: Option<Peekable<I>>,
@@ -278,6 +281,7 @@ impl<A: AsyncProducer, I: Iterator<Item = A::Item>> PushIterFuture<'_, A, I> {
 /// # Cancel safety
 ///
 /// You can safely cancel this future.
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct WaitVacantFuture<'a, A: AsyncProducer + ?Sized> {
     owner: &'a A,
     count: usize,

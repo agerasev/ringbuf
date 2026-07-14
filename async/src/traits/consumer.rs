@@ -129,6 +129,7 @@ pub trait AsyncConsumer: Consumer {
 /// # Cancel safety
 ///
 /// If future is cancelled then no item removed from the ring buffer.
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct PopFuture<'a, A: AsyncConsumer + ?Sized> {
     owner: &'a mut A,
     done: bool,
@@ -166,6 +167,7 @@ impl<A: AsyncConsumer> Future for PopFuture<'_, A> {
 /// # Cancel safety
 ///
 /// If future is cancelled then slice can be partially filled.
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct PopSliceFuture<'a, 'b, A: AsyncConsumer + ?Sized>
 where
     A::Item: Copy,
@@ -226,6 +228,7 @@ where
 ///
 /// If future is cancelled then `vec` contains items taken from RB before cancellation.
 #[cfg(feature = "alloc")]
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct PopVecFuture<'a, 'b, A: AsyncConsumer + ?Sized> {
     owner: &'a mut A,
     vec: Option<&'b mut alloc::vec::Vec<A::Item>>,
@@ -275,6 +278,7 @@ impl<A: AsyncConsumer> Future for PopVecFuture<'_, '_, A> {
 /// # Cancel safety
 ///
 /// The future can be safely cancelled.
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct WaitOccupiedFuture<'a, A: AsyncConsumer + ?Sized> {
     owner: &'a A,
     count: usize,
