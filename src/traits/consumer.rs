@@ -216,30 +216,30 @@ pub trait Consumer: Observer {
     /// # }
     /// ```
     fn skip(&mut self, count: usize) -> usize {
-        unsafe {
-            let (left, right) = self.occupied_slices_mut();
-            for elem in left.iter_mut().chain(right.iter_mut()).take(count) {
-                ptr::drop_in_place(elem.as_mut_ptr());
+        let mut removed = 0;
+        while removed < count {
+            unsafe {
+                let (left, right) = self.occupied_slices_mut();
+                let elem = match left.first_mut().or_else(|| right.first_mut()) {
+                    Some(elem) => elem.as_mut_ptr(),
+                    None => break,
+                };
+                // Retire the slot before destroying it. If `T::drop` panics the
+                // item is already outside the occupied range, so the ring
+                // buffer's own `Drop` cannot destroy it a second time.
+                self.advance_read_index(1);
+                ptr::drop_in_place(elem);
             }
-            let actual_count = usize::min(count, left.len() + right.len());
-            self.advance_read_index(actual_count);
-            actual_count
+            removed += 1;
         }
+        removed
     }
 
     /// Removes all items from the buffer and safely drops them.
     ///
     /// Returns the number of deleted items.
     fn clear(&mut self) -> usize {
-        unsafe {
-            let (left, right) = self.occupied_slices_mut();
-            for elem in left.iter_mut().chain(right.iter_mut()) {
-                ptr::drop_in_place(elem.as_mut_ptr());
-            }
-            let count = left.len() + right.len();
-            self.advance_read_index(count);
-            count
-        }
+        self.skip(usize::MAX)
     }
 
     #[cfg(feature = "std")]

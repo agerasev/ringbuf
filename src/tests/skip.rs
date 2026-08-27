@@ -70,3 +70,60 @@ fn skip_drop() {
     // Check that items are dropped
     assert_eq!(Rc::strong_count(&rc), 1);
 }
+
+/// A panicking `Drop` must not leave already-destroyed items inside the
+/// occupied range. `skip` and `clear` advanced the read index only after the
+/// loop, so an unwind left the ring buffer's own `Drop` to destroy them again.
+#[cfg(feature = "std")]
+#[test]
+fn skip_panicking_drop() {
+    use core::cell::Cell;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    std::thread_local! {
+        static DROPS: Cell<usize> = const { Cell::new(0) };
+        static ARMED: Cell<bool> = const { Cell::new(false) };
+    }
+
+    struct Boom;
+
+    impl Drop for Boom {
+        fn drop(&mut self) {
+            DROPS.with(|d| d.set(d.get() + 1));
+            if ARMED.with(|a| a.replace(false)) {
+                panic!("item Drop panics");
+            }
+        }
+    }
+
+    const CAP: usize = 4;
+
+    for (name, count) in [("clear", CAP), ("skip", 2)] {
+        DROPS.with(|d| d.set(0));
+
+        let mut rb = Rb::<Array<Boom, CAP>>::default();
+        for _ in 0..CAP {
+            rb.try_push(Boom).ok().unwrap();
+        }
+
+        ARMED.with(|a| a.set(true));
+        let r = catch_unwind(AssertUnwindSafe(|| {
+            rb.skip(count);
+        }));
+        ARMED.with(|a| a.set(false));
+        assert!(r.is_err(), "{}: the armed Drop should have panicked", name);
+
+        drop(rb);
+
+        // Four items exist. Fewer drops mean a leak, which is sound; more mean
+        // an item was destroyed twice.
+        let drops = DROPS.with(|d| d.get());
+        assert!(
+            drops <= CAP,
+            "{}: {} drops for {} items - an item was destroyed twice",
+            name,
+            drops,
+            CAP
+        );
+    }
+}
