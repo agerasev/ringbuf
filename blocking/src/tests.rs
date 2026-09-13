@@ -1,4 +1,6 @@
-use crate::{traits::*, wrap::WaitError, BlockingHeapRb};
+mod regressions;
+
+use crate::{BlockingHeapRb, traits::*, wrap::WaitError};
 use std::{
     io::{Read, Write},
     sync::Arc,

@@ -4,7 +4,7 @@ use core::time::Duration;
 #[cfg(feature = "std")]
 use ringbuf::traits::Based;
 use ringbuf::{
-    traits::{consumer::DelegateConsumer, observer::DelegateObserver, Consumer, Observer},
+    traits::{Consumer, Observer, consumer::DelegateConsumer, observer::DelegateObserver},
     wrap::Wrap,
 };
 #[cfg(feature = "std")]
@@ -36,10 +36,13 @@ impl<R: BlockingRbRef> BlockingCons<R> {
     pub fn wait_occupied(&mut self, count: usize) -> Result<(), WaitError> {
         debug_assert!(count <= self.rb().capacity().get());
         for _ in wait_iter!(self) {
+            // Observe closure before checking the data so a final write
+            // followed by close cannot be mistaken for an empty buffer.
+            let closed = self.is_closed();
             if self.base.occupied_len() >= count {
                 return Ok(());
             }
-            if self.is_closed() {
+            if closed {
                 return Err(WaitError::Closed);
             }
         }
@@ -48,10 +51,11 @@ impl<R: BlockingRbRef> BlockingCons<R> {
 
     pub fn pop(&mut self) -> Result<<Self as Observer>::Item, WaitError> {
         for _ in wait_iter!(self) {
+            let closed = self.is_closed();
             if let Some(item) = self.base.try_pop() {
                 return Ok(item);
             }
-            if self.is_closed() {
+            if closed {
                 return Err(WaitError::Closed);
             }
         }
@@ -113,12 +117,17 @@ where
     <Self as Based>::Base: Consumer<Item = u8>,
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
         for _ in wait_iter!(self) {
+            // If closure is observed, the following read sees the final data.
+            let closed = self.is_closed();
             let n = self.base.pop_slice(buf);
             if n > 0 {
                 return Ok(n);
             }
-            if self.is_closed() {
+            if closed {
                 return Ok(0);
             }
         }

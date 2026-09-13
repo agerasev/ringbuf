@@ -4,7 +4,7 @@ use core::time::Duration;
 #[cfg(feature = "std")]
 use ringbuf::traits::Based;
 use ringbuf::{
-    traits::{observer::DelegateObserver, producer::DelegateProducer, Observer, Producer},
+    traits::{Observer, Producer, observer::DelegateObserver, producer::DelegateProducer},
     wrap::Wrap,
 };
 #[cfg(feature = "std")]
@@ -112,6 +112,9 @@ where
     <Self as Based>::Base: Producer<Item = u8>,
 {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
         for _ in wait_iter!(self) {
             if self.is_closed() {
                 return Ok(0);
