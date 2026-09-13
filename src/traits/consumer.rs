@@ -4,10 +4,12 @@ use super::{
 };
 use crate::utils::{move_uninit_slice, slice_as_uninit_mut, slice_assume_init_mut, slice_assume_init_ref};
 use core::{iter::Chain, mem::MaybeUninit, ptr, slice};
+
 #[cfg(feature = "std")]
 use std::io::{self, Write};
 
 /// Consumer part of ring buffer.
+
 pub trait Consumer: Observer {
     /// Set read index.
     ///
@@ -176,7 +178,10 @@ pub trait Consumer: Observer {
     }
 
     /// Returns an iterator that removes items one by one from the ring buffer.
-    fn pop_iter(&mut self) -> PopIter<'_, Self> {
+    fn pop_iter(&mut self) -> PopIter<'_, Self>
+    where
+        Self: Sized,
+    {
         PopIter::new(self)
     }
 
@@ -258,7 +263,7 @@ pub trait Consumer: Observer {
     ///   To achieve this we write only one contiguous slice at once. So this call may write less than `occupied_len` items even if the writer is ready to get more.
     fn write_into<S: Write>(&mut self, writer: &mut S, count: Option<usize>) -> Option<io::Result<usize>>
     where
-        Self: Consumer<Item = u8>,
+        Self: Consumer<Item = u8> + Sized,
     {
         let (left, _) = self.occupied_slices();
         let count = usize::min(count.unwrap_or(left.len()), left.len());
