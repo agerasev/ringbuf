@@ -216,30 +216,34 @@ pub trait Consumer: Observer {
     /// # }
     /// ```
     fn skip(&mut self, count: usize) -> usize {
-        unsafe {
-            let (left, right) = self.occupied_slices_mut();
-            for elem in left.iter_mut().chain(right.iter_mut()).take(count) {
-                ptr::drop_in_place(elem.as_mut_ptr());
-            }
-            let actual_count = usize::min(count, left.len() + right.len());
-            self.advance_read_index(actual_count);
-            actual_count
+        struct Guard<'a, C: Consumer + ?Sized> {
+            consumer: &'a mut C,
+            count: usize,
         }
+        impl<C: Consumer + ?Sized> Drop for Guard<'_, C> {
+            fn drop(&mut self) {
+                // The slice iterator and any panicking item destructor have
+                // finished before this guard publishes the freed slots.
+                unsafe { self.consumer.advance_read_index(self.count) };
+            }
+        }
+
+        let mut guard = Guard { consumer: self, count: 0 };
+        let (left, right) = unsafe { guard.consumer.occupied_slices_mut() };
+        for elem in left.iter_mut().chain(right.iter_mut()).take(count) {
+            // Include this item if its destructor unwinds, but keep its slot
+            // occupied until destruction ends so a producer cannot reuse it.
+            guard.count += 1;
+            unsafe { ptr::drop_in_place(elem.as_mut_ptr()) };
+        }
+        guard.count
     }
 
     /// Removes all items from the buffer and safely drops them.
     ///
     /// Returns the number of deleted items.
     fn clear(&mut self) -> usize {
-        unsafe {
-            let (left, right) = self.occupied_slices_mut();
-            for elem in left.iter_mut().chain(right.iter_mut()) {
-                ptr::drop_in_place(elem.as_mut_ptr());
-            }
-            let count = left.len() + right.len();
-            self.advance_read_index(count);
-            count
-        }
+        self.skip(usize::MAX)
     }
 
     #[cfg(feature = "std")]
