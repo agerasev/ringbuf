@@ -115,6 +115,9 @@ pub trait AsyncProducer: Producer {
     where
         Self: AsyncProducer<Item = u8> + Unpin,
     {
+        if buf.is_empty() {
+            return Poll::Ready(Ok(0));
+        }
         let mut waker_registered = false;
         loop {
             if self.is_closed() {
@@ -240,7 +243,7 @@ pub struct PushIterFuture<'a, A: AsyncProducer + ?Sized, I: Iterator<Item = A::I
 impl<A: AsyncProducer, I: Iterator<Item = A::Item>> Unpin for PushIterFuture<'_, A, I> {}
 impl<A: AsyncProducer, I: Iterator<Item = A::Item>> FusedFuture for PushIterFuture<'_, A, I> {
     fn is_terminated(&self) -> bool {
-        self.iter.is_none() || self.owner.is_closed()
+        self.iter.is_none()
     }
 }
 impl<A: AsyncProducer, I: Iterator<Item = A::Item>> Future for PushIterFuture<'_, A, I> {
@@ -296,12 +299,13 @@ impl<A: AsyncProducer> FusedFuture for WaitVacantFuture<'_, A> {
 impl<A: AsyncProducer> Future for WaitVacantFuture<'_, A> {
     type Output = ();
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut waker_registered = false;
         loop {
             assert!(!self.done);
             let closed = self.owner.is_closed();
             if self.count <= self.owner.vacant_len() || closed {
+                self.done = true;
                 break Poll::Ready(());
             }
             if waker_registered {

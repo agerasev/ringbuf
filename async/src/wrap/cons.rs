@@ -3,13 +3,13 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
+use futures_util::Stream;
 #[cfg(feature = "std")]
 use futures_util::io::AsyncRead;
-use futures_util::Stream;
 use ringbuf::{
     traits::{
-        consumer::{Consumer, DelegateConsumer},
         Observer,
+        consumer::{Consumer, DelegateConsumer},
     },
     wrap::Wrap,
 };
@@ -56,19 +56,7 @@ impl<R: AsyncRbRef> AsyncRead for AsyncCons<R>
 where
     Self: AsyncConsumer<Item = u8>,
 {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        let mut waker_registered = false;
-        loop {
-            let closed = self.is_closed();
-            let len = self.pop_slice(buf);
-            if len != 0 || closed {
-                break Poll::Ready(Ok(len));
-            }
-            if waker_registered {
-                break Poll::Pending;
-            }
-            self.register_waker(cx.waker());
-            waker_registered = true;
-        }
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        <Self as AsyncConsumer>::poll_read(self, cx, buf)
     }
 }

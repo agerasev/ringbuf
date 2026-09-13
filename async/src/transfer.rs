@@ -24,8 +24,6 @@ pub async fn async_transfer<T, As: AsyncConsumer<Item = T>, Ad: AsyncProducer<It
         if count.as_ref().is_some_and(|n| actual_count == *n) {
             break;
         }
-        actual_count += 1;
-
         match dst
             .push(match src.pop().await {
                 Some(item) => item,
@@ -33,7 +31,7 @@ pub async fn async_transfer<T, As: AsyncConsumer<Item = T>, Ad: AsyncProducer<It
             })
             .await
         {
-            Ok(()) => (),
+            Ok(()) => actual_count += 1,
             Err(_item) => break,
         };
     }

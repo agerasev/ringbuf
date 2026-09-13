@@ -110,6 +110,9 @@ pub trait AsyncConsumer: Consumer {
     where
         Self: AsyncConsumer<Item = u8> + Unpin,
     {
+        if buf.is_empty() {
+            return Poll::Ready(Ok(0));
+        }
         let mut waker_registered = false;
         loop {
             let closed = self.is_closed();
@@ -137,7 +140,7 @@ pub struct PopFuture<'a, A: AsyncConsumer + ?Sized> {
 impl<A: AsyncConsumer> Unpin for PopFuture<'_, A> {}
 impl<A: AsyncConsumer> FusedFuture for PopFuture<'_, A> {
     fn is_terminated(&self) -> bool {
-        self.done || self.owner.is_closed()
+        self.done
     }
 }
 impl<A: AsyncConsumer> Future for PopFuture<'_, A> {
@@ -153,6 +156,7 @@ impl<A: AsyncConsumer> Future for PopFuture<'_, A> {
                 break Poll::Ready(Some(item));
             }
             if closed {
+                self.done = true;
                 break Poll::Ready(None);
             }
             if waker_registered {

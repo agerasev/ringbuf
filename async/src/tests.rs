@@ -1,3 +1,5 @@
+mod regressions;
+
 use crate::{
     alias::{AsyncHeapCons, AsyncHeapProd, AsyncHeapRb},
     async_transfer,
@@ -8,7 +10,7 @@ use core::{
     marker::PhantomData,
     sync::atomic::{AtomicUsize, Ordering},
 };
-use futures::task::{noop_waker_ref, AtomicWaker};
+use futures::task::{AtomicWaker, noop_waker_ref};
 #[cfg(feature = "std")]
 use std::sync::Arc;
 
