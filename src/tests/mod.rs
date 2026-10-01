@@ -12,6 +12,7 @@ mod frozen;
 mod hold;
 mod init;
 mod iter;
+#[cfg(feature = "alloc")]
 mod new;
 mod overwrite;
 #[cfg(feature = "std")]
@@ -22,4 +23,5 @@ mod shared;
 mod skip;
 mod slice;
 mod unsized_;
+#[cfg(feature = "alloc")]
 mod zero_sized;
