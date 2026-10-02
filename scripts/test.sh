@@ -4,6 +4,7 @@ rustup target add thumbv6m-none-eabi && \
 cargo test && \
 cargo test --features test_local && \
 cargo test --features portable-atomic && \
+cargo test --no-default-features --lib && \
 cargo check --no-default-features --features alloc && \
 cargo check --no-default-features && \
 cargo check --target thumbv6m-none-eabi --no-default-features --features alloc,portable-atomic,portable-atomic/critical-section && \

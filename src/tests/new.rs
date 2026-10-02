@@ -1,6 +1,5 @@
 use super::Rb;
 use crate::{storage::Array, traits::*};
-#[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
 #[test]
@@ -21,7 +20,6 @@ fn new_static() {
     assert_eq!(cons.try_pop(), None);
 }
 
-#[cfg(feature = "alloc")]
 #[test]
 fn from_vec() {
     let mut vec = Vec::<i32>::with_capacity(4);

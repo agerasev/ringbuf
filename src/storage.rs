@@ -209,6 +209,7 @@ mod tests {
         let _: Check<Ref<Cell<i32>>>;
         let _: Check<Array<Cell<i32>, 4>>;
         let _: Check<Slice<Cell<i32>>>;
+        #[cfg(feature = "alloc")]
         let _: Check<Heap<Cell<i32>>>;
     }
 }
