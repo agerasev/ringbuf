@@ -1,4 +1,7 @@
-use super::{macros::rb_impl_init, utils::ranges};
+use super::{
+    macros::rb_impl_init,
+    utils::{assert_capacity, ranges},
+};
 #[cfg(feature = "alloc")]
 use crate::traits::Split;
 use crate::{
@@ -59,12 +62,14 @@ pub struct SharedRb<S: Storage + ?Sized> {
 impl<S: Storage> SharedRb<S> {
     /// Constructs ring buffer from storage and indices.
     ///
+    /// Panics if the storage is empty or its length exceeds `usize::MAX / 2`.
+    ///
     /// # Safety
     ///
     /// The items in storage inside `read..write` range must be initialized, items outside this range must be uninitialized.
     /// `read` and `write` positions must be valid (see implementation details).
     pub unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
-        assert!(!storage.is_empty());
+        assert_capacity(storage.len());
         Self {
             storage,
             read_index: CachePadded::new(AtomicUsize::new(read)),

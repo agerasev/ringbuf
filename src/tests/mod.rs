@@ -5,6 +5,7 @@ use crate::SharedRb as Rb;
 
 mod access;
 mod basic;
+mod capacity;
 #[cfg(feature = "alloc")]
 mod drop;
 mod fmt_write;

@@ -1,6 +1,6 @@
 use super::{
     observer::{DelegateObserver, Observer},
-    utils::modulus,
+    utils::{add_mod, modulus},
 };
 use crate::utils::{move_uninit_slice, slice_as_uninit_mut, slice_assume_init_mut, slice_assume_init_ref};
 use core::{iter::Chain, mem::MaybeUninit, ptr, slice};
@@ -26,7 +26,7 @@ pub trait Consumer: Observer {
     ///
     /// Must not be called concurrently.
     unsafe fn advance_read_index(&self, count: usize) {
-        unsafe { self.set_read_index((self.read_index() + count) % modulus(self)) };
+        unsafe { self.set_read_index(add_mod(self.read_index(), count, modulus(self))) };
     }
 
     /// Provides a direct access to the ring buffer occupied memory.

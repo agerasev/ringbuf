@@ -84,22 +84,23 @@ fn pop_iter_publishes_each_item_and_keeps_its_snapshot() {
     let mut rb = Rb::<Array<i32, 3>>::default();
     let (mut prod, mut cons) = rb.split_ref();
     prod.push_slice(&[0, 1, 2]);
-    let mut iter = cons.pop_iter();
-    assert_eq!(iter.len(), 3);
-    assert_eq!(iter.next(), Some(0));
-    // Reuse the freed slot while the iterator is still alive.
-    prod.try_push(3).unwrap();
-    iter.commit();
-    iter.commit();
-    assert_eq!(iter.len(), 2);
-    assert_eq!(iter.size_hint(), (2, Some(2)));
-    assert_eq!(iter.next(), Some(1));
-    assert_eq!(iter.next(), Some(2));
-    assert_eq!(iter.next(), None);
-    assert_eq!(iter.len(), 0);
-    prod.try_push(4).unwrap();
-    assert_eq!(iter.next(), None);
-    drop(iter);
+    {
+        let mut iter = cons.pop_iter();
+        assert_eq!(iter.len(), 3);
+        assert_eq!(iter.next(), Some(0));
+        // Reuse the freed slot while the iterator is still alive.
+        prod.try_push(3).unwrap();
+        iter.commit();
+        iter.commit();
+        assert_eq!(iter.len(), 2);
+        assert_eq!(iter.size_hint(), (2, Some(2)));
+        assert_eq!(iter.next(), Some(1));
+        assert_eq!(iter.next(), Some(2));
+        assert_eq!(iter.next(), None);
+        assert_eq!(iter.len(), 0);
+        prod.try_push(4).unwrap();
+        assert_eq!(iter.next(), None);
+    }
     assert_eq!(cons.try_pop(), Some(3));
     assert_eq!(cons.try_pop(), Some(4));
 }
@@ -136,6 +137,10 @@ fn forgotten_pop_iter_drops_each_item_once() {
                         for _ in 0..count {
                             drop(iter.next().unwrap());
                         }
+                        #[allow(
+                            clippy::forget_non_drop,
+                            reason = "Regression test: soundness must not depend on the iterator's destructor"
+                        )]
                         mem::forget(iter);
                     }};
                 }
@@ -182,14 +187,15 @@ fn pop_iter_allows_concurrent_slot_reuse() {
                 reused_tx.send(()).unwrap();
             }
         });
-        let mut iter = cons.pop_iter();
-        for value in 0..3 {
-            assert_eq!(*iter.next().unwrap(), value);
-            released_tx.send(()).unwrap();
-            reused_rx.recv().unwrap();
+        {
+            let mut iter = cons.pop_iter();
+            for value in 0..3 {
+                assert_eq!(*iter.next().unwrap(), value);
+                released_tx.send(()).unwrap();
+                reused_rx.recv().unwrap();
+            }
+            assert_eq!(iter.next(), None);
         }
-        assert_eq!(iter.next(), None);
-        drop(iter);
         assert!(cons.pop_iter().map(|value| *value).eq(3..6));
     });
 }

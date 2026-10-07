@@ -1,6 +1,6 @@
 use super::{
     observer::{DelegateObserver, Observer},
-    utils::modulus,
+    utils::{add_mod, modulus},
 };
 #[cfg(feature = "std")]
 use crate::utils::slice_assume_init_mut;
@@ -31,14 +31,14 @@ pub trait Producer: Observer {
     ///
     /// Must not be called concurrently.
     unsafe fn advance_write_index(&self, count: usize) {
-        unsafe { self.set_write_index((self.write_index() + count) % modulus(self)) };
+        unsafe { self.set_write_index(add_mod(self.write_index(), count, modulus(self))) };
     }
 
     /// Provides a direct access to the ring buffer vacant memory.
     ///
     /// Returns a pair of slices of uninitialized memory, the second one may be empty.
     fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        unsafe { self.unsafe_slices(self.write_index(), self.read_index() + self.capacity().get()) }
+        unsafe { self.unsafe_slices(self.write_index(), add_mod(self.read_index(), self.capacity().get(), modulus(self))) }
     }
 
     /// Mutable version of [`Self::vacant_slices`].
@@ -51,7 +51,7 @@ pub trait Producer: Observer {
     ///
     /// *Vacant slices must not be used to store any data because their contents aren't synchronized properly.*
     fn vacant_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        unsafe { self.unsafe_slices_mut(self.write_index(), self.read_index() + self.capacity().get()) }
+        unsafe { self.unsafe_slices_mut(self.write_index(), add_mod(self.read_index(), self.capacity().get(), modulus(self))) }
     }
 
     /// Appends an item to the ring buffer.

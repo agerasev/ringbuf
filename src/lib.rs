@@ -119,6 +119,7 @@ so to perform it concurrently you need to guard the ring buffer with mutex or so
 //! It must span a single contiguous memory area (e.g. we can obtain a slice or subslice of it).
 //! Ring buffer can own its storage or it can hold only a mutable reference to it.
 //! Storage length is refered as `capacity`.
+//! Capacity must be in `1..=usize::MAX / 2`, including for zero-sized items.
 //!
 //! ## Indices
 //!

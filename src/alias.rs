@@ -13,7 +13,7 @@ pub use portable_atomic_util::Arc;
 
 /// Stack-allocated ring buffer with static capacity.
 ///
-/// *Capacity (`N`) must be greater than zero.*
+/// *Capacity (`N`) must be in `1..=usize::MAX / 2`.*
 pub type StaticRb<T, const N: usize> = SharedRb<Array<T, N>>;
 
 /// Alias for [`StaticRb`] producer.

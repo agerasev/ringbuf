@@ -1,4 +1,7 @@
-use super::{Based, utils::modulus};
+use super::{
+    Based,
+    utils::{add_mod, modulus, sub_mod},
+};
 use core::{mem::MaybeUninit, num::NonZeroUsize};
 
 /// Ring buffer observer.
@@ -10,6 +13,7 @@ pub trait Observer {
     /// Capacity of the ring buffer.
     ///
     /// It is constant during the whole ring buffer lifetime.
+    /// Must not exceed `usize::MAX / 2` so that the index modulus is representable.
     fn capacity(&self) -> NonZeroUsize;
 
     /// Index of the last item in the ring buffer.
@@ -48,7 +52,7 @@ pub trait Observer {
     /// *Actual number may be greater or less than returned value due to concurring activity of producer or consumer respectively.*
     fn occupied_len(&self) -> usize {
         let modulus = modulus(self);
-        (modulus.get() + self.write_index() - self.read_index()) % modulus
+        sub_mod(self.write_index(), self.read_index(), modulus)
     }
 
     /// The number of remaining free places in the buffer.
@@ -56,7 +60,11 @@ pub trait Observer {
     /// *Actual number may be greater or less than returned value due to concurring activity of consumer or producer respectively.*
     fn vacant_len(&self) -> usize {
         let modulus = modulus(self);
-        (self.capacity().get() + self.read_index() - self.write_index()) % modulus
+        sub_mod(
+            add_mod(self.read_index(), self.capacity().get(), modulus),
+            self.write_index(),
+            modulus,
+        )
     }
 
     /// Checks if the ring buffer is empty.

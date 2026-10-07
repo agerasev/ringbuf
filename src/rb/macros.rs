@@ -17,14 +17,16 @@ macro_rules! rb_impl_init {
         impl<T> $type<crate::storage::Heap<T>> {
             /// Creates a new instance of a ring buffer.
             ///
-            /// *Panics if allocation failed or `capacity` is zero.*
+            /// *Panics if allocation failed, `capacity` is zero, or it exceeds `usize::MAX / 2`.*
             pub fn new(capacity: usize) -> Self {
+                $crate::rb::utils::assert_capacity(capacity);
                 unsafe { Self::from_raw_parts(crate::storage::Heap::<T>::new(capacity), usize::default(), usize::default()) }
             }
             /// Creates a new instance of a ring buffer returning an error if allocation failed.
             ///
-            /// *Panics if `capacity` is zero.*
+            /// *Panics if `capacity` is zero or exceeds `usize::MAX / 2`.*
             pub fn try_new(capacity: usize) -> Result<Self, alloc::collections::TryReserveError> {
+                $crate::rb::utils::assert_capacity(capacity);
                 let mut vec = alloc::vec::Vec::<core::mem::MaybeUninit<T>>::new();
                 vec.try_reserve_exact(capacity)?;
                 unsafe { vec.set_len(capacity) };
