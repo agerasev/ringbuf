@@ -5,5 +5,6 @@ mod traits;
 
 pub use caching::{CachingCons, CachingProd};
 pub use direct::{Cons, Obs, Prod};
+#[allow(deprecated)]
 pub use frozen::{FrozenCons, FrozenProd};
 pub use traits::*;

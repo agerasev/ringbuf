@@ -2,7 +2,9 @@
 //!
 //! All changes are synchronized with the ring buffer immediately.
 
-use super::{frozen::Frozen, traits::Wrap};
+#[allow(deprecated)]
+use super::frozen::Frozen;
+use super::{caching::Caching, traits::Wrap};
 use crate::{
     rb::RbRef,
     traits::{
@@ -54,10 +56,11 @@ impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
         Obs { rb: self.rb.clone() }
     }
 
-    /// Freeze current state.
+    /// Convert to the deprecated compatibility wrapper. Changes remain immediately visible.
+    #[deprecated(note = "use the endpoint directly; freezing no longer delays publication")]
+    #[allow(deprecated)]
     pub fn freeze(self) -> Frozen<R, P, C> {
-        let this = ManuallyDrop::new(self);
-        unsafe { Frozen::new_unchecked(ptr::read(&this.rb)) }
+        Frozen::from_caching(Caching::from_direct(self))
     }
 
     /// # Safety

@@ -306,60 +306,57 @@ impl<C: Consumer> Iterator for IntoIter<C> {
 
 /// An iterator that removes items from the ring buffer.
 ///
-/// Producer will see removed items only when iterator is dropped or [`PopIter::commit`] is called.
+/// Each yielded item is removed immediately, making its slot available to the producer.
+/// Only items present when the iterator is created are yielded.
 pub struct PopIter<'a, C: Consumer + ?Sized> {
     inner: &'a C,
     iter: Chain<slice::Iter<'a, MaybeUninit<C::Item>>, slice::Iter<'a, MaybeUninit<C::Item>>>,
-    count: usize,
-    len: usize,
-}
-
-impl<C: Consumer + ?Sized> Drop for PopIter<'_, C> {
-    fn drop(&mut self) {
-        self.commit();
-    }
+    read: usize,
+    modulus: usize,
+    remaining: usize,
 }
 
 impl<'a, C: Consumer + ?Sized> PopIter<'a, C> {
     /// Create an iterator.
     pub fn new(inner: &'a mut C) -> Self {
-        let (len, iter) = {
-            let (left, right) = inner.occupied_slices();
-            (left.len() + right.len(), left.iter().chain(right))
-        };
+        let (left, right) = inner.occupied_slices();
         Self {
             inner,
-            iter,
-            count: 0,
-            len,
+            iter: left.iter().chain(right),
+            read: inner.read_index(),
+            modulus: modulus(inner).get(),
+            remaining: left.len() + right.len(),
         }
     }
 
-    /// Send information about removed items to the ring buffer.
-    pub fn commit(&mut self) {
-        unsafe { self.inner.advance_read_index(self.count) };
-        self.count = 0;
-    }
+    /// Does nothing: each yielded item has already been removed from the ring buffer.
+    #[deprecated(note = "each yielded item is removed immediately; remove this call")]
+    pub fn commit(&mut self) {}
 }
 
-impl<C: Consumer> Iterator for PopIter<'_, C> {
+impl<C: Consumer + ?Sized> Iterator for PopIter<'_, C> {
     type Item = C::Item;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|item| {
-            self.count += 1;
-            unsafe { item.assume_init_read() }
-        })
+        let item = unsafe { self.iter.next()?.assume_init_read() };
+        self.read += 1;
+        if self.read == self.modulus {
+            self.read = 0;
+        }
+        self.remaining -= 1;
+        // The slice iterator no longer accesses this item. Publish its removal before
+        // handing it to the caller, who may forget the iterator or drop the item.
+        unsafe { self.inner.set_read_index(self.read) };
+        Some(item)
     }
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let remain = self.len - self.count;
-        (remain, Some(remain))
+        (self.remaining, Some(self.remaining))
     }
 }
 
-impl<C: Consumer> ExactSizeIterator for PopIter<'_, C> {}
+impl<C: Consumer + ?Sized> ExactSizeIterator for PopIter<'_, C> {}
 
 /// Iterator over ring buffer contents.
 ///

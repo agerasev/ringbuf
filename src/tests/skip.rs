@@ -75,6 +75,7 @@ fn skip_drop() {
 /// remain initialized and the buffer can still be used after unwinding.
 #[cfg(feature = "std")]
 #[test]
+#[allow(deprecated)]
 fn skip_panicking_drop() {
     use core::cell::Cell;
     use std::panic::{AssertUnwindSafe, catch_unwind};

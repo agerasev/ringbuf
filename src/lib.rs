@@ -22,8 +22,10 @@
 //!
 //! [`SharedRb`] needs to synchronize CPU cache between CPU cores. This synchronization has some overhead.
 //! To avoid multiple unnecessary synchronizations you may use methods that operate many items at once
-//! ([`push_slice`](`traits::Producer::push_slice`)/[`push_iter`](`traits::Producer::push_iter`), [`pop_slice`](`traits::Consumer::pop_slice`)/[`pop_iter`](`traits::Consumer::pop_iter`), etc.)
-//! or you can `freeze` [producer](`Prod::freeze`) or [consumer](`Cons::freeze`) and then synchronize threads manually (see items in [`frozen`](`wrap::frozen`) module).
+//! ([`push_slice`](`traits::Producer::push_slice`)/[`push_iter`](`traits::Producer::push_iter`), [`pop_slice`](`traits::Consumer::pop_slice`), etc.).
+//! Caching endpoints also avoid repeatedly fetching the opposite endpoint's index when progress is possible.
+//! All completed operations publish their index updates immediately, including each step of [`pop_iter`](`traits::Consumer::pop_iter`).
+//! The former frozen endpoints are deprecated compatibility wrappers; see [`wrap::frozen`] for migration details.
 //!
 //! For single-threaded usage [`LocalRb`] is recommended because it is slightly faster than [`SharedRb`] due to absence of CPU cache synchronization.
 //!

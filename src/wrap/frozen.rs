@@ -1,81 +1,99 @@
-//! Frozen implementation.
+//! Deprecated compatibility wrappers for caching endpoints.
 //!
-//! Changes are not synchronized with the ring buffer until its explicitly requested or when dropped.
+//! All writes and removals are now published immediately. Use [`CachingProd`](super::CachingProd)
+//! and [`CachingCons`](super::CachingCons) directly instead; these wrappers will be removed in the
+//! next breaking release.
+//!
+//! # Migration
+//!
+//! Remove calls to `freeze`, `commit`, `fetch`, and `sync`. Endpoints publish their own changes
+//! immediately and fetch the opposite endpoint's progress as needed. `discard` is now a no-op:
+//! published items cannot be retracted. Stage items outside the ring buffer if rollback is needed,
+//! and use bulk operations such as `push_slice` and `pop_slice` to batch index updates.
 
-use super::{direct::Obs, traits::Wrap};
+#![allow(deprecated)]
+
+use super::{caching::Caching, direct::Obs, traits::Wrap};
+#[cfg(feature = "std")]
+use crate::traits::Consumer;
 use crate::{
     rb::RbRef,
     traits::{
-        Observer, RingBuffer,
-        consumer::{Consumer, impl_consumer_traits},
-        producer::{Producer, impl_producer_traits},
+        Based,
+        consumer::{DelegateConsumer, impl_consumer_traits},
+        observer::DelegateObserver,
+        producer::{DelegateProducer, Producer, impl_producer_traits},
     },
 };
-use core::{
-    cell::Cell,
-    mem::{ManuallyDrop, MaybeUninit},
-    num::NonZeroUsize,
-    ptr,
-};
 
-/// Frozen wrapper of the ring buffer.
+/// Compatibility wrapper with the same immediate publication behavior as [`Caching`].
+///
+/// Unlike earlier versions, this wrapper never defers publication until `commit` or drop.
+#[deprecated(note = "use Caching directly; frozen endpoints now publish changes immediately and will be removed in the next breaking release")]
 pub struct Frozen<R: RbRef, const P: bool, const C: bool> {
-    rb: R,
-    read: Cell<usize>,
-    write: Cell<usize>,
+    inner: Caching<R, P, C>,
 }
 
-/// Frozen write end of some ring buffer.
-///
-/// Inserted items is not visible for an opposite write end until [`Self::commit`]/[`Self::sync`] is called or `Self` is dropped.
-/// A free space of items removed by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
+/// Deprecated producer wrapper. All inserted items are published immediately.
+#[deprecated(note = "use CachingProd; writes are now published immediately")]
 pub type FrozenProd<R> = Frozen<R, true, false>;
 
-/// Frozen read end of some ring buffer.
-///
-/// A free space of removed items is not visible for an opposite write end until [`Self::commit`]/[`Self::sync`] is called or `Self` is dropped.
-/// Items inserted by an opposite write end is not visible for `Self` until [`Self::sync`] is called.
+/// Deprecated consumer wrapper. All removals are published immediately.
+#[deprecated(note = "use CachingCons; removals are now published immediately")]
 pub type FrozenCons<R> = Frozen<R, false, true>;
 
 impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
-    /// Create a new ring buffer frozen wrapper.
+    /// Create a compatibility wrapper with immediate publication.
     ///
-    /// Panics if wrapper with matching rights already exists.
+    /// Panics if an endpoint with matching rights already exists.
     pub fn new(rb: R) -> Self {
-        if P {
-            assert!(!unsafe { rb.rb().hold_write(true) });
-        }
-        if C {
-            assert!(!unsafe { rb.rb().hold_read(true) });
-        }
-        unsafe { Self::new_unchecked(rb) }
+        Self::from_caching(Caching::new(rb))
     }
 
-    /// Create wrapper without checking that such wrapper already exists.
-    ///
-    /// # Safety
-    ///
-    /// There must be maximum one instance of matching rights.
-    pub(crate) unsafe fn new_unchecked(rb: R) -> Self {
-        Self {
-            read: Cell::new(rb.rb().read_index()),
-            write: Cell::new(rb.rb().write_index()),
-            rb,
-        }
+    pub(crate) fn from_caching(inner: Caching<R, P, C>) -> Self {
+        Self { inner }
     }
 
     /// Get ring buffer observer.
     pub fn observe(&self) -> Obs<R> {
-        Obs::new(self.rb.clone())
+        self.inner.observe()
     }
 
-    unsafe fn close(&mut self) {
-        if P {
-            unsafe { self.rb().hold_write(false) };
-        }
-        if C {
-            unsafe { self.rb().hold_read(false) };
-        }
+    /// Does nothing: all changes have already been published.
+    #[deprecated(note = "changes are published immediately; remove this call")]
+    pub fn commit(&self) {}
+
+    /// Refresh the cached opposite index. Operations also refresh it as needed.
+    #[deprecated(note = "the caching endpoint fetches progress automatically; remove this call")]
+    pub fn fetch(&self) {
+        self.inner.fetch();
+    }
+
+    /// Refresh the cached opposite index. All local changes are already published.
+    #[deprecated(note = "changes are published immediately and progress is fetched automatically; remove this call")]
+    pub fn sync(&self) {
+        self.inner.fetch();
+    }
+}
+
+impl<R: RbRef> FrozenProd<R> {
+    /// Does nothing: inserted items are already published and cannot be retracted.
+    ///
+    /// Stage items outside the ring buffer if they may need to be discarded.
+    #[deprecated(
+        note = "discard is now a no-op because writes are immediately published; stage items outside the ring buffer to support rollback"
+    )]
+    pub fn discard(&mut self) {}
+}
+
+impl<R: RbRef, const P: bool, const C: bool> Based for Frozen<R, P, C> {
+    type Base = Caching<R, P, C>;
+
+    fn base(&self) -> &Self::Base {
+        &self.inner
+    }
+    fn base_mut(&mut self) -> &mut Self::Base {
+        &mut self.inner
     }
 }
 
@@ -83,15 +101,10 @@ impl<R: RbRef, const P: bool, const C: bool> Wrap for Frozen<R, P, C> {
     type RbRef = R;
 
     fn rb_ref(&self) -> &R {
-        &self.rb
+        self.inner.rb_ref()
     }
-    fn into_rb_ref(mut self) -> R {
-        self.commit();
-        unsafe {
-            self.close();
-            let this = ManuallyDrop::new(self);
-            ptr::read(&this.rb)
-        }
+    fn into_rb_ref(self) -> R {
+        self.inner.into_rb_ref()
     }
 }
 
@@ -106,102 +119,9 @@ impl<R: RbRef, const P: bool, const C: bool> AsMut<Self> for Frozen<R, P, C> {
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
-    /// Commit changes to the ring buffer.
-    pub fn commit(&self) {
-        unsafe {
-            if P {
-                self.rb().set_write_index(self.write.get());
-            }
-            if C {
-                self.rb().set_read_index(self.read.get());
-            }
-        }
-    }
-
-    /// Fetch changes from the ring buffer.
-    pub fn fetch(&self) {
-        if P {
-            self.read.set(self.rb().read_index());
-        }
-        if C {
-            self.write.set(self.rb().write_index());
-        }
-    }
-
-    /// Commit changes to and fetch updates from the ring buffer.
-    pub fn sync(&self) {
-        self.commit();
-        self.fetch();
-    }
-}
-
-impl<R: RbRef> FrozenProd<R> {
-    /// Discard new items pushed since last sync.
-    pub fn discard(&mut self) {
-        let last_tail = self.rb().write_index();
-        let (first, second) = unsafe { self.rb().unsafe_slices_mut(last_tail, self.write.get()) };
-        for item_mut in first.iter_mut().chain(second.iter_mut()) {
-            unsafe { item_mut.assume_init_drop() };
-        }
-        self.write.set(last_tail);
-    }
-}
-
-impl<R: RbRef, const P: bool, const C: bool> Observer for Frozen<R, P, C> {
-    type Item = <R::Rb as Observer>::Item;
-
-    #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.rb().capacity()
-    }
-
-    #[inline]
-    fn read_index(&self) -> usize {
-        self.read.get()
-    }
-    #[inline]
-    fn write_index(&self) -> usize {
-        self.write.get()
-    }
-
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        unsafe { self.rb().unsafe_slices(start, end) }
-    }
-    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        unsafe { self.rb().unsafe_slices_mut(start, end) }
-    }
-
-    #[inline]
-    fn read_is_held(&self) -> bool {
-        self.rb().read_is_held()
-    }
-    #[inline]
-    fn write_is_held(&self) -> bool {
-        self.rb().write_is_held()
-    }
-}
-
-impl<R: RbRef> Producer for FrozenProd<R> {
-    #[inline]
-    unsafe fn set_write_index(&self, value: usize) {
-        self.write.set(value);
-    }
-}
-
-impl<R: RbRef> Consumer for FrozenCons<R> {
-    #[inline]
-    unsafe fn set_read_index(&self, value: usize) {
-        self.read.set(value);
-    }
-}
-
-impl<R: RbRef, const P: bool, const C: bool> Drop for Frozen<R, P, C> {
-    fn drop(&mut self) {
-        self.commit();
-        unsafe { self.close() };
-    }
-}
+impl<R: RbRef, const P: bool, const C: bool> DelegateObserver for Frozen<R, P, C> {}
+impl<R: RbRef> DelegateProducer for FrozenProd<R> {}
+impl<R: RbRef> DelegateConsumer for FrozenCons<R> {}
 
 impl_producer_traits!(FrozenProd<R: RbRef>);
 impl_consumer_traits!(FrozenCons<R: RbRef>);

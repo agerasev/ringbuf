@@ -1,8 +1,14 @@
 //! Caching implementation.
 //!
 //! Fetches changes from the ring buffer only when there is no more slots to perform requested operation.
+//! Changes to this endpoint's index are always published before an operation returns.
 
-use super::{direct::Obs, frozen::Frozen, traits::Wrap};
+#[allow(deprecated)]
+use super::frozen::Frozen;
+use super::{
+    direct::{Direct, Obs},
+    traits::Wrap,
+};
 use crate::{
     rb::RbRef,
     traits::{
@@ -11,11 +17,13 @@ use crate::{
         producer::{Producer, impl_producer_traits},
     },
 };
-use core::{mem::MaybeUninit, num::NonZeroUsize};
+use core::{cell::Cell, mem::MaybeUninit, num::NonZeroUsize};
 
 /// Caching wrapper of a ring buffer.
 pub struct Caching<R: RbRef, const P: bool, const C: bool> {
-    frozen: Frozen<R, P, C>,
+    base: Direct<R, P, C>,
+    read: Cell<usize>,
+    write: Cell<usize>,
 }
 
 /// Caching producer implementation.
@@ -28,17 +36,36 @@ impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
     ///
     /// Panics if wrapper with matching rights already exists.
     pub fn new(rb: R) -> Self {
-        Self { frozen: Frozen::new(rb) }
+        Self::from_direct(Direct::new(rb))
+    }
+
+    pub(crate) fn from_direct(base: Direct<R, P, C>) -> Self {
+        Self {
+            read: Cell::new(base.read_index()),
+            write: Cell::new(base.write_index()),
+            base,
+        }
     }
 
     /// Get ring buffer observer.
     pub fn observe(&self) -> Obs<R> {
-        self.frozen.observe()
+        self.base.observe()
     }
 
-    /// Freeze current state.
+    /// Convert to the deprecated compatibility wrapper. Changes remain immediately visible.
+    #[deprecated(note = "use the caching endpoint directly; freezing no longer delays publication")]
+    #[allow(deprecated)]
     pub fn freeze(self) -> Frozen<R, P, C> {
-        self.frozen
+        Frozen::from_caching(self)
+    }
+
+    pub(crate) fn fetch(&self) {
+        if P {
+            self.read.set(self.base.read_index());
+        }
+        if C {
+            self.write.set(self.base.write_index());
+        }
     }
 }
 
@@ -46,10 +73,10 @@ impl<R: RbRef, const P: bool, const C: bool> Wrap for Caching<R, P, C> {
     type RbRef = R;
 
     fn rb_ref(&self) -> &R {
-        self.frozen.rb_ref()
+        self.base.rb_ref()
     }
     fn into_rb_ref(self) -> R {
-        self.frozen.into_rb_ref()
+        self.base.into_rb_ref()
     }
 }
 
@@ -69,76 +96,85 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Caching<R, P, C> {
 
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
-        self.frozen.capacity()
+        self.base.capacity()
     }
 
     #[inline]
     fn read_index(&self) -> usize {
         if P {
-            self.frozen.fetch();
+            self.fetch();
         }
-        self.frozen.read_index()
+        self.read.get()
     }
     #[inline]
     fn write_index(&self) -> usize {
         if C {
-            self.frozen.fetch();
+            self.fetch();
         }
-        self.frozen.write_index()
+        self.write.get()
     }
 
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        unsafe { self.frozen.unsafe_slices(start, end) }
+        unsafe { self.base.unsafe_slices(start, end) }
     }
     unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        unsafe { self.frozen.unsafe_slices_mut(start, end) }
+        unsafe { self.base.unsafe_slices_mut(start, end) }
     }
 
     #[inline]
     fn read_is_held(&self) -> bool {
-        self.frozen.read_is_held()
+        self.base.read_is_held()
     }
     #[inline]
     fn write_is_held(&self) -> bool {
-        self.frozen.write_is_held()
+        self.base.write_is_held()
     }
 }
 
 impl<R: RbRef> Producer for CachingProd<R> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
-        unsafe { self.frozen.set_write_index(value) };
-        self.frozen.commit();
+        self.write.set(value);
+        unsafe { self.base.set_write_index(value) };
     }
 
     fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
-        if self.frozen.is_full() {
-            self.frozen.fetch();
+        let capacity = self.capacity().get();
+        if self.write.get().abs_diff(self.read.get()) == capacity {
+            self.fetch();
         }
-        let r = self.frozen.try_push(elem);
-        if r.is_ok() {
-            self.frozen.commit();
+        if self.write.get().abs_diff(self.read.get()) == capacity {
+            return Err(elem);
         }
-        r
+        let write = self.write.get();
+        // The cached read index only underestimates the available space.
+        unsafe {
+            self.unsafe_slices_mut(write, write + 1).0.get_unchecked_mut(0).write(elem);
+            self.advance_write_index(1);
+        }
+        Ok(())
     }
 }
 
 impl<R: RbRef> Consumer for CachingCons<R> {
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
-        unsafe { self.frozen.set_read_index(value) };
-        self.frozen.commit();
+        self.read.set(value);
+        unsafe { self.base.set_read_index(value) };
     }
 
     fn try_pop(&mut self) -> Option<<Self as Observer>::Item> {
-        if self.frozen.is_empty() {
-            self.frozen.fetch();
+        if self.read.get() == self.write.get() {
+            self.fetch();
         }
-        let r = self.frozen.try_pop();
-        if r.is_some() {
-            self.frozen.commit();
+        if self.read.get() == self.write.get() {
+            return None;
         }
-        r
+        let read = self.read.get();
+        // Move the item out before publishing the slot for reuse.
+        let item = unsafe { self.unsafe_slices(read, read + 1).0.get_unchecked(0).assume_init_read() };
+        unsafe { self.advance_read_index(1) };
+        Some(item)
     }
 }
 
