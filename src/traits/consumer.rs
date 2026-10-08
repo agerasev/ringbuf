@@ -3,7 +3,11 @@ use super::{
     utils::{add_mod, modulus},
 };
 use crate::utils::{move_uninit_slice, slice_as_uninit_mut, slice_assume_init_mut, slice_assume_init_ref};
-use core::{iter::Chain, mem::MaybeUninit, ptr, slice};
+use core::{
+    iter::Chain,
+    mem::{self, MaybeUninit},
+    ptr, slice,
+};
 #[cfg(feature = "std")]
 use std::io::{self, Write};
 
@@ -216,6 +220,14 @@ pub trait Consumer: Observer {
     /// # }
     /// ```
     fn skip(&mut self, count: usize) -> usize {
+        if !mem::needs_drop::<Self::Item>() {
+            // No destructor can run or unwind, so release all slots at once
+            // instead of visiting each item.
+            let count = usize::min(count, self.occupied_len());
+            unsafe { self.advance_read_index(count) };
+            return count;
+        }
+
         struct Guard<'a, C: Consumer + ?Sized> {
             consumer: &'a mut C,
             count: usize,
