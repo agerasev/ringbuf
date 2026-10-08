@@ -200,11 +200,14 @@ pub trait Consumer: Observer {
         left.iter_mut().chain(right.iter_mut())
     }
 
-    /// Removes at most `count` and at least `min(count, Self::len())` items from the buffer and safely drops them.
+    /// Removes and drops at most `count` items, returning the number removed.
     ///
-    /// If there is no concurring producer activity then exactly `min(count, Self::len())` items are removed.
+    /// Without concurrent producer activity, removes exactly `min(count, self.occupied_len())` items,
+    /// where the length is measured before removal. Items inserted after the occupied range is read are left in the buffer.
     ///
-    /// Returns the number of deleted items.
+    /// Takes constant time for item types for which [`core::mem::needs_drop`] returns false.
+    /// Otherwise, removed items are dropped in order and their slots remain occupied until destruction finishes.
+    /// If a destructor panics, that item and earlier items are removed; later items remain in the buffer.
     ///
     /// ```
     /// # extern crate ringbuf;
@@ -251,9 +254,9 @@ pub trait Consumer: Observer {
         guard.count
     }
 
-    /// Removes all items from the buffer and safely drops them.
+    /// Removes and drops all items present when the occupied range is read.
     ///
-    /// Returns the number of deleted items.
+    /// Returns the number of deleted items. See [`Self::skip`] for complexity and behavior when a destructor panics.
     fn clear(&mut self) -> usize {
         self.skip(usize::MAX)
     }

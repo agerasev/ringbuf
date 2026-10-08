@@ -27,6 +27,9 @@
 //! All completed operations publish their index updates immediately, including each step of [`pop_iter`](`traits::Consumer::pop_iter`).
 //! The former frozen endpoints are deprecated compatibility wrappers; see [`wrap::frozen`] for migration details.
 //!
+//! [`skip`](`traits::Consumer::skip`) and [`clear`](`traits::Consumer::clear`) take constant time for items without destructors.
+//! Items that need destruction are dropped individually, with each slot kept occupied until its destructor finishes.
+//!
 //! For single-threaded usage [`LocalRb`] is recommended because it is slightly faster than [`SharedRb`] due to absence of CPU cache synchronization.
 //!
 //! # Examples
@@ -82,7 +85,7 @@ assert_eq!(cons.try_pop(), None);
     doc = r##"
 ## Overwrite
 
-Ring buffer can be used in overwriting mode when insertion overwrites the latest element if the buffer is full.
+Ring buffer can be used in overwriting mode when insertion overwrites the oldest element if the buffer is full.
 
 ```rust
 use ringbuf::{traits::*, HeapRb};

@@ -40,6 +40,9 @@ At first you need to create the ring buffer itself. `HeapRb` is recommended but 
 After the ring buffer is created it may be splitted into pair of `Producer` and `Consumer`.
 Producer is used to insert items to the ring buffer, consumer - to remove items from it.
 
+Capacity must be in `1..=usize::MAX / 2`, including for zero-sized items.
+Constructors panic if the capacity is zero or exceeds this limit.
+
 # Types
 
 There are several types of ring buffers provided:
@@ -54,11 +57,28 @@ You may also provide your own generic parameters.
 # Performance
 
 `SharedRb` needs to synchronize CPU cache between CPU cores. This synchronization has some overhead.
-To avoid multiple unnecessary synchronizations you may use methods that operate many items at once
-(`push_slice`/`push_iter`, `pop_slice`/`pop_iter`, etc.)
-or you can `freeze` producer or consumer and then synchronize threads manually (see items in `frozen` module).
+To avoid multiple unnecessary synchronizations you may use methods that operate many items at once(`push_slice`/`push_iter`, `pop_slice`, etc.).
+Caching endpoints also avoid repeatedly fetching the opposite endpoint's index when progress is possible.
+All completed operations publish their index updates immediately, including each step of `pop_iter`.
+
+`skip` and `clear` take constant time for items without destructors, such as `u8`.
+Items that need destruction are dropped individually, with each slot kept occupied until its destructor finishes.
 
 For single-threaded usage `LocalRb` is recommended because it is slightly faster than `SharedRb` due to absence of CPU cache synchronization.
+
+## Migrating from deferred publication
+
+Deferred publication in frozen endpoints and `PopIter` could lead to double drops if they were forgotten with `core::mem::forget`.
+Publication no longer depends on running their destructors.
+
+`Frozen`, `FrozenProd`, `FrozenCons`, and `freeze()` are deprecated compatibility APIs. Their removal is reserved for a future breaking release.
+Existing calls remain available, but code relying on delayed visibility or rollback must be updated:
+
++ Use `CachingProd` and `CachingCons` directly and remove calls to `freeze`, `commit`, `fetch`, and `sync`.
+  Operations publish their changes immediately and fetch the opposite endpoint's progress as needed.
++ `FrozenProd::discard` is now a no-op. Stage items outside the ring buffer if they may need to be discarded, and insert them only when ready to publish.
++ `PopIter` releases each slot as soon as it yields the item. Its `commit` method is deprecated and does nothing.
+  It still yields only the items present when it was created. Use `pop_slice` to batch removals.
 
 ## Examples
 
@@ -101,7 +121,7 @@ assert_eq!(cons.try_pop(), None);
 
 ## Overwrite
 
-Ring buffer can be used in overwriting mode when insertion overwrites the latest element if the buffer is full.
+Ring buffer can be used in overwriting mode when insertion overwrites the oldest element if the buffer is full.
 
 ```rust
 use ringbuf::{traits::*, HeapRb};

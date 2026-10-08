@@ -1,8 +1,12 @@
 //! Deprecated compatibility wrappers for caching endpoints.
 //!
 //! All writes and removals are now published immediately. Use [`CachingProd`](super::CachingProd)
-//! and [`CachingCons`](super::CachingCons) directly instead; these wrappers will be removed in the
-//! next breaking release.
+//! and [`CachingCons`](super::CachingCons) directly instead. These wrappers remain available;
+//! their removal is reserved for a future breaking release.
+//!
+//! Deferred publication could cause double drops if an endpoint was forgotten with [`core::mem::forget`].
+//! Publication no longer depends on running its destructor. Code relying on delayed visibility or
+//! rollback must be updated even though the compatibility API remains available.
 //!
 //! # Migration
 //!
