@@ -19,3 +19,13 @@ pub unsafe trait Endpoint {
     /// Destructure into underlying ring buffer reference.
     fn into_rb_handle(self) -> Self::Handle;
 }
+
+unsafe impl<E: Endpoint> Endpoint for &mut E {
+    type Handle = E::Handle;
+    fn rb_handle(&self) -> &Self::Handle {
+        (**self).rb_handle()
+    }
+    fn into_rb_handle(self) -> Self::Handle {
+        self.rb_handle().clone()
+    }
+}

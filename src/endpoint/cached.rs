@@ -23,6 +23,7 @@ use core::{cell::Cell, mem::MaybeUninit, num::NonZeroUsize};
 pub struct Cached<R: RbHandle, const P: bool, const C: bool> {
     base: Direct<R, P, C>,
     read: Cell<usize>,
+    refresh: Cell<bool>,
     write: Cell<usize>,
 }
 
@@ -47,6 +48,7 @@ impl<R: RbHandle, const P: bool, const C: bool> Cached<R, P, C> {
     pub fn from_direct(base: Direct<R, P, C>) -> Self {
         Self {
             read: Cell::new(base.read_index()),
+            refresh: Cell::new(true),
             write: Cell::new(base.write_index()),
             base,
         }
@@ -57,11 +59,12 @@ impl<R: RbHandle, const P: bool, const C: bool> Cached<R, P, C> {
         self.base.observe()
     }
 
-    /// Convert to the deprecated compatibility wrapper. Changes remain immediately visible.
-    #[deprecated(note = "use the caching endpoint directly; freezing no longer delays publication")]
+    /// Compatibility spelling for conversion to a deferred endpoint.
+    #[deprecated(note = "use into_deferred")]
     #[allow(deprecated)]
     pub fn freeze(self) -> Frozen<R, P, C> {
-        Frozen::from_cached(self)
+        self.refresh.set(true);
+        unsafe { super::Deferred::from_endpoint(self) }
     }
 
     pub(crate) fn fetch(&self) {
@@ -106,6 +109,9 @@ impl<R: RbHandle, const P: bool, const C: bool> Observer for Cached<R, P, C> {
 
     #[inline]
     fn read_index(&self) -> usize {
+        if C && self.refresh.get() {
+            self.read.set(self.base.read_index());
+        }
         if P {
             self.fetch();
         }
@@ -113,6 +119,9 @@ impl<R: RbHandle, const P: bool, const C: bool> Observer for Cached<R, P, C> {
     }
     #[inline]
     fn write_index(&self) -> usize {
+        if P && self.refresh.get() {
+            self.write.set(self.base.write_index());
+        }
         if C {
             self.fetch();
         }
@@ -145,6 +154,7 @@ unsafe impl<R: RbHandle, const P: bool, const C: bool> crate::traits::RawObserve
 
 impl<R: RbHandle> Producer for CachedProd<R> {
     fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
+        unsafe { self.prepare_write() };
         let capacity = self.capacity().get();
         if self.write.get().abs_diff(self.read.get()) == capacity {
             self.fetch();
@@ -163,6 +173,13 @@ impl<R: RbHandle> Producer for CachedProd<R> {
 }
 
 unsafe impl<R: RbHandle> crate::traits::RawProducer for CachedProd<R> {
+    unsafe fn prepare_write(&mut self) {
+        if self.refresh.replace(false) {
+            self.read.set(self.base.read_released_index());
+            self.write.set(self.base.write_index());
+        }
+    }
+
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         self.write.set(value);
@@ -189,8 +206,11 @@ impl<R: RbHandle> Consumer for CachedCons<R> {
 
 unsafe impl<R: RbHandle> crate::traits::RawConsumer for CachedCons<R> {
     unsafe fn prepare_read(&mut self) {
-        unsafe { self.base.prepare_read() };
-        self.read.set(self.base.read_index());
+        if self.refresh.replace(false) {
+            unsafe { self.base.prepare_read() };
+            self.read.set(self.base.read_index());
+            self.write.set(self.base.write_index());
+        }
     }
 
     #[inline]
@@ -208,3 +228,29 @@ use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};
 
 #[allow(unused_imports)]
 use crate::traits::Presence;
+
+impl<R: RbHandle> Cached<R, true, false> {
+    /// Defer publication and acquisition until explicitly synchronized.
+    pub fn into_deferred(self) -> super::DeferredProd<Self> {
+        self.refresh.set(true);
+        unsafe { super::Deferred::from_endpoint(self) }
+    }
+    /// Temporarily defer this endpoint. Drop commits; forgetting may leak items.
+    pub fn defer(&mut self) -> super::DeferredProd<&mut Self> {
+        self.refresh.set(true);
+        unsafe { super::Deferred::from_endpoint(self) }
+    }
+}
+
+impl<R: RbHandle> Cached<R, false, true> {
+    /// Defer publication and acquisition until explicitly synchronized.
+    pub fn into_deferred(self) -> super::DeferredCons<Self> {
+        self.refresh.set(true);
+        unsafe { super::Deferred::from_endpoint(self) }
+    }
+    /// Temporarily defer this endpoint. Drop commits; forgetting may leak items.
+    pub fn defer(&mut self) -> super::DeferredCons<&mut Self> {
+        self.refresh.set(true);
+        unsafe { super::Deferred::from_endpoint(self) }
+    }
+}

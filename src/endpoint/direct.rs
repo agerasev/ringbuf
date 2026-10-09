@@ -81,11 +81,12 @@ impl<R: RbHandle, const P: bool, const C: bool> Direct<R, P, C> {
         Obs { rb: self.rb.clone() }
     }
 
-    /// Convert to the deprecated compatibility wrapper. Changes remain immediately visible.
-    #[deprecated(note = "use the endpoint directly; freezing no longer delays publication")]
+    /// Compatibility spelling for conversion to a deferred endpoint.
+    #[deprecated(note = "use into_deferred")]
     #[allow(deprecated)]
     pub fn freeze(self) -> Frozen<R, P, C> {
-        Frozen::from_cached(Cached::from_direct(self))
+        let base = Cached::from_direct(self);
+        unsafe { super::Deferred::from_endpoint(base) }
     }
 
     /// # Safety
@@ -216,3 +217,25 @@ use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};
 
 #[allow(unused_imports)]
 use crate::traits::Presence;
+
+impl<R: RbHandle> Direct<R, true, false> {
+    /// Defer publication and acquisition until explicitly synchronized.
+    pub fn into_deferred(self) -> super::DeferredProd<Self> {
+        unsafe { super::Deferred::from_endpoint(self) }
+    }
+    /// Temporarily defer this endpoint. Drop commits; forgetting may leak items.
+    pub fn defer(&mut self) -> super::DeferredProd<&mut Self> {
+        unsafe { super::Deferred::from_endpoint(self) }
+    }
+}
+
+impl<R: RbHandle> Direct<R, false, true> {
+    /// Defer publication and acquisition until explicitly synchronized.
+    pub fn into_deferred(self) -> super::DeferredCons<Self> {
+        unsafe { super::Deferred::from_endpoint(self) }
+    }
+    /// Temporarily defer this endpoint. Drop commits; forgetting may leak items.
+    pub fn defer(&mut self) -> super::DeferredCons<&mut Self> {
+        unsafe { super::Deferred::from_endpoint(self) }
+    }
+}

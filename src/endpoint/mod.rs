@@ -3,7 +3,7 @@ pub mod direct;
 pub mod frozen;
 mod traits;
 
-pub use cached::{CachedCons, CachedProd};
+pub use cached::{Cached, CachedCons, CachedProd};
 pub use cached::{CachedCons as Cons, CachedProd as Prod};
 pub use direct::Obs;
 pub use direct::{Cons as DirectCons, Prod as DirectProd};
@@ -50,3 +50,6 @@ pub unsafe fn split_unchecked<R: crate::rb::RbHandle>(rb: R) -> (CachedProd<R>, 
 pub use cached as caching;
 pub use cached::{CachedCons as CachingCons, CachedProd as CachingProd};
 pub use traits::Endpoint as Wrap;
+
+pub mod deferred;
+pub use deferred::{Deferred, DeferredCons, DeferredProd};

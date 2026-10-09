@@ -7,7 +7,7 @@ pub mod producer;
 /// Owning ring buffer functionality.
 pub mod ring_buffer;
 mod split;
-mod utils;
+pub(crate) mod utils;
 
 pub use consumer::Consumer;
 pub use observer::Observer;

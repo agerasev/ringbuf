@@ -152,9 +152,9 @@ fn forgotten_pop_iter_drops_each_item_once() {
                     }
                     _ => {
                         let (_prod, cons) = rb.split_ref();
-                        let mut cons = cons.freeze();
+                        let mut cons = cons.into_deferred();
                         consume!(cons);
-                        mem::forget(cons);
+                        drop(cons);
                     }
                 }
                 assert_eq!(rb.occupied_len(), 3 - count);

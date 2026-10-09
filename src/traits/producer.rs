@@ -48,6 +48,7 @@ pub trait Producer: Observer + crate::traits::RawProducer {
     ///
     /// If buffer is full returns an `Err` containing the item that hasn't been appended.
     fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
+        unsafe { self.prepare_write() };
         if !self.is_full() {
             unsafe {
                 self.vacant_slices_mut().0.get_unchecked_mut(0).write(elem);
@@ -67,17 +68,27 @@ pub trait Producer: Observer + crate::traits::RawProducer {
     /// *Inserted items are committed to the ring buffer all at once in the end,*
     /// *e.g. when buffer is full or iterator has ended.*
     fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, mut iter: I) -> usize {
-        let (left, right) = self.vacant_slices_mut();
-        let mut count = 0;
+        struct Publish<'a, P: Producer + ?Sized> {
+            producer: &'a mut P,
+            count: usize,
+        }
+        impl<P: Producer + ?Sized> Drop for Publish<'_, P> {
+            fn drop(&mut self) {
+                unsafe { self.producer.advance_write_index(self.count) };
+            }
+        }
+        let mut guard = Publish { producer: self, count: 0 };
+        let (left, right) = guard.producer.vacant_slices_mut();
         for place in left.iter_mut().chain(right.iter_mut()) {
             match iter.next() {
-                Some(elem) => unsafe { place.as_mut_ptr().write(elem) },
+                Some(elem) => {
+                    place.write(elem);
+                    guard.count += 1;
+                }
                 None => break,
             }
-            count += 1;
         }
-        unsafe { self.advance_write_index(count) };
-        count
+        guard.count
     }
 
     /// Appends items from slice to the ring buffer.
@@ -186,6 +197,10 @@ unsafe impl<D: DelegateProducer> crate::traits::RawProducer for D
 where
     D::Base: Producer,
 {
+    unsafe fn prepare_write(&mut self) {
+        unsafe { self.base_mut().prepare_write() };
+    }
+
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         unsafe { self.base().set_write_index(value) }

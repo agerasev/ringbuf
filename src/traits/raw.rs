@@ -38,6 +38,11 @@ pub unsafe trait RawObserver: Observer {
 /// vacant slots. Publication must finish before returning or unwinding, including
 /// when a notification panics. Safe Producer overrides must preserve these rules.
 pub unsafe trait RawProducer: RawObserver {
+    /// Recover cached state after a deferred borrow has ended or been forgotten.
+    /// # Safety
+    /// Caller has exclusive producer access and no active deferred producer.
+    unsafe fn prepare_write(&mut self) {}
+
     /// Set read index.
     ///
     /// # Safety
