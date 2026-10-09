@@ -118,11 +118,7 @@ impl<I: Instant> Iterator for TimeoutIter<I> {
         match self.timeout {
             Some(dur) => {
                 let elapsed = self.start.elapsed();
-                if dur > elapsed {
-                    Some(Some(dur - elapsed))
-                } else {
-                    None
-                }
+                if dur > elapsed { Some(Some(dur - elapsed)) } else { None }
             }
             None => Some(None),
         }

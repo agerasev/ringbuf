@@ -61,7 +61,7 @@ impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
 
     pub(crate) fn fetch(&self) {
         if P {
-            self.read.set(self.base.read_index());
+            self.read.set(self.base.read_released_index());
         }
         if C {
             self.write.set(self.base.write_index());
@@ -114,13 +114,6 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Caching<R, P, C> {
         self.write.get()
     }
 
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        unsafe { self.base.unsafe_slices(start, end) }
-    }
-    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        unsafe { self.base.unsafe_slices_mut(start, end) }
-    }
-
     #[inline]
     fn read_is_held(&self) -> bool {
         self.base.read_is_held()
@@ -131,13 +124,16 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Caching<R, P, C> {
     }
 }
 
-impl<R: RbRef> Producer for CachingProd<R> {
-    #[inline]
-    unsafe fn set_write_index(&self, value: usize) {
-        self.write.set(value);
-        unsafe { self.base.set_write_index(value) };
+unsafe impl<R: RbRef, const P: bool, const C: bool> crate::traits::RawObserver for Caching<R, P, C> {
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        unsafe { self.base.unsafe_slices(start, end) }
     }
+    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        unsafe { self.base.unsafe_slices_mut(start, end) }
+    }
+}
 
+impl<R: RbRef> Producer for CachingProd<R> {
     fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
         let capacity = self.capacity().get();
         if self.write.get().abs_diff(self.read.get()) == capacity {
@@ -156,14 +152,17 @@ impl<R: RbRef> Producer for CachingProd<R> {
     }
 }
 
-impl<R: RbRef> Consumer for CachingCons<R> {
+unsafe impl<R: RbRef> crate::traits::RawProducer for CachingProd<R> {
     #[inline]
-    unsafe fn set_read_index(&self, value: usize) {
-        self.read.set(value);
-        unsafe { self.base.set_read_index(value) };
+    unsafe fn set_write_index(&self, value: usize) {
+        self.write.set(value);
+        unsafe { self.base.set_write_index(value) };
     }
+}
 
+impl<R: RbRef> Consumer for CachingCons<R> {
     fn try_pop(&mut self) -> Option<<Self as Observer>::Item> {
+        unsafe { self.prepare_read() };
         if self.read.get() == self.write.get() {
             self.fetch();
         }
@@ -178,5 +177,21 @@ impl<R: RbRef> Consumer for CachingCons<R> {
     }
 }
 
+unsafe impl<R: RbRef> crate::traits::RawConsumer for CachingCons<R> {
+    unsafe fn prepare_read(&mut self) {
+        unsafe { self.base.prepare_read() };
+        self.read.set(self.base.read_index());
+    }
+
+    #[inline]
+    unsafe fn set_read_index(&self, value: usize) {
+        self.read.set(value);
+        unsafe { self.base.set_read_index(value) };
+    }
+}
+
 impl_producer_traits!(CachingProd<R: RbRef>);
 impl_consumer_traits!(CachingCons<R: RbRef>);
+
+#[allow(unused_imports)]
+use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};

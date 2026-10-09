@@ -1,5 +1,5 @@
 use super::Rb;
-use crate::{storage::Array, traits::*, CachingCons, CachingProd, Obs};
+use crate::{CachingCons, CachingProd, Obs, storage::Array, traits::*};
 
 #[test]
 fn split_and_drop() {

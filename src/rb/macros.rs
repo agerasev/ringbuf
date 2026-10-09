@@ -1,12 +1,12 @@
 macro_rules! rb_impl_init {
-    ($type:ident) => {
-        impl<T, const N: usize> Default for $type<crate::storage::Array<T, N>> {
+    ($type:ident $(, $param:ident : $bound:ident)*) => {
+        impl<T, const N: usize $(, $param: $bound)*> Default for $type<crate::storage::Array<T, N> $(, $param)*> {
             fn default() -> Self {
                 unsafe { Self::from_raw_parts(crate::utils::uninit_array().into(), usize::default(), usize::default()) }
             }
         }
 
-        impl<T, const N: usize> From<[T; N]> for $type<crate::storage::Array<T, N>> {
+        impl<T, const N: usize $(, $param: $bound)*> From<[T; N]> for $type<crate::storage::Array<T, N> $(, $param)*> {
             fn from(value: [T; N]) -> Self {
                 let (read, write) = (0, value.len());
                 unsafe { Self::from_raw_parts(crate::utils::array_to_uninit(value).into(), read, write) }
@@ -14,7 +14,7 @@ macro_rules! rb_impl_init {
         }
 
         #[cfg(feature = "alloc")]
-        impl<T> $type<crate::storage::Heap<T>> {
+        impl<T $(, $param: $bound)*> $type<crate::storage::Heap<T> $(, $param)*> {
             /// Creates a new instance of a ring buffer.
             ///
             /// *Panics if allocation failed, `capacity` is zero, or it exceeds `usize::MAX / 2`.*
@@ -35,7 +35,7 @@ macro_rules! rb_impl_init {
         }
 
         #[cfg(feature = "alloc")]
-        impl<T> From<alloc::vec::Vec<T>> for $type<crate::storage::Heap<T>> {
+        impl<T $(, $param: $bound)*> From<alloc::vec::Vec<T>> for $type<crate::storage::Heap<T> $(, $param)*> {
             fn from(value: alloc::vec::Vec<T>) -> Self {
                 let (read, write) = (0, value.len());
                 unsafe { Self::from_raw_parts(crate::utils::vec_to_uninit(value).into(), read, write) }
@@ -43,7 +43,7 @@ macro_rules! rb_impl_init {
         }
 
         #[cfg(feature = "alloc")]
-        impl<T> From<alloc::boxed::Box<[T]>> for $type<crate::storage::Heap<T>> {
+        impl<T $(, $param: $bound)*> From<alloc::boxed::Box<[T]>> for $type<crate::storage::Heap<T> $(, $param)*> {
             fn from(value: alloc::boxed::Box<[T]>) -> Self {
                 let (read, write) = (0, value.len());
                 unsafe { Self::from_raw_parts(crate::utils::boxed_slice_to_uninit(value).into(), read, write) }

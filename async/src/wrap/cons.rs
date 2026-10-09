@@ -16,7 +16,7 @@ use ringbuf::{
 #[cfg(feature = "std")]
 use std::io;
 
-impl<R: AsyncRbRef> DelegateConsumer for AsyncCons<R> {}
+unsafe impl<R: AsyncRbRef> DelegateConsumer for AsyncCons<R> {}
 
 impl<R: AsyncRbRef> AsyncConsumer for AsyncCons<R> {
     fn register_waker(&self, waker: &core::task::Waker) {

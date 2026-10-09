@@ -1,7 +1,7 @@
 use crate::{
+    HeapRb,
     producer::Producer,
     traits::{Consumer, Observer, Split},
-    HeapRb,
 };
 
 #[test]

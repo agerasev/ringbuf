@@ -1,4 +1,4 @@
-use crate::{storage::Heap, traits::*, SharedRb};
+use crate::{SharedRb, storage::Heap, traits::*};
 use std::{cell::Cell, thread, thread::sleep, time::Duration, vec::Vec};
 
 fn yield_() {

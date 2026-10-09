@@ -1,6 +1,6 @@
 #![no_std]
 
-use ringbuf::{traits::*, StaticRb};
+use ringbuf::{StaticRb, traits::*};
 
 fn main() {
     const RB_SIZE: usize = 1;

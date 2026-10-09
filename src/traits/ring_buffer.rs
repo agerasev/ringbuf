@@ -5,24 +5,7 @@ use super::{
 };
 
 /// An abstract ring buffer that exclusively owns its data.
-pub trait RingBuffer: Observer + Consumer + Producer {
-    /// Tell whether read end of the ring buffer is held by consumer or not.
-    ///
-    /// Returns old value.
-    ///
-    /// # Safety
-    ///
-    /// Must not be set to `false` while consumer exists.
-    unsafe fn hold_read(&self, flag: bool) -> bool;
-    /// Tell whether write end of the ring buffer is held by producer or not.
-    ///
-    /// Returns old value.
-    ///
-    /// # Safety
-    ///
-    /// Must not be set to `false` while producer exists.
-    unsafe fn hold_write(&self, flag: bool) -> bool;
-
+pub trait RingBuffer: Observer + Consumer + Producer + crate::traits::RawRingBuffer {
     /// Pushes an item to the ring buffer overwriting the least recent item if the buffer is full.
     ///
     /// Returns overwritten item if overwriting took place.
@@ -61,7 +44,7 @@ pub trait RingBuffer: Observer + Consumer + Producer {
 }
 
 /// Trait used for delegating owning ring buffer methods.
-pub trait DelegateRingBuffer: DelegateProducer + DelegateConsumer
+pub unsafe trait DelegateRingBuffer: DelegateProducer + DelegateConsumer
 where
     Self::Base: RingBuffer,
 {
@@ -71,13 +54,6 @@ impl<D: DelegateRingBuffer> RingBuffer for D
 where
     D::Base: RingBuffer,
 {
-    unsafe fn hold_read(&self, flag: bool) -> bool {
-        unsafe { self.base().hold_read(flag) }
-    }
-    unsafe fn hold_write(&self, flag: bool) -> bool {
-        unsafe { self.base().hold_write(flag) }
-    }
-
     #[inline]
     fn push_overwrite(&mut self, elem: Self::Item) -> Option<Self::Item> {
         self.base_mut().push_overwrite(elem)
@@ -96,3 +72,25 @@ where
         self.base_mut().push_slice_overwrite(elems)
     }
 }
+
+unsafe impl<D: DelegateRingBuffer> crate::traits::RawRingBuffer for D
+where
+    D::Base: RingBuffer,
+{
+    unsafe fn set_read_claimed(&self, value: usize) {
+        unsafe { self.base().set_read_claimed(value) };
+    }
+    unsafe fn set_read_released(&self, value: usize) {
+        unsafe { self.base().set_read_released(value) };
+    }
+
+    unsafe fn hold_read(&self, flag: bool) -> bool {
+        unsafe { self.base().hold_read(flag) }
+    }
+    unsafe fn hold_write(&self, flag: bool) -> bool {
+        unsafe { self.base().hold_write(flag) }
+    }
+}
+
+#[allow(unused_imports)]
+use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};

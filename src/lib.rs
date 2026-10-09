@@ -163,6 +163,8 @@ extern crate std;
 
 /// Shortcuts for frequently used types.
 mod alias;
+pub mod indices;
+pub mod markers;
 /// Ring buffer implementations.
 pub mod rb;
 /// Storage types.
@@ -180,7 +182,7 @@ pub mod wrap;
 mod tests;
 
 pub use alias::*;
-pub use rb::{LocalRb, SharedRb};
+pub use rb::{LocalRb, Rb, SharedRb};
 pub use traits::{consumer, producer};
 pub use transfer::transfer;
 pub use wrap::{CachingCons, CachingProd, Cons, Obs, Prod};

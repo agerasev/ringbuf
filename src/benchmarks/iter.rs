@@ -1,5 +1,5 @@
-use crate::{traits::*, HeapRb};
-use test::{black_box, Bencher};
+use crate::{HeapRb, traits::*};
+use test::{Bencher, black_box};
 
 const RB_SIZE: usize = 1024;
 
@@ -34,3 +34,6 @@ fn pop_iter_x1000(b: &mut Bencher) {
         unsafe { prod.advance_write_index(1000) };
     });
 }
+
+#[allow(unused_imports)]
+use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};

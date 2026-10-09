@@ -8,7 +8,7 @@ use super::{caching::Caching, traits::Wrap};
 use crate::{
     rb::RbRef,
     traits::{
-        Observer, RingBuffer,
+        Observer,
         consumer::{Consumer, impl_consumer_traits},
         producer::{Producer, impl_producer_traits},
     },
@@ -112,18 +112,17 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Direct<R, P, C> {
     fn read_index(&self) -> usize {
         self.rb().read_index()
     }
+    fn read_released_index(&self) -> usize {
+        self.rb().read_released_index()
+    }
+    fn read_claimed_index(&self) -> usize {
+        self.rb().read_claimed_index()
+    }
     #[inline]
     fn write_index(&self) -> usize {
         self.rb().write_index()
     }
-    #[inline]
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        unsafe { self.rb().unsafe_slices(start, end) }
-    }
-    #[inline]
-    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        unsafe { self.rb().unsafe_slices_mut(start, end) }
-    }
+
     #[inline]
     fn read_is_held(&self) -> bool {
         self.rb().read_is_held()
@@ -134,14 +133,33 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Direct<R, P, C> {
     }
 }
 
-impl<R: RbRef> Producer for Prod<R> {
+unsafe impl<R: RbRef, const P: bool, const C: bool> crate::traits::RawObserver for Direct<R, P, C> {
+    #[inline]
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        unsafe { self.rb().unsafe_slices(start, end) }
+    }
+    #[inline]
+    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        unsafe { self.rb().unsafe_slices_mut(start, end) }
+    }
+}
+
+impl<R: RbRef> Producer for Prod<R> {}
+
+unsafe impl<R: RbRef> crate::traits::RawProducer for Prod<R> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         unsafe { self.rb().set_write_index(value) }
     }
 }
 
-impl<R: RbRef> Consumer for Cons<R> {
+impl<R: RbRef> Consumer for Cons<R> {}
+
+unsafe impl<R: RbRef> crate::traits::RawConsumer for Cons<R> {
+    unsafe fn prepare_read(&mut self) {
+        unsafe { self.rb().set_read_released(self.rb().read_claimed_index()) };
+    }
+
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
         unsafe { self.rb().set_read_index(value) }
@@ -156,3 +174,6 @@ impl<R: RbRef, const P: bool, const C: bool> Drop for Direct<R, P, C> {
 
 impl_producer_traits!(Prod<R: RbRef>);
 impl_consumer_traits!(Cons<R: RbRef>);
+
+#[allow(unused_imports)]
+use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};

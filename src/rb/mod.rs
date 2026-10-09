@@ -1,3 +1,5 @@
+mod core;
+pub use core::Rb;
 /// Single-threaded ring buffer implementation.
 pub mod local;
 mod macros;

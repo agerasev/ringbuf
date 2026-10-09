@@ -84,7 +84,7 @@ provide an alternative backing handle. Borrowed splitting does not allocate.
 ## Milestones
 
 - [x] 1. Contracts, executable ownership model, and baseline checks.
-- [ ] 2. One generic core, index policies, and raw/safe interfaces.
+- [x] 2. One generic core, index policies, and raw/safe interfaces.
 - [ ] 3. Configurable ownership markers and handle acquisition.
 - [ ] 4. Extensible deferred endpoints, undo, and forget/panic recovery.
 - [ ] 5. Exact/partial bulk operations and fallible construction.
@@ -94,3 +94,8 @@ provide an alternative backing handle. Borrowed splitting does not allocate.
 Milestone 1 validation: `cargo test --workspace --offline` passes (100 unit
 tests and 5 doctests); `cargo test --offline --test ownership_model` passes
 all three exhaustive small-capacity cursor models.
+
+Milestone 2 validation: workspace tests, local-policy tests, and a no-default-feature
+build pass. Data views now require an exclusive borrow, preventing shared backing
+handles from aliasing an active endpoint's data. Public raw and delegation traits
+have explicit unsafe implementation contracts.

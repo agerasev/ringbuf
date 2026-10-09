@@ -1,5 +1,5 @@
 #![no_std]
-use async_ringbuf::{traits::*, AsyncStaticRb};
+use async_ringbuf::{AsyncStaticRb, traits::*};
 use futures::{executor::block_on, join};
 
 async fn async_main() {

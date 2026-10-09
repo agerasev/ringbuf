@@ -13,32 +13,17 @@ use std::{
 };
 
 /// Producer part of ring buffer.
-pub trait Producer: Observer {
-    /// Set read index.
-    ///
-    /// # Safety
-    ///
-    /// Index must go only forward, never backward. It is recommended to use [`Self::advance_write_index`] instead.
-    ///
-    /// All slots with index less than `value` must be initialized until write index, all slots with index equal or greater - must be uninitialized.
-    unsafe fn set_write_index(&self, value: usize);
-
-    /// Moves `write` pointer by `count` places forward.
-    ///
-    /// # Safety
-    ///
-    /// First `count` items in free space must be initialized.
-    ///
-    /// Must not be called concurrently.
-    unsafe fn advance_write_index(&self, count: usize) {
-        unsafe { self.set_write_index(add_mod(self.write_index(), count, modulus(self))) };
-    }
-
+pub trait Producer: Observer + crate::traits::RawProducer {
     /// Provides a direct access to the ring buffer vacant memory.
     ///
     /// Returns a pair of slices of uninitialized memory, the second one may be empty.
-    fn vacant_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        unsafe { self.unsafe_slices(self.write_index(), add_mod(self.read_index(), self.capacity().get(), modulus(self))) }
+    fn vacant_slices(&mut self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        unsafe {
+            self.unsafe_slices(
+                self.write_index(),
+                add_mod(self.read_released_index(), self.capacity().get(), modulus(self)),
+            )
+        }
     }
 
     /// Mutable version of [`Self::vacant_slices`].
@@ -51,7 +36,12 @@ pub trait Producer: Observer {
     ///
     /// *Vacant slices must not be used to store any data because their contents aren't synchronized properly.*
     fn vacant_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        unsafe { self.unsafe_slices_mut(self.write_index(), add_mod(self.read_index(), self.capacity().get(), modulus(self))) }
+        unsafe {
+            self.unsafe_slices_mut(
+                self.write_index(),
+                add_mod(self.read_released_index(), self.capacity().get(), modulus(self)),
+            )
+        }
     }
 
     /// Appends an item to the ring buffer.
@@ -153,7 +143,7 @@ pub trait Producer: Observer {
 }
 
 /// Trait used for delegating consumer methods.
-pub trait DelegateProducer: DelegateObserver
+pub unsafe trait DelegateProducer: DelegateObserver
 where
     Self::Base: Producer,
 {
@@ -164,17 +154,8 @@ where
     D::Base: Producer,
 {
     #[inline]
-    unsafe fn set_write_index(&self, value: usize) {
-        unsafe { self.base().set_write_index(value) }
-    }
-    #[inline]
-    unsafe fn advance_write_index(&self, count: usize) {
-        unsafe { self.base().advance_write_index(count) }
-    }
-
-    #[inline]
-    fn vacant_slices(&self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
-        self.base().vacant_slices()
+    fn vacant_slices(&mut self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
+        self.base_mut().vacant_slices()
     }
 
     #[inline]
@@ -198,6 +179,20 @@ where
         Self::Item: Copy,
     {
         self.base_mut().push_slice(elems)
+    }
+}
+
+unsafe impl<D: DelegateProducer> crate::traits::RawProducer for D
+where
+    D::Base: Producer,
+{
+    #[inline]
+    unsafe fn set_write_index(&self, value: usize) {
+        unsafe { self.base().set_write_index(value) }
+    }
+    #[inline]
+    unsafe fn advance_write_index(&self, count: usize) {
+        unsafe { self.base().advance_write_index(count) }
     }
 }
 
@@ -238,3 +233,6 @@ macro_rules! impl_producer_traits {
     };
  }
 pub(crate) use impl_producer_traits;
+
+#[allow(unused_imports)]
+use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};

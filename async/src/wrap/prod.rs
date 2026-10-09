@@ -5,20 +5,20 @@ use core::{
 };
 #[cfg(feature = "std")]
 use futures_util::io::AsyncWrite;
-use futures_util::{ready, Sink};
+use futures_util::{Sink, ready};
 #[cfg(feature = "std")]
 use ringbuf::traits::RingBuffer;
 use ringbuf::{
     traits::{
-        producer::{DelegateProducer, Producer},
         Observer,
+        producer::{DelegateProducer, Producer},
     },
     wrap::Wrap,
 };
 #[cfg(feature = "std")]
 use std::io;
 
-impl<R: AsyncRbRef> DelegateProducer for AsyncProd<R> {}
+unsafe impl<R: AsyncRbRef> DelegateProducer for AsyncProd<R> {}
 
 impl<R: AsyncRbRef> AsyncProducer for AsyncProd<R> {
     fn register_waker(&self, waker: &core::task::Waker) {

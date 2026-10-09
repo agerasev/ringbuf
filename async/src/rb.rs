@@ -54,13 +54,6 @@ impl<S: Storage> Observer for AsyncRb<S> {
         self.base.write_index()
     }
 
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
-        unsafe { self.base.unsafe_slices(start, end) }
-    }
-    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        unsafe { self.base.unsafe_slices_mut(start, end) }
-    }
-
     #[inline]
     fn read_is_held(&self) -> bool {
         self.base.read_is_held()
@@ -71,19 +64,41 @@ impl<S: Storage> Observer for AsyncRb<S> {
     }
 }
 
-impl<S: Storage> Producer for AsyncRb<S> {
+unsafe impl<S: Storage> ringbuf::traits::RawObserver for AsyncRb<S> {
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
+        unsafe { self.base.unsafe_slices(start, end) }
+    }
+    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
+        unsafe { self.base.unsafe_slices_mut(start, end) }
+    }
+}
+
+impl<S: Storage> Producer for AsyncRb<S> {}
+
+unsafe impl<S: Storage> ringbuf::traits::RawProducer for AsyncRb<S> {
     unsafe fn set_write_index(&self, value: usize) {
         unsafe { self.base.set_write_index(value) };
         self.write.wake();
     }
 }
-impl<S: Storage> Consumer for AsyncRb<S> {
+impl<S: Storage> Consumer for AsyncRb<S> {}
+
+unsafe impl<S: Storage> ringbuf::traits::RawConsumer for AsyncRb<S> {
     unsafe fn set_read_index(&self, value: usize) {
         unsafe { self.base.set_read_index(value) };
         self.read.wake();
     }
 }
-impl<S: Storage> RingBuffer for AsyncRb<S> {
+impl<S: Storage> RingBuffer for AsyncRb<S> {}
+
+unsafe impl<S: Storage> ringbuf::traits::RawRingBuffer for AsyncRb<S> {
+    unsafe fn set_read_claimed(&self, value: usize) {
+        unsafe { self.base.set_read_claimed(value) };
+    }
+    unsafe fn set_read_released(&self, value: usize) {
+        unsafe { self.base.set_read_released(value) };
+    }
+
     #[inline]
     unsafe fn hold_read(&self, flag: bool) -> bool {
         let old = unsafe { self.base.hold_read(flag) };
@@ -133,3 +148,6 @@ impl<S: Storage> AsMut<Self> for AsyncRb<S> {
         self
     }
 }
+
+#[allow(unused_imports)]
+use ringbuf::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};

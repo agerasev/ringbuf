@@ -1,4 +1,4 @@
-use ringbuf::{traits::*, HeapRb};
+use ringbuf::{HeapRb, traits::*};
 
 fn main() {
     let mut rb = HeapRb::<i32>::new(2);

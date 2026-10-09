@@ -123,9 +123,9 @@ impl<R: RbRef, const P: bool, const C: bool> AsMut<Self> for Frozen<R, P, C> {
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> DelegateObserver for Frozen<R, P, C> {}
-impl<R: RbRef> DelegateProducer for FrozenProd<R> {}
-impl<R: RbRef> DelegateConsumer for FrozenCons<R> {}
+unsafe impl<R: RbRef, const P: bool, const C: bool> DelegateObserver for Frozen<R, P, C> {}
+unsafe impl<R: RbRef> DelegateProducer for FrozenProd<R> {}
+unsafe impl<R: RbRef> DelegateConsumer for FrozenCons<R> {}
 
 impl_producer_traits!(FrozenProd<R: RbRef>);
 impl_consumer_traits!(FrozenCons<R: RbRef>);

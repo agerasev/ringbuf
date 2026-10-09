@@ -25,29 +25,30 @@ pub trait Observer {
     /// Index value is in range `0..(2 * capacity)`.
     fn write_index(&self) -> usize;
 
-    /// Get slice between `start` and `end` indices.
-    ///
-    /// # Safety
-    ///
-    /// Slice must not overlap with any mutable slice existing at the same time.
-    ///
-    /// Non-`Sync` items must not be accessed from multiple threads at the same time.
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]);
-
-    /// Get mutable slice between `start` and `end` indices.
-    ///
-    /// # Safety
-    ///
-    /// There must not exist overlapping slices at the same time.
-    #[allow(clippy::mut_from_ref)]
-    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]);
+    /// Oldest slot still retained by the consumer.
+    fn read_released_index(&self) -> usize {
+        self.read_index()
+    }
+    /// First initialized slot still owned by the backing ring buffer.
+    fn read_claimed_index(&self) -> usize {
+        self.read_index()
+    }
 
     /// Whether read end is held by consumer.
     fn read_is_held(&self) -> bool;
     /// Whether write end is held by producer.
     fn write_is_held(&self) -> bool;
 
-    /// The number of items stored in the buffer.
+    /// Queued items plus consumer-owned slots not yet released.
+    fn retained_len(&self) -> usize {
+        sub_mod(self.write_index(), self.read_released_index(), modulus(self))
+    }
+    /// Initialized items owned by the backing ring buffer.
+    fn queued_len(&self) -> usize {
+        sub_mod(self.write_index(), self.read_claimed_index(), modulus(self))
+    }
+
+    /// The number of items visible to this endpoint (legacy spelling).
     ///
     /// *Actual number may be greater or less than returned value due to concurring activity of producer or consumer respectively.*
     fn occupied_len(&self) -> usize {
@@ -61,7 +62,7 @@ pub trait Observer {
     fn vacant_len(&self) -> usize {
         let modulus = modulus(self);
         sub_mod(
-            add_mod(self.read_index(), self.capacity().get(), modulus),
+            add_mod(self.read_released_index(), self.capacity().get(), modulus),
             self.write_index(),
             modulus,
         )
@@ -85,15 +86,15 @@ pub trait Observer {
 }
 
 /// Trait used for delegating observer methods.
-pub trait DelegateObserver: Based
+pub unsafe trait DelegateObserver: Based
 where
-    Self::Base: Observer,
+    Self::Base: Observer + crate::traits::RawObserver,
 {
 }
 
 impl<D: DelegateObserver> Observer for D
 where
-    D::Base: Observer,
+    D::Base: Observer + crate::traits::RawObserver,
 {
     type Item = <D::Base as Observer>::Item;
 
@@ -112,21 +113,19 @@ where
     }
 
     #[inline]
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        unsafe { self.base().unsafe_slices(start, end) }
-    }
-    #[inline]
-    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        unsafe { self.base().unsafe_slices_mut(start, end) }
-    }
-
-    #[inline]
     fn read_is_held(&self) -> bool {
         self.base().read_is_held()
     }
     #[inline]
     fn write_is_held(&self) -> bool {
         self.base().write_is_held()
+    }
+
+    fn read_released_index(&self) -> usize {
+        self.base().read_released_index()
+    }
+    fn read_claimed_index(&self) -> usize {
+        self.base().read_claimed_index()
     }
 
     #[inline]
@@ -149,3 +148,20 @@ where
         self.base().is_full()
     }
 }
+
+unsafe impl<D: DelegateObserver> crate::traits::RawObserver for D
+where
+    D::Base: Observer + crate::traits::RawObserver,
+{
+    #[inline]
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        unsafe { self.base().unsafe_slices(start, end) }
+    }
+    #[inline]
+    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        unsafe { self.base().unsafe_slices_mut(start, end) }
+    }
+}
+
+#[allow(unused_imports)]
+use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};

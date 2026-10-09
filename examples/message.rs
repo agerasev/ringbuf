@@ -1,4 +1,4 @@
-use ringbuf::{traits::*, HeapRb};
+use ringbuf::{HeapRb, traits::*};
 use std::{io::Read, thread, time::Duration};
 
 fn main() {

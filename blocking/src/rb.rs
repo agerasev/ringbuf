@@ -53,13 +53,6 @@ impl<S: Storage, X: Semaphore> Observer for BlockingRb<S, X> {
         self.base.write_index()
     }
 
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
-        unsafe { self.base.unsafe_slices(start, end) }
-    }
-    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        unsafe { self.base.unsafe_slices_mut(start, end) }
-    }
-
     #[inline]
     fn read_is_held(&self) -> bool {
         self.base.read_is_held()
@@ -69,19 +62,41 @@ impl<S: Storage, X: Semaphore> Observer for BlockingRb<S, X> {
         self.base.write_is_held()
     }
 }
-impl<S: Storage, X: Semaphore> Producer for BlockingRb<S, X> {
+
+unsafe impl<S: Storage, X: Semaphore> ringbuf::traits::RawObserver for BlockingRb<S, X> {
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
+        unsafe { self.base.unsafe_slices(start, end) }
+    }
+    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
+        unsafe { self.base.unsafe_slices_mut(start, end) }
+    }
+}
+impl<S: Storage, X: Semaphore> Producer for BlockingRb<S, X> {}
+
+unsafe impl<S: Storage, X: Semaphore> ringbuf::traits::RawProducer for BlockingRb<S, X> {
     unsafe fn set_write_index(&self, value: usize) {
         unsafe { self.base.set_write_index(value) };
         self.write.give();
     }
 }
-impl<S: Storage, X: Semaphore> Consumer for BlockingRb<S, X> {
+impl<S: Storage, X: Semaphore> Consumer for BlockingRb<S, X> {}
+
+unsafe impl<S: Storage, X: Semaphore> ringbuf::traits::RawConsumer for BlockingRb<S, X> {
     unsafe fn set_read_index(&self, value: usize) {
         unsafe { self.base.set_read_index(value) };
         self.read.give();
     }
 }
-impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {
+impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {}
+
+unsafe impl<S: Storage, X: Semaphore> ringbuf::traits::RawRingBuffer for BlockingRb<S, X> {
+    unsafe fn set_read_claimed(&self, value: usize) {
+        unsafe { self.base.set_read_claimed(value) };
+    }
+    unsafe fn set_read_released(&self, value: usize) {
+        unsafe { self.base.set_read_released(value) };
+    }
+
     unsafe fn hold_read(&self, flag: bool) -> bool {
         let old = unsafe { self.base.hold_read(flag) };
         self.read.give();
@@ -138,3 +153,6 @@ impl<S: Storage, X: Semaphore> AsMut<Self> for BlockingRb<S, X> {
         self
     }
 }
+
+#[allow(unused_imports)]
+use ringbuf::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};

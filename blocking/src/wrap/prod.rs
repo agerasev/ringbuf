@@ -12,8 +12,8 @@ use std::io;
 
 pub type BlockingProd<R> = BlockingWrap<R, true, false>;
 
-impl<R: BlockingRbRef> DelegateObserver for BlockingProd<R> {}
-impl<R: BlockingRbRef> DelegateProducer for BlockingProd<R> {}
+unsafe impl<R: BlockingRbRef> DelegateObserver for BlockingProd<R> {}
+unsafe impl<R: BlockingRbRef> DelegateProducer for BlockingProd<R> {}
 
 macro_rules! wait_iter {
     ($self:expr) => {

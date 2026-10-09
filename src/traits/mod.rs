@@ -15,3 +15,6 @@ pub use producer::Producer;
 pub use ring_buffer::RingBuffer;
 pub use split::{Split, SplitRef};
 pub use utils::Based;
+
+pub mod raw;
+pub use raw::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};

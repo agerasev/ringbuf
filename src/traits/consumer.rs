@@ -1,6 +1,6 @@
 use super::{
     observer::{DelegateObserver, Observer},
-    utils::{add_mod, modulus},
+    utils::modulus,
 };
 use crate::utils::{move_uninit_slice, slice_as_uninit_mut, slice_assume_init_mut, slice_assume_init_ref};
 use core::{
@@ -12,27 +12,7 @@ use core::{
 use std::io::{self, Write};
 
 /// Consumer part of ring buffer.
-pub trait Consumer: Observer {
-    /// Set read index.
-    ///
-    /// # Safety
-    ///
-    /// Index must go only forward, never backward. It is recommended to use [`Self::advance_read_index`] instead.
-    ///
-    /// All slots with index less than `value` must be uninitialized until write index, all slots with index equal or greater - must be initialized.
-    unsafe fn set_read_index(&self, value: usize);
-
-    /// Moves `read` pointer by `count` places forward.
-    ///
-    /// # Safety
-    ///
-    /// First `count` items in occupied memory must be moved out or dropped.
-    ///
-    /// Must not be called concurrently.
-    unsafe fn advance_read_index(&self, count: usize) {
-        unsafe { self.set_read_index(add_mod(self.read_index(), count, modulus(self))) };
-    }
-
+pub trait Consumer: Observer + crate::traits::RawConsumer {
     /// Provides a direct access to the ring buffer occupied memory.
     /// The difference from [`Self::as_slices`] is that this method provides slices of [`MaybeUninit`], so items may be moved out of slices.
     ///
@@ -46,24 +26,16 @@ pub trait Consumer: Observer {
     ///
     /// *This method must be followed by [`Self::advance_read_index`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
-    fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        unsafe { self.unsafe_slices(self.read_index(), self.write_index()) }
-    }
-
-    /// Provides a direct mutable access to the ring buffer occupied memory.
-    ///
-    /// Same as [`Self::occupied_slices`].
-    ///
-    /// # Safety
-    ///
-    /// When some item is replaced with uninitialized value then it must not be read anymore.
-    unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        unsafe { self.unsafe_slices_mut(self.read_index(), self.write_index()) }
+    fn occupied_slices(&mut self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        unsafe {
+            self.prepare_read();
+            self.unsafe_slices(self.read_index(), self.write_index())
+        }
     }
 
     /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
     #[inline]
-    fn as_slices(&self) -> (&[Self::Item], &[Self::Item]) {
+    fn as_slices(&mut self) -> (&[Self::Item], &[Self::Item]) {
         unsafe {
             let (left, right) = self.occupied_slices();
             (slice_assume_init_ref(left), slice_assume_init_ref(right))
@@ -81,7 +53,7 @@ pub trait Consumer: Observer {
 
     /// Returns a reference to the eldest item in the ring buffer, if exists.
     #[inline]
-    fn first(&self) -> Option<&Self::Item> {
+    fn first(&mut self) -> Option<&Self::Item> {
         self.as_slices().0.first()
     }
     /// Returns a mutable reference to the eldest item in the ring buffer, if exists.
@@ -92,7 +64,7 @@ pub trait Consumer: Observer {
     /// Returns a reference to the most recent item in the ring buffer, if exists.
     ///
     /// *Returned item may not be actually the most recent if there is a concurrent producer activity.*
-    fn last(&self) -> Option<&Self::Item> {
+    fn last(&mut self) -> Option<&Self::Item> {
         let (first, second) = self.as_slices();
         if second.is_empty() { first.last() } else { second.last() }
     }
@@ -108,6 +80,7 @@ pub trait Consumer: Observer {
     ///
     /// Returns `None` if the ring buffer is empty.
     fn try_pop(&mut self) -> Option<Self::Item> {
+        unsafe { self.prepare_read() };
         if !self.is_empty() {
             let elem = unsafe { self.occupied_slices().0.get_unchecked(0).assume_init_read() };
             unsafe { self.advance_read_index(1) };
@@ -120,7 +93,8 @@ pub trait Consumer: Observer {
     /// Returns the reference to the eldest item without removing it from the buffer.
     ///
     /// Returns `None` if the ring buffer is empty.
-    fn try_peek(&self) -> Option<&Self::Item> {
+    fn try_peek(&mut self) -> Option<&Self::Item> {
+        unsafe { self.prepare_read() };
         if !self.is_empty() {
             Some(unsafe { self.occupied_slices().0.get_unchecked(0).assume_init_ref() })
         } else {
@@ -131,7 +105,7 @@ pub trait Consumer: Observer {
     /// Copies items from the ring buffer to an uninit slice without removing them from the ring buffer.
     ///
     /// Returns a number of items being copied.
-    fn peek_slice_uninit(&self, elems: &mut [MaybeUninit<Self::Item>]) -> usize {
+    fn peek_slice_uninit(&mut self, elems: &mut [MaybeUninit<Self::Item>]) -> usize {
         let (left, right) = self.occupied_slices();
         if elems.len() < left.len() {
             move_uninit_slice(elems, unsafe { left.get_unchecked(..elems.len()) });
@@ -153,7 +127,7 @@ pub trait Consumer: Observer {
     /// Copies items from the ring buffer to a slice without removing them from the ring buffer.
     ///
     /// Returns a number of items being copied.
-    fn peek_slice(&self, elems: &mut [Self::Item]) -> usize
+    fn peek_slice(&mut self, elems: &mut [Self::Item]) -> usize
     where
         Self::Item: Copy,
     {
@@ -187,7 +161,7 @@ pub trait Consumer: Observer {
     /// Returns a front-to-back iterator containing references to items in the ring buffer.
     ///
     /// This iterator does not remove items out of the ring buffer.
-    fn iter(&self) -> Iter<'_, Self> {
+    fn iter(&mut self) -> Iter<'_, Self> {
         let (left, right) = self.as_slices();
         left.iter().chain(right.iter())
     }
@@ -223,6 +197,7 @@ pub trait Consumer: Observer {
     /// # }
     /// ```
     fn skip(&mut self, count: usize) -> usize {
+        unsafe { self.prepare_read() };
         if !mem::needs_drop::<Self::Item>() {
             // No destructor can run or unwind, so release all slots at once
             // instead of visiting each item.
@@ -334,7 +309,8 @@ pub struct PopIter<'a, C: Consumer + ?Sized> {
 impl<'a, C: Consumer + ?Sized> PopIter<'a, C> {
     /// Create an iterator.
     pub fn new(inner: &'a mut C) -> Self {
-        let (left, right) = inner.occupied_slices();
+        unsafe { inner.prepare_read() };
+        let (left, right) = unsafe { inner.unsafe_slices(inner.read_index(), inner.write_index()) };
         Self {
             inner,
             iter: left.iter().chain(right),
@@ -386,7 +362,7 @@ pub type Iter<'a, C: Consumer> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a,
 pub type IterMut<'a, C: Consumer> = Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
 
 /// Trait used for delegating producer methods.
-pub trait DelegateConsumer: DelegateObserver
+pub unsafe trait DelegateConsumer: DelegateObserver
 where
     Self::Base: Consumer,
 {
@@ -396,27 +372,13 @@ where
     D::Base: Consumer,
 {
     #[inline]
-    unsafe fn set_read_index(&self, value: usize) {
-        unsafe { self.base().set_read_index(value) }
-    }
-    #[inline]
-    unsafe fn advance_read_index(&self, count: usize) {
-        unsafe { self.base().advance_read_index(count) }
+    fn occupied_slices(&mut self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
+        self.base_mut().occupied_slices()
     }
 
     #[inline]
-    fn occupied_slices(&self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
-        self.base().occupied_slices()
-    }
-
-    #[inline]
-    unsafe fn occupied_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
-        unsafe { self.base_mut().occupied_slices_mut() }
-    }
-
-    #[inline]
-    fn as_slices(&self) -> (&[Self::Item], &[Self::Item]) {
-        self.base().as_slices()
+    fn as_slices(&mut self) -> (&[Self::Item], &[Self::Item]) {
+        self.base_mut().as_slices()
     }
 
     #[inline]
@@ -438,8 +400,8 @@ where
     }
 
     #[inline]
-    fn iter(&self) -> Iter<'_, Self> {
-        self.base().iter()
+    fn iter(&mut self) -> Iter<'_, Self> {
+        self.base_mut().iter()
     }
 
     #[inline]
@@ -455,6 +417,28 @@ where
     #[inline]
     fn clear(&mut self) -> usize {
         self.base_mut().clear()
+    }
+}
+
+unsafe impl<D: DelegateConsumer> crate::traits::RawConsumer for D
+where
+    D::Base: Consumer,
+{
+    unsafe fn prepare_read(&mut self) {
+        unsafe { self.base_mut().prepare_read() };
+    }
+
+    #[inline]
+    unsafe fn set_read_index(&self, value: usize) {
+        unsafe { self.base().set_read_index(value) }
+    }
+    #[inline]
+    unsafe fn advance_read_index(&self, count: usize) {
+        unsafe { self.base().advance_read_index(count) }
+    }
+    #[inline]
+    unsafe fn occupied_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
+        unsafe { self.base_mut().occupied_slices_mut() }
     }
 }
 
@@ -485,3 +469,6 @@ macro_rules! impl_consumer_traits {
     };
 }
 pub(crate) use impl_consumer_traits;
+
+#[allow(unused_imports)]
+use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};

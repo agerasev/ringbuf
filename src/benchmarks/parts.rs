@@ -1,5 +1,5 @@
-use crate::{storage::Array, traits::*, SharedRb};
-use test::{black_box, Bencher};
+use crate::{SharedRb, storage::Array, traits::*};
+use test::{Bencher, black_box};
 
 const RB_SIZE: usize = 256;
 
@@ -39,3 +39,6 @@ fn get_vacant_slices(b: &mut Bencher) {
         black_box(&mut prod);
     });
 }
+
+#[allow(unused_imports)]
+use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};

@@ -3,9 +3,9 @@ mod prod;
 
 use crate::rb::AsyncRbRef;
 use ringbuf::{
-    traits::{observer::DelegateObserver, Based},
-    wrap::{direct::Direct, Wrap},
     Obs,
+    traits::{Based, observer::DelegateObserver},
+    wrap::{Wrap, direct::Direct},
 };
 
 pub struct AsyncWrap<R: AsyncRbRef, const P: bool, const C: bool> {
@@ -49,7 +49,7 @@ impl<R: AsyncRbRef, const P: bool, const C: bool> Wrap for AsyncWrap<R, P, C> {
 
 impl<R: AsyncRbRef, const P: bool, const C: bool> Unpin for AsyncWrap<R, P, C> {}
 
-impl<R: AsyncRbRef, const P: bool, const C: bool> DelegateObserver for AsyncWrap<R, P, C> {}
+unsafe impl<R: AsyncRbRef, const P: bool, const C: bool> DelegateObserver for AsyncWrap<R, P, C> {}
 
 impl<R: AsyncRbRef, const P: bool, const C: bool> AsRef<Self> for AsyncWrap<R, P, C> {
     fn as_ref(&self) -> &Self {

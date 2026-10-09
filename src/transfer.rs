@@ -26,3 +26,6 @@ pub fn transfer<T, C: Consumer<Item = T>, P: Producer<Item = T>>(src: &mut C, ds
     unsafe { dst.advance_write_index(actual_count) };
     actual_count
 }
+
+#[allow(unused_imports)]
+use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};

@@ -1,9 +1,9 @@
 #[cfg(feature = "std")]
 use crate::sync::StdSemaphore;
 use crate::{rb::BlockingRb, sync::Semaphore};
-use ringbuf::{storage::Array, SharedRb};
 #[cfg(feature = "alloc")]
-use ringbuf::{storage::Heap, HeapRb};
+use ringbuf::{HeapRb, storage::Heap};
+use ringbuf::{SharedRb, storage::Array};
 
 #[cfg(all(feature = "alloc", not(feature = "portable-atomic")))]
 pub use alloc::sync::Arc;

@@ -1,5 +1,5 @@
-use crate::{storage::Array, traits::*, LocalRb, SharedRb};
-use test::{black_box, Bencher};
+use crate::{LocalRb, SharedRb, storage::Array, traits::*};
+use test::{Bencher, black_box};
 
 const RB_SIZE: usize = 256;
 const BATCH_SIZE: usize = 100;

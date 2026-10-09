@@ -150,3 +150,6 @@ fn excessive_vec_capacity() {
 fn excessive_boxed_slice_capacity() {
     let _rb = ManuallyDrop::new(Rb::from(alloc::vec![(); MAX_CAPACITY + 2].into_boxed_slice()));
 }
+
+#[allow(unused_imports)]
+use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};

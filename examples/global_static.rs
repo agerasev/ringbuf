@@ -1,7 +1,7 @@
 #![no_std]
 
 use lock_free_static::OnceMut;
-use ringbuf::{traits::*, StaticRb};
+use ringbuf::{StaticRb, traits::*};
 
 static RB: OnceMut<StaticRb<i32, 1>> = OnceMut::new();
 
