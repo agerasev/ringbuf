@@ -5,11 +5,20 @@ use core::{
     task::{Context, Poll, Waker},
 };
 use futures_util::future::FusedFuture;
+use ringbuf::error::{TransferError, WaitError};
 use ringbuf::traits::Producer;
 #[cfg(feature = "std")]
 use std::io;
 
 pub trait AsyncProducer: ringbuf::traits::Presence + Producer {
+    /// Compatibility spelling for the streaming `push_all` operation.
+    fn push_exact<'a: 'b, 'b>(&'a mut self, slice: &'b [Self::Item]) -> PushSliceFuture<'a, 'b, Self>
+    where
+        Self::Item: Copy,
+    {
+        self.push_all(slice)
+    }
+
     fn register_waker(&self, waker: &Waker);
 
     fn close(&mut self);
@@ -49,12 +58,14 @@ pub trait AsyncProducer: ringbuf::traits::Presence + Producer {
         PushIterFuture {
             owner: self,
             iter: Some(iter.peekable()),
+            count: 0,
+            done: false,
         }
     }
 
     /// Wait for the buffer to have at least `count` free places for items or to close.
     ///
-    /// In debug mode panics if `count` is greater than buffer capacity.
+    /// Returns `TooLarge` immediately if `count` exceeds capacity.
     ///
     /// The method takes `&mut self` because only single [`WaitVacantFuture`] is allowed at a time.
     ///
@@ -62,7 +73,7 @@ pub trait AsyncProducer: ringbuf::traits::Presence + Producer {
     ///
     /// You can safely cancel this future.
     fn wait_vacant(&mut self, count: usize) -> WaitVacantFuture<'_, Self> {
-        debug_assert!(count <= self.capacity().get());
+        unsafe { self.prepare_write() };
         WaitVacantFuture {
             owner: self,
             count,
@@ -74,13 +85,13 @@ pub trait AsyncProducer: ringbuf::traits::Presence + Producer {
     ///
     /// Future returns:
     /// + `Ok` - all slice contents are copied.
-    /// + `Err(count)` - the corresponding consumer was dropped, number of copied items returned.
+    /// + `Err(TransferError)` - the corresponding consumer was dropped, number of copied items returned.
     ///
     /// # Cancel safety
     ///
     /// On cancel the slice can be copied partially.
     /// The number of items already copied can be examined by [`PushSliceFuture::count`].
-    fn push_exact<'a: 'b, 'b>(&'a mut self, slice: &'b [Self::Item]) -> PushSliceFuture<'a, 'b, Self>
+    fn push_all<'a: 'b, 'b>(&'a mut self, slice: &'b [Self::Item]) -> PushSliceFuture<'a, 'b, Self>
     where
         Self::Item: Copy,
     {
@@ -199,20 +210,26 @@ impl<A: AsyncProducer> Future for PushSliceFuture<'_, '_, A>
 where
     A::Item: Copy,
 {
-    type Output = Result<(), usize>;
+    type Output = Result<usize, TransferError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut waker_registered = false;
         loop {
             let mut slice = self.slice.take().unwrap();
+            if slice.is_empty() {
+                break Poll::Ready(Ok(self.count));
+            }
             if self.owner.is_closed() {
-                break Poll::Ready(Err(self.count));
+                break Poll::Ready(Err(TransferError {
+                    completed: self.count,
+                    reason: WaitError::Closed,
+                }));
             }
             let len = self.owner.push_slice(slice);
             slice = &slice[len..];
             self.count += len;
             if slice.is_empty() {
-                break Poll::Ready(Ok(()));
+                break Poll::Ready(Ok(self.count));
             }
             self.slice.replace(slice);
             if waker_registered {
@@ -239,26 +256,43 @@ where
 pub struct PushIterFuture<'a, A: AsyncProducer + ?Sized, I: Iterator<Item = A::Item>> {
     owner: &'a mut A,
     iter: Option<Peekable<I>>,
+    count: usize,
+    done: bool,
 }
 impl<A: AsyncProducer, I: Iterator<Item = A::Item>> Unpin for PushIterFuture<'_, A, I> {}
 impl<A: AsyncProducer, I: Iterator<Item = A::Item>> FusedFuture for PushIterFuture<'_, A, I> {
     fn is_terminated(&self) -> bool {
-        self.iter.is_none()
+        self.done
     }
 }
 impl<A: AsyncProducer, I: Iterator<Item = A::Item>> Future for PushIterFuture<'_, A, I> {
-    type Output = bool;
+    type Output = Result<usize, TransferError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.done {
+            return Poll::Pending;
+        }
         let mut waker_registered = false;
         loop {
             let mut iter = self.iter.take().unwrap();
-            if self.owner.is_closed() {
-                break Poll::Ready(false);
-            }
-            self.owner.push_iter(&mut iter);
             if iter.peek().is_none() {
-                break Poll::Ready(true);
+                self.iter = Some(iter);
+                self.done = true;
+                break Poll::Ready(Ok(self.count));
+            }
+            if self.owner.is_closed() {
+                self.iter = Some(iter);
+                self.done = true;
+                break Poll::Ready(Err(TransferError {
+                    completed: self.count,
+                    reason: WaitError::Closed,
+                }));
+            }
+            self.count += self.owner.push_iter(&mut iter);
+            if iter.peek().is_none() {
+                self.iter = Some(iter);
+                self.done = true;
+                break Poll::Ready(Ok(self.count));
             }
             self.iter.replace(iter);
             if waker_registered {
@@ -270,6 +304,9 @@ impl<A: AsyncProducer, I: Iterator<Item = A::Item>> Future for PushIterFuture<'_
     }
 }
 impl<A: AsyncProducer, I: Iterator<Item = A::Item>> PushIterFuture<'_, A, I> {
+    pub fn count(&self) -> usize {
+        self.count
+    }
     pub fn inner(&self) -> &Peekable<I> {
         self.iter.as_ref().unwrap()
     }
@@ -297,16 +334,33 @@ impl<A: AsyncProducer> FusedFuture for WaitVacantFuture<'_, A> {
     }
 }
 impl<A: AsyncProducer> Future for WaitVacantFuture<'_, A> {
-    type Output = ();
+    type Output = Result<(), WaitError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut waker_registered = false;
         loop {
-            assert!(!self.done);
+            if self.done {
+                return Poll::Pending;
+            }
             let closed = self.owner.is_closed();
-            if self.count <= self.owner.vacant_len() || closed {
+            if self.count > self.owner.capacity().get() {
                 self.done = true;
-                break Poll::Ready(());
+                break Poll::Ready(Err(WaitError::TooLarge {
+                    requested: self.count,
+                    capacity: self.owner.capacity().get(),
+                }));
+            }
+            if self.count == 0 {
+                self.done = true;
+                break Poll::Ready(Ok(()));
+            }
+            if closed {
+                self.done = true;
+                break Poll::Ready(Err(WaitError::Closed));
+            }
+            if self.count <= self.owner.vacant_len() {
+                self.done = true;
+                break Poll::Ready(Ok(()));
             }
             if waker_registered {
                 break Poll::Pending;

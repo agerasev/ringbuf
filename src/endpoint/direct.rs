@@ -22,6 +22,7 @@ use core::{
 /// Direct wrapper of a ring buffer.
 pub struct Direct<R: RbHandle, const P: bool, const C: bool> {
     rb: R,
+    active: bool,
 }
 
 /// Observer of a ring buffer.
@@ -33,7 +34,10 @@ pub type Cons<R> = Direct<R, false, true>;
 
 impl<R: RbHandle> Clone for Obs<R> {
     fn clone(&self) -> Self {
-        Self { rb: self.rb.clone() }
+        Self {
+            rb: self.rb.clone(),
+            active: true,
+        }
     }
 }
 
@@ -59,7 +63,7 @@ impl<R: RbHandle, const P: bool, const C: bool> Direct<R, P, C> {
             }
             return Err((super::AcquireError::ConsumerHeld, rb));
         }
-        Ok(Self { rb })
+        Ok(Self { rb, active: true })
     }
 
     /// Acquire endpoint rights without checking their prior state.
@@ -73,26 +77,37 @@ impl<R: RbHandle, const P: bool, const C: bool> Direct<R, P, C> {
         if C {
             unsafe { rb.rb().hold_read(true) };
         }
-        Self { rb }
+        Self { rb, active: true }
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.active
     }
 
     /// Get ring buffer observer.
     pub fn observe(&self) -> Obs<R> {
-        Obs { rb: self.rb.clone() }
+        Obs {
+            rb: self.rb.clone(),
+            active: true,
+        }
     }
 
     /// Compatibility spelling for conversion to a deferred endpoint.
     #[deprecated(note = "use into_deferred")]
     #[allow(deprecated)]
     pub fn freeze(self) -> Frozen<R, P, C> {
+        assert!(self.is_active(), "endpoint is closed");
         let base = Cached::from_direct(self);
         unsafe { super::Deferred::from_endpoint(base) }
     }
 
-    /// # Safety
-    ///
-    /// Must not be used after this call.
-    unsafe fn close(&mut self) {
+    /// Release this endpoint's rights. Further data operations return empty/full.
+    /// Calling close repeatedly is harmless.
+    pub fn close(&mut self) {
+        if !self.active {
+            return;
+        }
+        self.active = false;
         if P {
             unsafe { self.rb().hold_write(false) };
         }
@@ -142,17 +157,23 @@ impl<R: RbHandle, const P: bool, const C: bool> Observer for Direct<R, P, C> {
     }
     #[inline]
     fn read_index(&self) -> usize {
-        self.rb().read_index()
+        if self.active { self.rb().read_index() } else { 0 }
     }
     fn read_released_index(&self) -> usize {
-        self.rb().read_released_index()
+        if self.active { self.rb().read_released_index() } else { 0 }
     }
     fn read_claimed_index(&self) -> usize {
-        self.rb().read_claimed_index()
+        if self.active { self.rb().read_claimed_index() } else { 0 }
     }
     #[inline]
     fn write_index(&self) -> usize {
-        self.rb().write_index()
+        if self.active {
+            self.rb().write_index()
+        } else if P {
+            self.capacity().get()
+        } else {
+            0
+        }
     }
 }
 
@@ -186,7 +207,9 @@ impl<R: RbHandle> Producer for Prod<R> {}
 unsafe impl<R: RbHandle> crate::traits::RawProducer for Prod<R> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
-        unsafe { self.rb().set_write_index(value) }
+        if self.active {
+            unsafe { self.rb().set_write_index(value) }
+        }
     }
 }
 
@@ -194,18 +217,26 @@ impl<R: RbHandle> Consumer for Cons<R> {}
 
 unsafe impl<R: RbHandle> crate::traits::RawConsumer for Cons<R> {
     unsafe fn prepare_read(&mut self) {
-        unsafe { self.rb().set_read_released(self.rb().read_claimed_index()) };
+        if self.active {
+            let claimed = self.rb().read_claimed_index();
+            if claimed != self.rb().read_released_index() {
+                unsafe { self.rb().set_read_released(claimed) };
+                self.rb().notify_read();
+            }
+        }
     }
 
     #[inline]
     unsafe fn set_read_index(&self, value: usize) {
-        unsafe { self.rb().set_read_index(value) }
+        if self.active {
+            unsafe { self.rb().set_read_index(value) }
+        }
     }
 }
 
 impl<R: RbHandle, const P: bool, const C: bool> Drop for Direct<R, P, C> {
     fn drop(&mut self) {
-        unsafe { self.close() };
+        self.close();
     }
 }
 
@@ -221,10 +252,12 @@ use crate::traits::Presence;
 impl<R: RbHandle> Direct<R, true, false> {
     /// Defer publication and acquisition until explicitly synchronized.
     pub fn into_deferred(self) -> super::DeferredProd<Self> {
+        assert!(self.is_active(), "endpoint is closed");
         unsafe { super::Deferred::from_endpoint(self) }
     }
     /// Temporarily defer this endpoint. Drop commits; forgetting may leak items.
     pub fn defer(&mut self) -> super::DeferredProd<&mut Self> {
+        assert!(self.is_active(), "endpoint is closed");
         unsafe { super::Deferred::from_endpoint(self) }
     }
 }
@@ -232,10 +265,12 @@ impl<R: RbHandle> Direct<R, true, false> {
 impl<R: RbHandle> Direct<R, false, true> {
     /// Defer publication and acquisition until explicitly synchronized.
     pub fn into_deferred(self) -> super::DeferredCons<Self> {
+        assert!(self.is_active(), "endpoint is closed");
         unsafe { super::Deferred::from_endpoint(self) }
     }
     /// Temporarily defer this endpoint. Drop commits; forgetting may leak items.
     pub fn defer(&mut self) -> super::DeferredCons<&mut Self> {
+        assert!(self.is_active(), "endpoint is closed");
         unsafe { super::Deferred::from_endpoint(self) }
     }
 }

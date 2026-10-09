@@ -1,4 +1,4 @@
-use crate::{producer::AsyncProducer, rb::AsyncRbRef, wrap::AsyncProd};
+use crate::{endpoint::AsyncProd, producer::AsyncProducer, rb::AsyncRbHandle};
 use core::{
     pin::Pin,
     task::{Context, Poll},
@@ -18,20 +18,23 @@ use ringbuf::{
 #[cfg(feature = "std")]
 use std::io;
 
-unsafe impl<R: AsyncRbRef> DelegateProducer for AsyncProd<R> {}
+unsafe impl<R: AsyncRbHandle> DelegateProducer for AsyncProd<R> {}
 
-impl<R: AsyncRbRef> AsyncProducer for AsyncProd<R> {
+impl<R: AsyncRbHandle> AsyncProducer for AsyncProd<R> {
+    fn is_closed(&self) -> bool {
+        !self.base.is_active() || !self.read_is_held()
+    }
     fn register_waker(&self, waker: &core::task::Waker) {
-        self.rb().read.register(waker)
+        self.rb().markers().read.register(waker)
     }
 
     #[inline]
     fn close(&mut self) {
-        drop(self.base.take());
+        self.base.close();
     }
 }
 
-impl<R: AsyncRbRef> Sink<<R::Rb as Observer>::Item> for AsyncProd<R> {
+impl<R: AsyncRbHandle> Sink<<R::Rb as Observer>::Item> for AsyncProd<R> {
     type Error = ();
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -42,8 +45,7 @@ impl<R: AsyncRbRef> Sink<<R::Rb as Observer>::Item> for AsyncProd<R> {
         })
     }
     fn start_send(mut self: Pin<&mut Self>, item: <R::Rb as Observer>::Item) -> Result<(), Self::Error> {
-        assert!(self.try_push(item).is_ok());
-        Ok(())
+        self.try_push(item).map_err(|_| ())
     }
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         // Don't need to be flushed.
@@ -56,7 +58,7 @@ impl<R: AsyncRbRef> Sink<<R::Rb as Observer>::Item> for AsyncProd<R> {
 }
 
 #[cfg(feature = "std")]
-impl<R: AsyncRbRef> AsyncWrite for AsyncProd<R>
+impl<R: AsyncRbHandle> AsyncWrite for AsyncProd<R>
 where
     R::Rb: RingBuffer<Item = u8>,
 {
@@ -72,3 +74,5 @@ where
         Poll::Ready(Ok(()))
     }
 }
+
+use ringbuf::traits::Presence;

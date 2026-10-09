@@ -8,10 +8,7 @@ fn read_keeps_final_batch_when_producer_closes_after_snapshot() {
         mem::MaybeUninit,
         sync::atomic::{AtomicBool, Ordering},
     };
-    use ringbuf::{
-        SharedRb,
-        storage::{Heap, Storage},
-    };
+    use ringbuf::storage::{Heap, Storage};
     use std::{
         sync::{Arc, Barrier},
         thread,
@@ -56,7 +53,7 @@ fn read_keeps_final_batch_when_producer_closes_after_snapshot() {
         gate: gate.clone(),
     };
     // SAFETY: The storage is nonempty and entirely uninitialized.
-    let rb = BlockingRb::<_, StdSemaphore>::from(unsafe { SharedRb::from_raw_parts(storage, 0, 0) });
+    let rb = unsafe { BlockingRb::<_, StdSemaphore>::from_raw_parts(storage, 0, 0) };
     let (mut prod, mut cons) = rb.split();
     let producer = thread::spawn({
         let gate = gate.clone();
@@ -103,4 +100,60 @@ fn empty_io_completes_without_waiting() {
         assert_eq!(prod.write(&[]).unwrap(), 0);
         assert_eq!(cons.try_pop(), if full { Some(7) } else { None });
     }
+}
+
+#[test]
+fn thresholds_closed_writes_and_streaming_progress() {
+    use crate::BlockingHeapRb;
+    use ringbuf::error::{TransferError, WaitError};
+    let (mut p, mut c) = BlockingHeapRb::<u8>::new(2).split();
+    p.set_timeout(Some(core::time::Duration::ZERO));
+    assert_eq!(p.wait_vacant(3), Err(WaitError::TooLarge { requested: 3, capacity: 2 }));
+    assert_eq!(c.wait_occupied(3), Err(WaitError::TooLarge { requested: 3, capacity: 2 }));
+    assert_eq!(
+        p.push_all(&[1, 2, 3]),
+        Err(TransferError {
+            completed: 2,
+            reason: WaitError::TimedOut
+        })
+    );
+    drop(p);
+    let mut dst = [0; 3];
+    assert_eq!(
+        c.pop_all(&mut dst),
+        Err(TransferError {
+            completed: 2,
+            reason: WaitError::Closed
+        })
+    );
+    assert_eq!(dst, [1, 2, 0]);
+    let (mut p, c) = BlockingHeapRb::<u8>::new(1).split();
+    drop(c);
+    assert_eq!(p.push(9), Err((WaitError::Closed, 9)));
+    assert_eq!(p.wait_vacant(1), Err(WaitError::Closed));
+    assert_eq!(p.push_all(&[]), Ok(0));
+}
+
+#[test]
+fn expired_deadline_checks_readiness_once_without_blocking() {
+    let (mut p, mut c) = crate::BlockingHeapRb::<u8>::new(1).split();
+    let past = std::time::Instant::now();
+    c.set_deadline(Some(past));
+    assert_eq!(c.pop(), Err(WaitError::TimedOut));
+    p.push(5).unwrap();
+    assert_eq!(c.pop(), Ok(5));
+}
+
+#[test]
+fn bounded_collection_and_timed_out_iterator_preserve_values() {
+    let (mut p, mut c) = crate::BlockingHeapRb::<i32>::new(2).split();
+    p.set_timeout(Some(core::time::Duration::ZERO));
+    let mut values = (0..4).peekable();
+    let error = p.push_all_iter(&mut values).unwrap_err();
+    assert_eq!((error.completed, error.reason), (2, WaitError::TimedOut));
+    assert_eq!(values.next(), Some(2));
+    let mut output = alloc::vec::Vec::new();
+    assert_eq!(c.pop_into_vec(&mut output, 1).unwrap(), 1);
+    assert_eq!(output, [0]);
+    assert_eq!(c.try_pop(), Some(1));
 }

@@ -8,10 +8,10 @@ extern crate alloc;
 extern crate std;
 
 mod alias;
+pub mod endpoint;
 pub mod rb;
 pub mod traits;
 mod transfer;
-pub mod wrap;
 
 pub use alias::*;
 pub use rb::AsyncRb;
@@ -23,3 +23,7 @@ mod tests;
 
 #[cfg(all(test, feature = "bench"))]
 mod bench;
+
+pub use endpoint as wrap;
+pub use endpoint::{AsyncCons, AsyncEndpoint, AsyncProd};
+pub use rb::AsyncMarkers;

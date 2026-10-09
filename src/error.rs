@@ -69,3 +69,52 @@ impl fmt::Display for ExactError {
     }
 }
 impl core::error::Error for ExactError {}
+
+/// A waiting operation could not proceed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum WaitError {
+    Closed,
+    TimedOut,
+    TooLarge { requested: usize, capacity: usize },
+}
+impl fmt::Display for WaitError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+impl core::error::Error for WaitError {}
+
+/// Streaming operations retain their completed prefix on failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TransferError {
+    pub completed: usize,
+    pub reason: WaitError,
+}
+impl fmt::Display for TransferError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} after {} items", self.reason, self.completed)
+    }
+}
+impl core::error::Error for TransferError {}
+
+/// Fallible vector collection retains all items collected before the error.
+#[cfg(feature = "alloc")]
+#[derive(Debug)]
+pub enum CollectError {
+    Wait(TransferError),
+    Allocation {
+        completed: usize,
+        error: alloc::collections::TryReserveError,
+    },
+}
+#[cfg(feature = "alloc")]
+impl fmt::Display for CollectError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Wait(e) => e.fmt(f),
+            Self::Allocation { completed, error } => write!(f, "{error} after {completed} items"),
+        }
+    }
+}
+#[cfg(feature = "alloc")]
+impl core::error::Error for CollectError {}

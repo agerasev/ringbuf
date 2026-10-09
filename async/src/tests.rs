@@ -78,7 +78,7 @@ fn push_pop_slice() {
         async move {
             let mut cons = cons;
             let mut data = [0; COUNT + 1];
-            let count = cons.pop_exact(&mut data).await.unwrap_err();
+            let count = cons.pop_all(&mut data).await.unwrap_err().completed;
             assert_eq!(count, COUNT);
             assert!(data.into_iter().take(COUNT).eq(0..COUNT));
         },
@@ -97,7 +97,7 @@ fn push_pop_vec() {
         async move {
             let mut cons = cons;
             let mut data = Vec::new();
-            cons.pop_until_end(&mut data).await;
+            cons.pop_until_end(&mut data).await.unwrap();
             assert_eq!(data.len(), COUNT);
             assert!(data.into_iter().eq(0..COUNT));
         },
@@ -162,12 +162,12 @@ fn transfer() {
     execute!(
         async move {
             let mut prod = src_prod;
-            assert!(prod.push_iter_all(0..COUNT).await);
+            assert_eq!(prod.push_iter_all(0..COUNT).await.unwrap(), COUNT as usize);
         },
         async move {
             let mut src = src_cons;
             let mut dst = dst_prod;
-            async_transfer(&mut src, &mut dst, None).await
+            async_transfer(&mut src, &mut dst, None).await.unwrap()
         },
         async move {
             let cons = dst_cons;
@@ -193,11 +193,11 @@ fn wait() {
             assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 0);
             prod.push(1).await.unwrap();
 
-            prod.wait_vacant(2).await;
+            let _ = prod.wait_vacant(2).await;
             assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 2);
         },
         async {
-            cons.wait_occupied(2).await;
+            let _ = cons.wait_occupied(2).await;
             assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 1);
 
             cons.pop().await.unwrap();
@@ -219,7 +219,7 @@ fn drop_close_prod() {
     });
     let t1 = std::thread::spawn(move || {
         execute!(async {
-            cons.wait_occupied(1).await;
+            let _ = cons.wait_occupied(1).await;
             assert_eq!(stage_clone.fetch_add(1, Ordering::SeqCst), 1);
             assert!(cons.is_closed());
         });
@@ -239,14 +239,14 @@ fn drop_close_cons() {
             assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 0);
             prod.push(0).await.unwrap();
 
-            prod.wait_vacant(1).await;
+            let _ = prod.wait_vacant(1).await;
             assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 2);
             assert!(prod.is_closed());
         });
     });
     let t1 = std::thread::spawn(move || {
         execute!(async {
-            cons.wait_occupied(1).await;
+            let _ = cons.wait_occupied(1).await;
             assert_eq!(stage_clone.fetch_add(1, Ordering::SeqCst), 1);
             drop(cons);
         });

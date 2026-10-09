@@ -88,7 +88,7 @@ provide an alternative backing handle. Borrowed splitting does not allocate.
 - [x] 3. Configurable ownership markers and handle acquisition.
 - [x] 4. Extensible deferred endpoints, undo, and forget/panic recovery.
 - [x] 5. Exact/partial bulk operations and fallible construction.
-- [ ] 6. Async/blocking marker backends and consistent waiting APIs.
+- [x] 6. Async/blocking marker backends and consistent waiting APIs.
 - [ ] 7. Feature/target checks, Miri, benchmarks, examples, and migration notes.
 
 Milestone 1 validation: `cargo test --workspace --offline` passes (100 unit
@@ -110,3 +110,10 @@ for tests that deliberately exercise the specified `mem::forget` leaks.
 
 Milestone 5 validation: workspace tests pass; exact-transfer and allocation-error
 tests, including non-Copy arrays and initializer panic recovery, pass under Miri.
+
+Milestone 6 validation: workspace tests pass, including threshold notifications,
+closure/reacquisition, a panicking waker, cancellation without in-flight items,
+partial-progress errors, and bounded collection. The initial workspace Miri run
+passed all enabled library tests (five timing/thread-dependent blocking tests are
+explicitly ignored under Miri by the existing suite). Async/blocking RBs are now
+aliases selecting notification markers; EndpointPolicy selects their adapters.

@@ -1,10 +1,10 @@
 use crate::{
+    endpoint::{AsyncCons, AsyncProd},
     rb::AsyncRb,
-    wrap::{AsyncCons, AsyncProd},
 };
+use ringbuf::storage::Array;
 #[cfg(feature = "alloc")]
-use ringbuf::{HeapRb, storage::Heap};
-use ringbuf::{SharedRb, storage::Array};
+use ringbuf::storage::Heap;
 
 #[cfg(all(feature = "alloc", not(feature = "portable-atomic")))]
 pub use alloc::sync::Arc;
@@ -18,19 +18,8 @@ pub type AsyncHeapProd<T> = AsyncProd<Arc<AsyncHeapRb<T>>>;
 #[cfg(feature = "alloc")]
 pub type AsyncHeapCons<T> = AsyncCons<Arc<AsyncHeapRb<T>>>;
 
-#[cfg(feature = "alloc")]
-impl<T> AsyncHeapRb<T> {
-    pub fn new(cap: usize) -> Self {
-        Self::from(HeapRb::new(cap))
-    }
-}
-
 pub type AsyncStaticRb<T, const N: usize> = AsyncRb<Array<T, N>>;
 pub type AsyncStaticProd<'a, T, const N: usize> = AsyncProd<&'a AsyncStaticRb<T, N>>;
 pub type AsyncStaticCons<'a, T, const N: usize> = AsyncCons<&'a AsyncStaticRb<T, N>>;
 
-impl<T, const N: usize> Default for AsyncRb<Array<T, N>> {
-    fn default() -> Self {
-        AsyncRb::from(SharedRb::default())
-    }
-}
+pub type AsyncArrayRb<T, const N: usize> = AsyncRb<Array<T, N>>;

@@ -1,158 +1,58 @@
-#[cfg(feature = "alloc")]
-use crate::alias::Arc;
-use crate::wrap::{AsyncCons, AsyncProd};
-use core::{mem::MaybeUninit, num::NonZeroUsize};
 use futures_util::task::AtomicWaker;
-#[cfg(feature = "alloc")]
-use ringbuf::traits::Split;
 use ringbuf::{
-    SharedRb,
+    Rb,
+    indices::{AtomicIndices, Indices},
+    markers::{AtomicMarkers, Markers, TrackedMarkers},
     rb::RbHandle,
     storage::Storage,
-    traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
+    traits::EndpointPolicy,
 };
-
-pub trait AsyncRbRef: RbHandle<Rb = AsyncRb<Self::Storage>> {
-    type Storage: Storage;
-}
-impl<S: Storage, R: RbHandle<Rb = AsyncRb<S>>> AsyncRbRef for R {
-    type Storage = S;
-}
-
-pub struct AsyncRb<S: Storage> {
-    base: SharedRb<S>,
+#[derive(Default)]
+pub struct AsyncMarkers {
+    flags: AtomicMarkers,
     pub(crate) read: AtomicWaker,
     pub(crate) write: AtomicWaker,
 }
-
-impl<S: Storage> AsyncRb<S> {
-    pub fn from(base: SharedRb<S>) -> Self {
-        Self {
-            base,
-            read: AtomicWaker::default(),
-            write: AtomicWaker::default(),
-        }
-    }
-}
-
-impl<S: Storage> Unpin for AsyncRb<S> {}
-
-impl<S: Storage> Observer for AsyncRb<S> {
-    type Item = S::Item;
-
-    #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.base.capacity()
-    }
-
-    #[inline]
-    fn read_index(&self) -> usize {
-        self.base.read_index()
-    }
-    #[inline]
-    fn write_index(&self) -> usize {
-        self.base.write_index()
-    }
-}
-
-impl<S: Storage> ringbuf::traits::Presence for AsyncRb<S> {
-    #[inline]
+unsafe impl Markers for AsyncMarkers {
     fn read_is_held(&self) -> bool {
-        self.base.read_is_held()
+        self.flags.read_is_held()
     }
-    #[inline]
     fn write_is_held(&self) -> bool {
-        self.base.write_is_held()
+        self.flags.write_is_held()
     }
-}
-
-unsafe impl<S: Storage> ringbuf::traits::RawObserver for AsyncRb<S> {
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
-        unsafe { self.base.unsafe_slices(start, end) }
+    unsafe fn hold_read(&self, held: bool) -> bool {
+        unsafe { self.flags.hold_read(held) }
     }
-    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        unsafe { self.base.unsafe_slices_mut(start, end) }
+    unsafe fn hold_write(&self, held: bool) -> bool {
+        unsafe { self.flags.hold_write(held) }
     }
-}
-
-impl<S: Storage> Producer for AsyncRb<S> {}
-
-unsafe impl<S: Storage> ringbuf::traits::RawProducer for AsyncRb<S> {
-    unsafe fn set_write_index(&self, value: usize) {
-        unsafe { self.base.set_write_index(value) };
+    fn notify_read(&self) {
+        self.read.wake();
+    }
+    fn notify_write(&self) {
         self.write.wake();
     }
 }
-impl<S: Storage> Consumer for AsyncRb<S> {}
-
-unsafe impl<S: Storage> ringbuf::traits::RawConsumer for AsyncRb<S> {
-    unsafe fn set_read_index(&self, value: usize) {
-        unsafe { self.base.set_read_index(value) };
-        self.read.wake();
+impl TrackedMarkers for AsyncMarkers {}
+pub type AsyncRb<S> = Rb<S, AtomicIndices, AsyncMarkers>;
+pub trait AsyncRbHandle: RbHandle<Rb = Rb<Self::Storage, Self::Indices, AsyncMarkers>> {
+    type Storage: Storage + ?Sized;
+    type Indices: Indices;
+}
+impl<S: Storage + ?Sized, I: Indices, R: RbHandle<Rb = Rb<S, I, AsyncMarkers>>> AsyncRbHandle for R {
+    type Storage = S;
+    type Indices = I;
+}
+impl<S: Storage + ?Sized, I: Indices> EndpointPolicy<S, I> for AsyncMarkers {
+    type Prod<R: RbHandle<Rb = Rb<S, I, Self>>> = crate::endpoint::AsyncProd<R>;
+    type Cons<R: RbHandle<Rb = Rb<S, I, Self>>> = crate::endpoint::AsyncCons<R>;
+    fn wrap_pair<R: RbHandle<Rb = Rb<S, I, Self>>>(
+        pair: (ringbuf::endpoint::CachedProd<R>, ringbuf::endpoint::CachedCons<R>),
+    ) -> (Self::Prod<R>, Self::Cons<R>) {
+        (
+            crate::endpoint::AsyncProd::from_cached(pair.0),
+            crate::endpoint::AsyncCons::from_cached(pair.1),
+        )
     }
 }
-impl<S: Storage> RingBuffer for AsyncRb<S> {}
-
-unsafe impl<S: Storage> ringbuf::traits::RawRingBuffer for AsyncRb<S> {
-    unsafe fn set_read_claimed(&self, value: usize) {
-        unsafe { self.base.set_read_claimed(value) };
-    }
-    unsafe fn set_read_released(&self, value: usize) {
-        unsafe { self.base.set_read_released(value) };
-    }
-
-    #[inline]
-    unsafe fn hold_read(&self, flag: bool) -> bool {
-        let old = unsafe { self.base.hold_read(flag) };
-        self.read.wake();
-        old
-    }
-    #[inline]
-    unsafe fn hold_write(&self, flag: bool) -> bool {
-        let old = unsafe { self.base.hold_write(flag) };
-        self.write.wake();
-        old
-    }
-}
-
-impl<S: Storage> SplitRef for AsyncRb<S> {
-    type RefProd<'a>
-        = AsyncProd<&'a Self>
-    where
-        Self: 'a;
-    type RefCons<'a>
-        = AsyncCons<&'a Self>
-    where
-        Self: 'a;
-
-    fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
-        unsafe { (AsyncProd::new(self), AsyncCons::new(self)) }
-    }
-}
-#[cfg(feature = "alloc")]
-impl<S: Storage> Split for AsyncRb<S> {
-    type Prod = AsyncProd<Arc<Self>>;
-    type Cons = AsyncCons<Arc<Self>>;
-
-    fn split(self) -> (Self::Prod, Self::Cons) {
-        let arc = Arc::new(self);
-        unsafe { (AsyncProd::new(arc.clone()), AsyncCons::new(arc)) }
-    }
-}
-
-impl<S: Storage> AsRef<Self> for AsyncRb<S> {
-    fn as_ref(&self) -> &Self {
-        self
-    }
-}
-impl<S: Storage> AsMut<Self> for AsyncRb<S> {
-    fn as_mut(&mut self) -> &mut Self {
-        self
-    }
-}
-
-#[allow(unused_imports)]
-use ringbuf::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};
-
-#[allow(unused_imports)]
-use ringbuf::traits::Presence;
+pub use AsyncRbHandle as AsyncRbRef;

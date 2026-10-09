@@ -7,9 +7,9 @@ extern crate alloc;
 extern crate std;
 
 mod alias;
+pub mod endpoint;
 pub mod rb;
 pub mod sync;
-pub mod wrap;
 
 #[cfg(all(test, feature = "std"))]
 mod tests;
@@ -17,5 +17,8 @@ mod tests;
 pub use ringbuf::traits;
 
 pub use alias::*;
+pub use endpoint::{BlockingCons, BlockingProd, WaitError};
 pub use rb::BlockingRb;
-pub use wrap::{BlockingCons, BlockingProd, WaitError};
+
+pub use endpoint as wrap;
+pub use rb::BlockingMarkers;

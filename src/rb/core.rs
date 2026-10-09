@@ -4,16 +4,15 @@ use super::{
 };
 #[cfg(feature = "alloc")]
 use crate::traits::Split;
+use crate::{indices::Indices, markers::Markers};
 use crate::{
-    endpoint::{CachedCons, CachedProd},
     storage::Storage,
     traits::{
-        Observer, RingBuffer, SplitRef,
+        EndpointPolicy, Observer, RingBuffer, SplitRef,
         consumer::{Consumer, impl_consumer_traits},
         producer::{Producer, impl_producer_traits},
     },
 };
-use crate::{indices::Indices, markers::Markers};
 use core::{
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
@@ -32,6 +31,20 @@ pub struct Rb<S: Storage + ?Sized, I: Indices, M: Markers> {
 }
 
 impl<S: Storage, I: Indices, M: Markers> Rb<S, I, M> {
+    /// Change marker policy while owning the RB exclusively. This does not allocate.
+    pub fn with_markers<N: Markers>(self, markers: N) -> Rb<S, I, N> {
+        let mut this = ManuallyDrop::new(self);
+        unsafe {
+            let result = Rb {
+                storage: ptr::read(&this.storage),
+                indices: ptr::read(&this.indices),
+                markers,
+            };
+            ptr::drop_in_place(&mut this.markers);
+            result
+        }
+    }
+
     /// Construct an empty buffer from caller-provided uninitialized storage.
     pub fn try_from_storage(storage: S) -> Result<Self, (crate::CapacityError, S)> {
         if let Err(error) = crate::CapacityError::check(storage.len()) {
@@ -62,13 +75,18 @@ impl<S: Storage, I: Indices, M: Markers> Rb<S, I, M> {
     ///
     /// Initialized contents of the storage must be properly dropped.
     pub unsafe fn into_raw_parts(self) -> (S, usize, usize, usize) {
-        let this = ManuallyDrop::new(self);
-        (
+        let mut this = ManuallyDrop::new(self);
+        let result = (
             unsafe { ptr::read(&this.storage) },
             this.read_released_index(),
             this.read_claimed_index(),
             this.write_index(),
-        )
+        );
+        unsafe {
+            ptr::drop_in_place(&mut this.indices);
+            ptr::drop_in_place(&mut this.markers);
+        }
+        result
     }
 }
 
@@ -131,6 +149,7 @@ unsafe impl<S: Storage + ?Sized, I: Indices, M: Markers> crate::traits::RawProdu
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         unsafe { self.indices.set_write_published(value) };
+        self.markers.notify_write();
     }
 }
 
@@ -147,6 +166,7 @@ unsafe impl<S: Storage + ?Sized, I: Indices, M: Markers> crate::traits::RawConsu
             self.indices.set_read_claimed(value);
             self.indices.set_read_released(value);
         }
+        self.markers.notify_read();
     }
 }
 
@@ -187,44 +207,44 @@ impl<S: Storage + ?Sized, I: Indices, M: Markers> Drop for Rb<S, I, M> {
 }
 
 #[cfg(feature = "alloc")]
-impl<S: Storage, I: Indices, M: Markers> Split for Rb<S, I, M> {
-    type Prod = CachedProd<Arc<Self>>;
-    type Cons = CachedCons<Arc<Self>>;
+impl<S: Storage, I: Indices, M: EndpointPolicy<S, I>> Split for Rb<S, I, M> {
+    type Prod = M::Prod<Arc<Self>>;
+    type Cons = M::Cons<Arc<Self>>;
 
     fn split(self) -> (Self::Prod, Self::Cons) {
-        unsafe { crate::endpoint::split_unchecked(Arc::new(self)) }
+        M::wrap_pair(unsafe { crate::endpoint::split_unchecked(Arc::new(self)) })
     }
 }
 #[cfg(feature = "alloc")]
-impl<S: Storage + ?Sized, I: Indices, M: Markers> Split for Arc<Rb<S, I, M>> {
-    type Prod = CachedProd<Self>;
-    type Cons = CachedCons<Self>;
+impl<S: Storage + ?Sized, I: Indices, M: EndpointPolicy<S, I>> Split for Arc<Rb<S, I, M>> {
+    type Prod = M::Prod<Self>;
+    type Cons = M::Cons<Self>;
 
     fn split(self) -> (Self::Prod, Self::Cons) {
-        crate::endpoint::try_split(self).unwrap_or_else(|_| panic!("endpoint already held or tracking disabled"))
+        M::wrap_pair(crate::endpoint::try_split(self).unwrap_or_else(|_| panic!("endpoint already held or tracking disabled")))
     }
 }
 #[cfg(feature = "alloc")]
-impl<S: Storage + ?Sized, I: Indices, M: Markers> Split for Box<Rb<S, I, M>> {
-    type Prod = CachedProd<Arc<Rb<S, I, M>>>;
-    type Cons = CachedCons<Arc<Rb<S, I, M>>>;
+impl<S: Storage + ?Sized, I: Indices, M: EndpointPolicy<S, I>> Split for Box<Rb<S, I, M>> {
+    type Prod = M::Prod<Arc<Rb<S, I, M>>>;
+    type Cons = M::Cons<Arc<Rb<S, I, M>>>;
 
     fn split(self) -> (Self::Prod, Self::Cons) {
-        unsafe { crate::endpoint::split_unchecked(Arc::<Rb<S, I, M>>::from(self)) }
+        M::wrap_pair(unsafe { crate::endpoint::split_unchecked(Arc::<Rb<S, I, M>>::from(self)) })
     }
 }
-impl<S: Storage + ?Sized, I: Indices, M: Markers> SplitRef for Rb<S, I, M> {
+impl<S: Storage + ?Sized, I: Indices, M: EndpointPolicy<S, I>> SplitRef for Rb<S, I, M> {
     type RefProd<'a>
-        = CachedProd<&'a Self>
+        = M::Prod<&'a Self>
     where
         Self: 'a;
     type RefCons<'a>
-        = CachedCons<&'a Self>
+        = M::Cons<&'a Self>
     where
         Self: 'a;
 
     fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
-        unsafe { crate::endpoint::split_unchecked(&*self) }
+        M::wrap_pair(unsafe { crate::endpoint::split_unchecked(&*self) })
     }
 }
 

@@ -1,163 +1,73 @@
-#[cfg(feature = "alloc")]
-use crate::alias::Arc;
+use crate::sync::Semaphore;
 #[cfg(feature = "std")]
 use crate::sync::StdSemaphore;
-use crate::{BlockingCons, BlockingProd, sync::Semaphore};
-use core::{mem::MaybeUninit, num::NonZeroUsize};
-#[cfg(feature = "alloc")]
-use ringbuf::traits::Split;
 use ringbuf::{
-    SharedRb,
+    Rb,
+    indices::{AtomicIndices, Indices},
+    markers::{AtomicMarkers, Markers, TrackedMarkers},
     rb::RbHandle,
     storage::Storage,
-    traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
+    traits::EndpointPolicy,
 };
-
-#[cfg(not(feature = "std"))]
-pub struct BlockingRb<S: Storage, X: Semaphore> {
-    base: SharedRb<S>,
+pub struct BlockingMarkers<X: Semaphore> {
+    flags: AtomicMarkers,
     pub(crate) read: X,
     pub(crate) write: X,
 }
-#[cfg(feature = "std")]
-pub struct BlockingRb<S: Storage, X: Semaphore = StdSemaphore> {
-    base: SharedRb<S>,
-    pub(crate) read: X,
-    pub(crate) write: X,
-}
-
-impl<S: Storage, X: Semaphore> BlockingRb<S, X> {
-    pub fn from(base: SharedRb<S>) -> Self {
+impl<X: Semaphore> Default for BlockingMarkers<X> {
+    fn default() -> Self {
         Self {
-            base,
+            flags: AtomicMarkers::default(),
             read: X::default(),
             write: X::default(),
         }
     }
 }
-
-impl<S: Storage, X: Semaphore> Observer for BlockingRb<S, X> {
-    type Item = S::Item;
-
-    #[inline]
-    fn capacity(&self) -> NonZeroUsize {
-        self.base.capacity()
-    }
-
-    #[inline]
-    fn read_index(&self) -> usize {
-        self.base.read_index()
-    }
-    #[inline]
-    fn write_index(&self) -> usize {
-        self.base.write_index()
-    }
-}
-
-impl<S: Storage, X: Semaphore> ringbuf::traits::Presence for BlockingRb<S, X> {
-    #[inline]
+unsafe impl<X: Semaphore> Markers for BlockingMarkers<X> {
     fn read_is_held(&self) -> bool {
-        self.base.read_is_held()
+        self.flags.read_is_held()
     }
-    #[inline]
     fn write_is_held(&self) -> bool {
-        self.base.write_is_held()
+        self.flags.write_is_held()
     }
-}
-
-unsafe impl<S: Storage, X: Semaphore> ringbuf::traits::RawObserver for BlockingRb<S, X> {
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
-        unsafe { self.base.unsafe_slices(start, end) }
+    unsafe fn hold_read(&self, held: bool) -> bool {
+        unsafe { self.flags.hold_read(held) }
     }
-    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        unsafe { self.base.unsafe_slices_mut(start, end) }
+    unsafe fn hold_write(&self, held: bool) -> bool {
+        unsafe { self.flags.hold_write(held) }
     }
-}
-impl<S: Storage, X: Semaphore> Producer for BlockingRb<S, X> {}
-
-unsafe impl<S: Storage, X: Semaphore> ringbuf::traits::RawProducer for BlockingRb<S, X> {
-    unsafe fn set_write_index(&self, value: usize) {
-        unsafe { self.base.set_write_index(value) };
+    fn notify_read(&self) {
+        self.read.give();
+    }
+    fn notify_write(&self) {
         self.write.give();
     }
 }
-impl<S: Storage, X: Semaphore> Consumer for BlockingRb<S, X> {}
-
-unsafe impl<S: Storage, X: Semaphore> ringbuf::traits::RawConsumer for BlockingRb<S, X> {
-    unsafe fn set_read_index(&self, value: usize) {
-        unsafe { self.base.set_read_index(value) };
-        self.read.give();
-    }
-}
-impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {}
-
-unsafe impl<S: Storage, X: Semaphore> ringbuf::traits::RawRingBuffer for BlockingRb<S, X> {
-    unsafe fn set_read_claimed(&self, value: usize) {
-        unsafe { self.base.set_read_claimed(value) };
-    }
-    unsafe fn set_read_released(&self, value: usize) {
-        unsafe { self.base.set_read_released(value) };
-    }
-
-    unsafe fn hold_read(&self, flag: bool) -> bool {
-        let old = unsafe { self.base.hold_read(flag) };
-        self.read.give();
-        old
-    }
-    unsafe fn hold_write(&self, flag: bool) -> bool {
-        let old = unsafe { self.base.hold_write(flag) };
-        self.write.give();
-        old
-    }
-}
-
-impl<S: Storage, X: Semaphore> SplitRef for BlockingRb<S, X> {
-    type RefProd<'a>
-        = BlockingProd<&'a Self>
-    where
-        Self: 'a;
-    type RefCons<'a>
-        = BlockingCons<&'a Self>
-    where
-        Self: 'a;
-
-    fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
-        (BlockingProd::new(self), BlockingCons::new(self))
-    }
-}
-#[cfg(feature = "alloc")]
-impl<S: Storage, X: Semaphore> Split for BlockingRb<S, X> {
-    type Prod = BlockingProd<Arc<Self>>;
-    type Cons = BlockingCons<Arc<Self>>;
-
-    fn split(self) -> (Self::Prod, Self::Cons) {
-        let arc = Arc::new(self);
-        (BlockingProd::new(arc.clone()), BlockingCons::new(arc))
-    }
-}
-
-pub trait BlockingRbRef: RbHandle<Rb = BlockingRb<Self::Storage, Self::Semaphore>> {
-    type Storage: Storage;
+impl<X: Semaphore> TrackedMarkers for BlockingMarkers<X> {}
+#[cfg(feature = "std")]
+pub type BlockingRb<S, X = StdSemaphore> = Rb<S, AtomicIndices, BlockingMarkers<X>>;
+#[cfg(not(feature = "std"))]
+pub type BlockingRb<S, X> = Rb<S, AtomicIndices, BlockingMarkers<X>>;
+pub trait BlockingRbHandle: RbHandle<Rb = Rb<Self::Storage, Self::Indices, BlockingMarkers<Self::Semaphore>>> {
+    type Storage: Storage + ?Sized;
+    type Indices: Indices;
     type Semaphore: Semaphore;
 }
-impl<S: Storage, X: Semaphore, R: RbHandle<Rb = BlockingRb<S, X>>> BlockingRbRef for R {
+impl<S: Storage + ?Sized, I: Indices, X: Semaphore, R: RbHandle<Rb = Rb<S, I, BlockingMarkers<X>>>> BlockingRbHandle for R {
     type Storage = S;
+    type Indices = I;
     type Semaphore = X;
 }
-
-impl<S: Storage, X: Semaphore> AsRef<Self> for BlockingRb<S, X> {
-    fn as_ref(&self) -> &Self {
-        self
+impl<S: Storage + ?Sized, I: Indices, X: Semaphore> EndpointPolicy<S, I> for BlockingMarkers<X> {
+    type Prod<R: RbHandle<Rb = Rb<S, I, Self>>> = crate::endpoint::BlockingProd<R>;
+    type Cons<R: RbHandle<Rb = Rb<S, I, Self>>> = crate::endpoint::BlockingCons<R>;
+    fn wrap_pair<R: RbHandle<Rb = Rb<S, I, Self>>>(
+        pair: (ringbuf::endpoint::CachedProd<R>, ringbuf::endpoint::CachedCons<R>),
+    ) -> (Self::Prod<R>, Self::Cons<R>) {
+        (
+            crate::endpoint::BlockingProd::from_cached(pair.0),
+            crate::endpoint::BlockingCons::from_cached(pair.1),
+        )
     }
 }
-impl<S: Storage, X: Semaphore> AsMut<Self> for BlockingRb<S, X> {
-    fn as_mut(&mut self) -> &mut Self {
-        self
-    }
-}
-
-#[allow(unused_imports)]
-use ringbuf::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};
-
-#[allow(unused_imports)]
-use ringbuf::traits::Presence;
+pub use BlockingRbHandle as BlockingRbRef;

@@ -54,6 +54,17 @@ impl<R: RbHandle, const P: bool, const C: bool> Cached<R, P, C> {
         }
     }
 
+    pub fn into_direct(self) -> Direct<R, P, C> {
+        self.base
+    }
+    pub fn is_active(&self) -> bool {
+        self.base.is_active()
+    }
+    pub fn close(&mut self) {
+        self.refresh.set(true);
+        self.base.close();
+    }
+
     /// Get ring buffer observer.
     pub fn observe(&self) -> Obs<R> {
         self.base.observe()
@@ -63,6 +74,7 @@ impl<R: RbHandle, const P: bool, const C: bool> Cached<R, P, C> {
     #[deprecated(note = "use into_deferred")]
     #[allow(deprecated)]
     pub fn freeze(self) -> Frozen<R, P, C> {
+        assert!(self.is_active(), "endpoint is closed");
         self.refresh.set(true);
         unsafe { super::Deferred::from_endpoint(self) }
     }
@@ -232,11 +244,13 @@ use crate::traits::Presence;
 impl<R: RbHandle> Cached<R, true, false> {
     /// Defer publication and acquisition until explicitly synchronized.
     pub fn into_deferred(self) -> super::DeferredProd<Self> {
+        assert!(self.is_active(), "endpoint is closed");
         self.refresh.set(true);
         unsafe { super::Deferred::from_endpoint(self) }
     }
     /// Temporarily defer this endpoint. Drop commits; forgetting may leak items.
     pub fn defer(&mut self) -> super::DeferredProd<&mut Self> {
+        assert!(self.is_active(), "endpoint is closed");
         self.refresh.set(true);
         unsafe { super::Deferred::from_endpoint(self) }
     }
@@ -245,11 +259,13 @@ impl<R: RbHandle> Cached<R, true, false> {
 impl<R: RbHandle> Cached<R, false, true> {
     /// Defer publication and acquisition until explicitly synchronized.
     pub fn into_deferred(self) -> super::DeferredCons<Self> {
+        assert!(self.is_active(), "endpoint is closed");
         self.refresh.set(true);
         unsafe { super::Deferred::from_endpoint(self) }
     }
     /// Temporarily defer this endpoint. Drop commits; forgetting may leak items.
     pub fn defer(&mut self) -> super::DeferredCons<&mut Self> {
+        assert!(self.is_active(), "endpoint is closed");
         self.refresh.set(true);
         unsafe { super::Deferred::from_endpoint(self) }
     }

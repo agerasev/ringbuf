@@ -4,11 +4,20 @@ use core::{
     task::{Context, Poll, Waker},
 };
 use futures_util::future::FusedFuture;
+use ringbuf::error::{TransferError, WaitError};
 use ringbuf::traits::Consumer;
 #[cfg(feature = "std")]
 use std::io;
 
 pub trait AsyncConsumer: ringbuf::traits::Presence + Consumer {
+    /// Compatibility spelling for the streaming `pop_all` operation.
+    fn pop_exact<'a: 'b, 'b>(&'a mut self, slice: &'b mut [Self::Item]) -> PopSliceFuture<'a, 'b, Self>
+    where
+        Self::Item: Copy,
+    {
+        self.pop_all(slice)
+    }
+
     fn register_waker(&self, waker: &Waker);
 
     fn close(&mut self);
@@ -32,7 +41,7 @@ pub trait AsyncConsumer: ringbuf::traits::Presence + Consumer {
 
     /// Wait for the buffer to contain at least `count` items or to close.
     ///
-    /// In debug mode panics if `count` is greater than buffer capacity.
+    /// Returns `TooLarge` immediately if `count` exceeds capacity.
     ///
     /// The method takes `&mut self` because only single [`WaitOccupiedFuture`] is allowed at a time.
     ///
@@ -40,7 +49,7 @@ pub trait AsyncConsumer: ringbuf::traits::Presence + Consumer {
     ///
     /// The future can be safely cancelled.
     fn wait_occupied(&mut self, count: usize) -> WaitOccupiedFuture<'_, Self> {
-        debug_assert!(count <= self.capacity().get());
+        unsafe { self.prepare_read() };
         WaitOccupiedFuture {
             owner: self,
             count,
@@ -52,13 +61,13 @@ pub trait AsyncConsumer: ringbuf::traits::Presence + Consumer {
     ///
     /// Future returns:
     /// + `Ok` - the whole slice is filled with the items from the buffer.
-    /// + `Err(count)` - the buffer is empty and the corresponding producer was dropped, number of items copied to slice is returned.
+    /// + `Err(TransferError)` - the buffer is empty and the corresponding producer was dropped, number of items copied to slice is returned.
     ///
     /// # Cancel safety
     ///
     /// If future is cancelled then slice can be partially filled.
     /// The number of items already copied can be examined by [`PopSliceFuture::count`].
-    fn pop_exact<'a: 'b, 'b>(&'a mut self, slice: &'b mut [Self::Item]) -> PopSliceFuture<'a, 'b, Self>
+    fn pop_all<'a: 'b, 'b>(&'a mut self, slice: &'b mut [Self::Item]) -> PopSliceFuture<'a, 'b, Self>
     where
         Self::Item: Copy,
     {
@@ -76,9 +85,18 @@ pub trait AsyncConsumer: ringbuf::traits::Presence + Consumer {
     /// If future is cancelled then `vec` contains items taken from RB before cancellation.
     #[cfg(feature = "alloc")]
     fn pop_until_end<'a: 'b, 'b>(&'a mut self, vec: &'b mut alloc::vec::Vec<Self::Item>) -> PopVecFuture<'a, 'b, Self> {
+        self.pop_into_vec(vec, usize::MAX)
+    }
+
+    /// Append at most `limit` items, stopping normally on producer closure.
+    /// Allocation failure is returned, with the collected prefix left in `vec`.
+    #[cfg(feature = "alloc")]
+    fn pop_into_vec<'a: 'b, 'b>(&'a mut self, vec: &'b mut alloc::vec::Vec<Self::Item>, limit: usize) -> PopVecFuture<'a, 'b, Self> {
         PopVecFuture {
             owner: self,
             vec: Some(vec),
+            limit,
+            count: 0,
         }
     }
 
@@ -193,7 +211,7 @@ impl<A: AsyncConsumer> Future for PopSliceFuture<'_, '_, A>
 where
     A::Item: Copy,
 {
-    type Output = Result<(), usize>;
+    type Output = Result<usize, TransferError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut waker_registered = false;
@@ -204,10 +222,13 @@ where
             slice = &mut slice[len..];
             self.count += len;
             if slice.is_empty() {
-                break Poll::Ready(Ok(()));
+                break Poll::Ready(Ok(self.count));
             }
             if closed {
-                break Poll::Ready(Err(self.count));
+                break Poll::Ready(Err(TransferError {
+                    completed: self.count,
+                    reason: WaitError::Closed,
+                }));
             }
             self.slice.replace(slice);
             if waker_registered {
@@ -236,6 +257,8 @@ where
 pub struct PopVecFuture<'a, 'b, A: AsyncConsumer + ?Sized> {
     owner: &'a mut A,
     vec: Option<&'b mut alloc::vec::Vec<A::Item>>,
+    limit: usize,
+    count: usize,
 }
 #[cfg(feature = "alloc")]
 impl<A: AsyncConsumer> Unpin for PopVecFuture<'_, '_, A> {}
@@ -247,7 +270,7 @@ impl<A: AsyncConsumer> FusedFuture for PopVecFuture<'_, '_, A> {
 }
 #[cfg(feature = "alloc")]
 impl<A: AsyncConsumer> Future for PopVecFuture<'_, '_, A> {
-    type Output = ();
+    type Output = Result<usize, ringbuf::error::CollectError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut waker_registered = false;
@@ -256,10 +279,20 @@ impl<A: AsyncConsumer> Future for PopVecFuture<'_, '_, A> {
             let vec = self.vec.take().unwrap();
 
             loop {
-                if vec.len() == vec.capacity() {
-                    vec.reserve(vec.capacity().max(16));
+                if self.count == self.limit {
+                    return Poll::Ready(Ok(self.count));
                 }
-                let n = self.owner.pop_slice_uninit(vec.spare_capacity_mut());
+                if vec.len() == vec.capacity() {
+                    if let Err(error) = vec.try_reserve((self.limit - self.count).min(vec.capacity().max(16))) {
+                        return Poll::Ready(Err(ringbuf::error::CollectError::Allocation {
+                            completed: self.count,
+                            error,
+                        }));
+                    }
+                }
+                let take = (self.limit - self.count).min(vec.spare_capacity_mut().len());
+                let n = self.owner.pop_slice_uninit(&mut vec.spare_capacity_mut()[..take]);
+                self.count += n;
                 if n == 0 {
                     break;
                 }
@@ -267,7 +300,7 @@ impl<A: AsyncConsumer> Future for PopVecFuture<'_, '_, A> {
             }
 
             if closed {
-                break Poll::Ready(());
+                break Poll::Ready(Ok(self.count));
             }
             self.vec.replace(vec);
             if waker_registered {
@@ -295,16 +328,29 @@ impl<A: AsyncConsumer> FusedFuture for WaitOccupiedFuture<'_, A> {
     }
 }
 impl<A: AsyncConsumer> Future for WaitOccupiedFuture<'_, A> {
-    type Output = ();
+    type Output = Result<(), WaitError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut waker_registered = false;
         loop {
-            assert!(!self.done);
+            if self.done {
+                return Poll::Pending;
+            }
             let closed = self.owner.is_closed();
-            if self.count <= self.owner.occupied_len() || closed {
+            if self.count > self.owner.capacity().get() {
                 self.done = true;
-                break Poll::Ready(());
+                break Poll::Ready(Err(WaitError::TooLarge {
+                    requested: self.count,
+                    capacity: self.owner.capacity().get(),
+                }));
+            }
+            if self.count <= self.owner.occupied_len() {
+                self.done = true;
+                break Poll::Ready(Ok(()));
+            }
+            if closed {
+                self.done = true;
+                break Poll::Ready(Err(WaitError::Closed));
             }
             if waker_registered {
                 break Poll::Pending;
@@ -317,3 +363,10 @@ impl<A: AsyncConsumer> Future for WaitOccupiedFuture<'_, A> {
 
 #[allow(unused_imports)]
 use ringbuf::traits::Presence;
+
+#[cfg(feature = "alloc")]
+impl<A: AsyncConsumer> PopVecFuture<'_, '_, A> {
+    pub fn count(&self) -> usize {
+        self.count
+    }
+}

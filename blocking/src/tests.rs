@@ -1,6 +1,6 @@
 mod regressions;
 
-use crate::{BlockingHeapRb, traits::*, wrap::WaitError};
+use crate::{BlockingHeapRb, endpoint::WaitError, traits::*};
 use std::{
     io::{Read, Write},
     sync::Arc,
@@ -82,7 +82,7 @@ fn slice_all() {
         move || {
             let bytes = smsg;
             prod.set_timeout(TIMEOUT);
-            assert_eq!(prod.push_exact(&bytes), bytes.len());
+            assert_eq!(prod.push_all(&bytes), Ok(bytes.len()));
         }
     });
 
@@ -91,7 +91,7 @@ fn slice_all() {
         move || {
             let mut bytes = vec![0u8; smsg.len()];
             cons.set_timeout(TIMEOUT);
-            assert_eq!(cons.pop_exact(&mut bytes), bytes.len());
+            assert_eq!(cons.pop_all(&mut bytes), Ok(bytes.len()));
             bytes
         }
     });
@@ -115,7 +115,7 @@ fn vec_all() {
         move || {
             let bytes = smsg;
             prod.set_timeout(TIMEOUT);
-            assert_eq!(prod.push_exact(&bytes), bytes.len());
+            assert_eq!(prod.push_all(&bytes), Ok(bytes.len()));
         }
     });
 
@@ -124,7 +124,7 @@ fn vec_all() {
         move || {
             let mut bytes = Vec::new();
             cons.set_timeout(TIMEOUT);
-            cons.pop_until_end(&mut bytes);
+            cons.pop_until_end(&mut bytes).unwrap();
             assert_eq!(bytes.len(), smsg.len());
             bytes
         }
@@ -149,7 +149,7 @@ fn iter_all() {
         move || {
             prod.set_timeout(TIMEOUT);
             let bytes = smsg;
-            assert_eq!(prod.push_all_iter(bytes.iter().copied()), bytes.len());
+            assert_eq!(prod.push_all_iter(&mut bytes.iter().copied().peekable()), Ok(bytes.len()));
         }
     });
 
