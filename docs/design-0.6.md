@@ -87,7 +87,7 @@ provide an alternative backing handle. Borrowed splitting does not allocate.
 - [x] 2. One generic core, index policies, and raw/safe interfaces.
 - [x] 3. Configurable ownership markers and handle acquisition.
 - [x] 4. Extensible deferred endpoints, undo, and forget/panic recovery.
-- [ ] 5. Exact/partial bulk operations and fallible construction.
+- [x] 5. Exact/partial bulk operations and fallible construction.
 - [ ] 6. Async/blocking marker backends and consistent waiting APIs.
 - [ ] 7. Feature/target checks, Miri, benchmarks, examples, and migration notes.
 
@@ -107,3 +107,6 @@ no markers across threads. Presence queries are a separate capability.
 Milestone 4 validation: workspace tests and all seven deferred ownership tests
 pass under Miri. Miri uses a writable cache in `/tmp`; leak checking is disabled
 for tests that deliberately exercise the specified `mem::forget` leaks.
+
+Milestone 5 validation: workspace tests pass; exact-transfer and allocation-error
+tests, including non-Copy arrays and initializer panic recovery, pass under Miri.

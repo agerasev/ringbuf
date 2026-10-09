@@ -1,8 +1,8 @@
 #[cfg(feature = "alloc")]
 use alloc::{boxed::Box, vec::Vec};
-use core::{cell::UnsafeCell, marker::PhantomData, mem::MaybeUninit, ops::Range, ptr::NonNull, slice};
 #[cfg(feature = "alloc")]
-use core::{mem::ManuallyDrop, ptr};
+use core::mem::ManuallyDrop;
+use core::{cell::UnsafeCell, marker::PhantomData, mem::MaybeUninit, ops::Range, ptr::NonNull, slice};
 
 /// Abstract storage for the ring buffer.
 ///
@@ -134,6 +134,7 @@ unsafe impl<T> Storage for Slice<T> {
 pub struct Heap<T> {
     ptr: *mut MaybeUninit<T>,
     len: usize,
+    allocated: usize,
 }
 #[cfg(feature = "alloc")]
 unsafe impl<T> Send for Heap<T> where T: Send {}
@@ -155,11 +156,22 @@ unsafe impl<T> Storage for Heap<T> {
 impl<T> Heap<T> {
     /// Create a new heap storage with exact capacity.
     pub fn new(capacity: usize) -> Self {
-        let mut data = Vec::<MaybeUninit<T>>::with_capacity(capacity);
-        // `data.capacity()` is not guaranteed to be equal to `capacity`.
-        // We enforce that by `set_len` and converting to boxed slice.
+        Self::try_new(capacity).unwrap_or_else(|error| panic!("{error}"))
+    }
+    /// Allocate exactly the requested logical length without a later shrinking allocation.
+    pub fn try_new(capacity: usize) -> Result<Self, alloc::collections::TryReserveError> {
+        let mut data = Vec::<MaybeUninit<T>>::new();
+        data.try_reserve_exact(capacity)?;
         unsafe { data.set_len(capacity) };
-        Self::from(data.into_boxed_slice())
+        Ok(Self::from_vec(data))
+    }
+    fn from_vec(value: Vec<MaybeUninit<T>>) -> Self {
+        let mut value = ManuallyDrop::new(value);
+        Self {
+            ptr: value.as_mut_ptr(),
+            len: value.len(),
+            allocated: value.capacity(),
+        }
     }
 }
 #[cfg(feature = "alloc")]
@@ -171,29 +183,26 @@ impl<T> From<Vec<MaybeUninit<T>>> for Heap<T> {
         if core::mem::size_of::<T>() != 0 {
             unsafe { value.set_len(value.capacity()) };
         }
-        Self::from(value.into_boxed_slice())
+        Self::from_vec(value)
     }
 }
 #[cfg(feature = "alloc")]
 impl<T> From<Box<[MaybeUninit<T>]>> for Heap<T> {
     fn from(value: Box<[MaybeUninit<T>]>) -> Self {
-        Self {
-            len: value.len(),
-            ptr: Box::into_raw(value).cast(),
-        }
+        Self::from_vec(value.into_vec())
     }
 }
 #[cfg(feature = "alloc")]
 impl<T> From<Heap<T>> for Box<[MaybeUninit<T>]> {
     fn from(value: Heap<T>) -> Self {
         let value = ManuallyDrop::new(value);
-        unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(value.ptr, value.len)) }
+        unsafe { Vec::from_raw_parts(value.ptr, value.len, value.allocated) }.into_boxed_slice()
     }
 }
 #[cfg(feature = "alloc")]
 impl<T> Drop for Heap<T> {
     fn drop(&mut self) {
-        drop(unsafe { Box::from_raw(ptr::slice_from_raw_parts_mut(self.ptr, self.len)) });
+        drop(unsafe { Vec::from_raw_parts(self.ptr, self.len, self.allocated) });
     }
 }
 

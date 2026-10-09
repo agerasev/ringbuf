@@ -118,6 +118,34 @@ pub trait Producer: Observer + crate::traits::RawProducer {
         count
     }
 
+    /// Append the whole slice or return an error without changing the queue.
+    fn try_push_slice(&mut self, items: &[Self::Item]) -> Result<(), crate::ExactError>
+    where
+        Self::Item: Copy,
+    {
+        unsafe { self.prepare_write() };
+        crate::ExactError::check(items.len(), self.capacity().get(), self.vacant_len())?;
+        self.push_slice(items);
+        Ok(())
+    }
+
+    /// Move an entire array into the queue, returning the untouched array on failure.
+    fn try_push_array<const N: usize>(&mut self, items: [Self::Item; N]) -> Result<(), (crate::ExactError, [Self::Item; N])> {
+        unsafe { self.prepare_write() };
+        if let Err(error) = crate::ExactError::check(N, self.capacity().get(), self.vacant_len()) {
+            return Err((error, items));
+        }
+        self.push_iter(items.into_iter());
+        Ok(())
+    }
+
+    /// Initialize up to `count` available slots safely. The initialized prefix is
+    /// retained even if the initializer panics. On a deferred endpoint it remains
+    /// unpublished until commit or drop.
+    fn fill_with<F: FnMut() -> Self::Item>(&mut self, count: usize, make: F) -> usize {
+        self.push_iter(core::iter::repeat_with(make).take(count))
+    }
+
     #[cfg(feature = "std")]
     /// Reads at most `count` bytes from `Read` instance and appends them to the ring buffer.
     /// If `count` is `None` then as much as possible bytes will be read.
@@ -221,7 +249,7 @@ macro_rules! impl_producer_traits {
         {
             fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
                 let n = self.push_slice(buf);
-                if n == 0 {
+                if n == 0 && !buf.is_empty() {
                     Err(std::io::ErrorKind::WouldBlock.into())
                 } else {
                     Ok(n)

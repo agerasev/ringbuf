@@ -132,9 +132,8 @@ fn excessive_heap_capacity() {
 
 #[cfg(feature = "alloc")]
 #[test]
-#[should_panic(expected = "capacity exceeds usize::MAX / 2")]
 fn excessive_heap_capacity_try_new() {
-    let _rb = ManuallyDrop::new(Rb::<Heap<()>>::try_new(usize::MAX).unwrap());
+    assert!(matches!(Rb::<Heap<()>>::try_new(usize::MAX), Err(crate::CreateError::Capacity(_))));
 }
 
 #[cfg(feature = "alloc")]

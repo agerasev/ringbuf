@@ -196,3 +196,10 @@ mod benchmarks;
 pub use endpoint as wrap;
 
 pub use endpoint::{CachingCons, CachingProd};
+
+pub mod error;
+pub use endpoint::{DeferredCons, DeferredProd, DirectCons, DirectProd};
+#[cfg(feature = "alloc")]
+pub use error::CreateError;
+pub use error::{CapacityError, ExactError};
+pub use rb::RbHandle;

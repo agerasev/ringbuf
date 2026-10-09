@@ -32,6 +32,14 @@ pub struct Rb<S: Storage + ?Sized, I: Indices, M: Markers> {
 }
 
 impl<S: Storage, I: Indices, M: Markers> Rb<S, I, M> {
+    /// Construct an empty buffer from caller-provided uninitialized storage.
+    pub fn try_from_storage(storage: S) -> Result<Self, (crate::CapacityError, S)> {
+        if let Err(error) = crate::CapacityError::check(storage.len()) {
+            return Err((error, storage));
+        }
+        Ok(unsafe { Self::from_raw_parts(storage, 0, 0) })
+    }
+
     /// Constructs ring buffer from storage and indices.
     ///
     /// Panics if the storage is empty or its length exceeds `usize::MAX / 2`.

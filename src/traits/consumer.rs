@@ -153,6 +153,30 @@ pub trait Consumer: Observer + crate::traits::RawConsumer {
         self.pop_slice_uninit(unsafe { slice_as_uninit_mut(elems) })
     }
 
+    /// Fill the whole destination or return an error without changing either side.
+    fn try_pop_slice(&mut self, items: &mut [Self::Item]) -> Result<(), crate::ExactError>
+    where
+        Self::Item: Copy,
+    {
+        unsafe { self.prepare_read() };
+        crate::ExactError::check(items.len(), self.capacity().get(), self.occupied_len())?;
+        self.pop_slice(items);
+        Ok(())
+    }
+
+    /// Move exactly `N` items into an array, or leave the queue unchanged.
+    fn try_pop_array<const N: usize>(&mut self) -> Result<[Self::Item; N], crate::ExactError> {
+        unsafe { self.prepare_read() };
+        crate::ExactError::check(N, self.capacity().get(), self.occupied_len())?;
+        let mut slots = crate::utils::uninit_array::<Self::Item, N>();
+        self.peek_slice_uninit(&mut slots);
+        // Construct the owner before publishing removal, so a panicking notification
+        // still drops each moved item exactly once.
+        let result = unsafe { (&slots as *const _ as *const [Self::Item; N]).read() };
+        unsafe { self.advance_read_index(N) };
+        Ok(result)
+    }
+
     /// Returns an iterator that removes items one by one from the ring buffer.
     fn pop_iter(&mut self) -> PopIter<'_, Self> {
         PopIter::new(self)
@@ -459,7 +483,7 @@ macro_rules! impl_consumer_traits {
         {
             fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
                 let n = self.pop_slice(buf);
-                if n == 0 {
+                if n == 0 && !buf.is_empty() {
                     Err(std::io::ErrorKind::WouldBlock.into())
                 } else {
                     Ok(n)
