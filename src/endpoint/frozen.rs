@@ -1,7 +1,7 @@
 //! Deprecated compatibility wrappers for caching endpoints.
 //!
-//! All writes and removals are now published immediately. Use [`CachingProd`](super::CachingProd)
-//! and [`CachingCons`](super::CachingCons) directly instead. These wrappers remain available;
+//! All writes and removals are now published immediately. Use [`CachedProd`](super::CachedProd)
+//! and [`CachedCons`](super::CachedCons) directly instead. These wrappers remain available;
 //! their removal is reserved for a future breaking release.
 //!
 //! Deferred publication could cause double drops if an endpoint was forgotten with [`core::mem::forget`].
@@ -17,44 +17,44 @@
 
 #![allow(deprecated)]
 
-use super::{caching::Caching, direct::Obs, traits::Wrap};
+use super::{cached::Cached, direct::Obs, traits::Endpoint};
 #[cfg(feature = "std")]
 use crate::traits::Consumer;
 use crate::{
-    rb::RbRef,
+    rb::RbHandle,
     traits::{
-        Based,
+        Delegate,
         consumer::{DelegateConsumer, impl_consumer_traits},
         observer::DelegateObserver,
         producer::{DelegateProducer, Producer, impl_producer_traits},
     },
 };
 
-/// Compatibility wrapper with the same immediate publication behavior as [`Caching`].
+/// Compatibility wrapper with the same immediate publication behavior as [`Cached`].
 ///
 /// Unlike earlier versions, this wrapper never defers publication until `commit` or drop.
-#[deprecated(note = "use Caching directly; frozen endpoints now publish changes immediately and will be removed in the next breaking release")]
-pub struct Frozen<R: RbRef, const P: bool, const C: bool> {
-    inner: Caching<R, P, C>,
+#[deprecated(note = "use Cached directly; frozen endpoints now publish changes immediately and will be removed in the next breaking release")]
+pub struct Frozen<R: RbHandle, const P: bool, const C: bool> {
+    inner: Cached<R, P, C>,
 }
 
 /// Deprecated producer wrapper. All inserted items are published immediately.
-#[deprecated(note = "use CachingProd; writes are now published immediately")]
+#[deprecated(note = "use CachedProd; writes are now published immediately")]
 pub type FrozenProd<R> = Frozen<R, true, false>;
 
 /// Deprecated consumer wrapper. All removals are published immediately.
-#[deprecated(note = "use CachingCons; removals are now published immediately")]
+#[deprecated(note = "use CachedCons; removals are now published immediately")]
 pub type FrozenCons<R> = Frozen<R, false, true>;
 
-impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
+impl<R: RbHandle, const P: bool, const C: bool> Frozen<R, P, C> {
     /// Create a compatibility wrapper with immediate publication.
     ///
     /// Panics if an endpoint with matching rights already exists.
     pub fn new(rb: R) -> Self {
-        Self::from_caching(Caching::new(rb))
+        Self::from_cached(Cached::new(rb))
     }
 
-    pub(crate) fn from_caching(inner: Caching<R, P, C>) -> Self {
+    pub(crate) fn from_cached(inner: Cached<R, P, C>) -> Self {
         Self { inner }
     }
 
@@ -80,7 +80,7 @@ impl<R: RbRef, const P: bool, const C: bool> Frozen<R, P, C> {
     }
 }
 
-impl<R: RbRef> FrozenProd<R> {
+impl<R: RbHandle> FrozenProd<R> {
     /// Does nothing: inserted items are already published and cannot be retracted.
     ///
     /// Stage items outside the ring buffer if they may need to be discarded.
@@ -90,8 +90,8 @@ impl<R: RbRef> FrozenProd<R> {
     pub fn discard(&mut self) {}
 }
 
-impl<R: RbRef, const P: bool, const C: bool> Based for Frozen<R, P, C> {
-    type Base = Caching<R, P, C>;
+impl<R: RbHandle, const P: bool, const C: bool> Delegate for Frozen<R, P, C> {
+    type Base = Cached<R, P, C>;
 
     fn base(&self) -> &Self::Base {
         &self.inner
@@ -101,31 +101,31 @@ impl<R: RbRef, const P: bool, const C: bool> Based for Frozen<R, P, C> {
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> Wrap for Frozen<R, P, C> {
-    type RbRef = R;
+unsafe impl<R: RbHandle, const P: bool, const C: bool> Endpoint for Frozen<R, P, C> {
+    type Handle = R;
 
-    fn rb_ref(&self) -> &R {
-        self.inner.rb_ref()
+    fn rb_handle(&self) -> &R {
+        self.inner.rb_handle()
     }
-    fn into_rb_ref(self) -> R {
-        self.inner.into_rb_ref()
+    fn into_rb_handle(self) -> R {
+        self.inner.into_rb_handle()
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> AsRef<Self> for Frozen<R, P, C> {
+impl<R: RbHandle, const P: bool, const C: bool> AsRef<Self> for Frozen<R, P, C> {
     fn as_ref(&self) -> &Self {
         self
     }
 }
-impl<R: RbRef, const P: bool, const C: bool> AsMut<Self> for Frozen<R, P, C> {
+impl<R: RbHandle, const P: bool, const C: bool> AsMut<Self> for Frozen<R, P, C> {
     fn as_mut(&mut self) -> &mut Self {
         self
     }
 }
 
-unsafe impl<R: RbRef, const P: bool, const C: bool> DelegateObserver for Frozen<R, P, C> {}
-unsafe impl<R: RbRef> DelegateProducer for FrozenProd<R> {}
-unsafe impl<R: RbRef> DelegateConsumer for FrozenCons<R> {}
+unsafe impl<R: RbHandle, const P: bool, const C: bool> DelegateObserver for Frozen<R, P, C> {}
+unsafe impl<R: RbHandle> DelegateProducer for FrozenProd<R> {}
+unsafe impl<R: RbHandle> DelegateConsumer for FrozenCons<R> {}
 
-impl_producer_traits!(FrozenProd<R: RbRef>);
-impl_consumer_traits!(FrozenCons<R: RbRef>);
+impl_producer_traits!(FrozenProd<R: RbHandle>);
+impl_consumer_traits!(FrozenCons<R: RbHandle>);

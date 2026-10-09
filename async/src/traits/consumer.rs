@@ -8,7 +8,7 @@ use ringbuf::traits::Consumer;
 #[cfg(feature = "std")]
 use std::io;
 
-pub trait AsyncConsumer: Consumer {
+pub trait AsyncConsumer: ringbuf::traits::Presence + Consumer {
     fn register_waker(&self, waker: &Waker);
 
     fn close(&mut self);
@@ -314,3 +314,6 @@ impl<A: AsyncConsumer> Future for WaitOccupiedFuture<'_, A> {
         }
     }
 }
+
+#[allow(unused_imports)]
+use ringbuf::traits::Presence;

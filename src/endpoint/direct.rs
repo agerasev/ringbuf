@@ -4,9 +4,9 @@
 
 #[allow(deprecated)]
 use super::frozen::Frozen;
-use super::{caching::Caching, traits::Wrap};
+use super::{cached::Cached, traits::Endpoint};
 use crate::{
-    rb::RbRef,
+    rb::RbHandle,
     traits::{
         Observer,
         consumer::{Consumer, impl_consumer_traits},
@@ -20,7 +20,7 @@ use core::{
 };
 
 /// Direct wrapper of a ring buffer.
-pub struct Direct<R: RbRef, const P: bool, const C: bool> {
+pub struct Direct<R: RbHandle, const P: bool, const C: bool> {
     rb: R,
 }
 
@@ -31,22 +31,47 @@ pub type Prod<R> = Direct<R, true, false>;
 /// Consumer of a ring buffer.
 pub type Cons<R> = Direct<R, false, true>;
 
-impl<R: RbRef> Clone for Obs<R> {
+impl<R: RbHandle> Clone for Obs<R> {
     fn clone(&self) -> Self {
         Self { rb: self.rb.clone() }
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
+impl<R: RbHandle, const P: bool, const C: bool> Direct<R, P, C> {
     /// Create a new ring buffer direct wrapper.
     ///
     /// Panics if wrapper with matching rights already exists.
     pub fn new(rb: R) -> Self {
+        Self::try_new(rb).unwrap_or_else(|_| panic!("endpoint is held or ownership tracking is disabled"))
+    }
+
+    /// Acquire endpoint rights without panicking; returns the handle on failure.
+    pub fn try_new(rb: R) -> Result<Self, (super::AcquireError, R)> {
+        if (P || C) && !rb.rb().tracking_enabled() {
+            return Err((super::AcquireError::Untracked, rb));
+        }
+        if P && unsafe { rb.rb().hold_write(true) } {
+            return Err((super::AcquireError::ProducerHeld, rb));
+        }
+        if C && unsafe { rb.rb().hold_read(true) } {
+            if P {
+                unsafe { rb.rb().hold_write(false) };
+            }
+            return Err((super::AcquireError::ConsumerHeld, rb));
+        }
+        Ok(Self { rb })
+    }
+
+    /// Acquire endpoint rights without checking their prior state.
+    /// # Safety
+    /// No other endpoint or data view may hold any of the requested rights.
+    /// A forgotten endpoint's stale marker may be replaced after exclusive access.
+    pub unsafe fn new_unchecked(rb: R) -> Self {
         if P {
-            assert!(!unsafe { rb.rb().hold_write(true) });
+            unsafe { rb.rb().hold_write(true) };
         }
         if C {
-            assert!(!unsafe { rb.rb().hold_read(true) });
+            unsafe { rb.rb().hold_read(true) };
         }
         Self { rb }
     }
@@ -60,7 +85,7 @@ impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
     #[deprecated(note = "use the endpoint directly; freezing no longer delays publication")]
     #[allow(deprecated)]
     pub fn freeze(self) -> Frozen<R, P, C> {
-        Frozen::from_caching(Caching::from_direct(self))
+        Frozen::from_cached(Cached::from_direct(self))
     }
 
     /// # Safety
@@ -73,15 +98,21 @@ impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
         if C {
             unsafe { self.rb().hold_read(false) };
         }
+        if P {
+            self.rb().notify_write();
+        }
+        if C {
+            self.rb().notify_read();
+        }
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> Wrap for Direct<R, P, C> {
-    type RbRef = R;
-    fn rb_ref(&self) -> &R {
+unsafe impl<R: RbHandle, const P: bool, const C: bool> Endpoint for Direct<R, P, C> {
+    type Handle = R;
+    fn rb_handle(&self) -> &R {
         &self.rb
     }
-    fn into_rb_ref(mut self) -> R {
+    fn into_rb_handle(mut self) -> R {
         unsafe {
             self.close();
             let this = ManuallyDrop::new(self);
@@ -90,18 +121,18 @@ impl<R: RbRef, const P: bool, const C: bool> Wrap for Direct<R, P, C> {
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> AsRef<Self> for Direct<R, P, C> {
+impl<R: RbHandle, const P: bool, const C: bool> AsRef<Self> for Direct<R, P, C> {
     fn as_ref(&self) -> &Self {
         self
     }
 }
-impl<R: RbRef, const P: bool, const C: bool> AsMut<Self> for Direct<R, P, C> {
+impl<R: RbHandle, const P: bool, const C: bool> AsMut<Self> for Direct<R, P, C> {
     fn as_mut(&mut self) -> &mut Self {
         self
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> Observer for Direct<R, P, C> {
+impl<R: RbHandle, const P: bool, const C: bool> Observer for Direct<R, P, C> {
     type Item = <R::Rb as Observer>::Item;
 
     #[inline]
@@ -122,7 +153,12 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Direct<R, P, C> {
     fn write_index(&self) -> usize {
         self.rb().write_index()
     }
+}
 
+impl<R: RbHandle, const P: bool, const C: bool> crate::traits::Presence for Direct<R, P, C>
+where
+    R::Rb: crate::traits::Presence,
+{
     #[inline]
     fn read_is_held(&self) -> bool {
         self.rb().read_is_held()
@@ -133,7 +169,7 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Direct<R, P, C> {
     }
 }
 
-unsafe impl<R: RbRef, const P: bool, const C: bool> crate::traits::RawObserver for Direct<R, P, C> {
+unsafe impl<R: RbHandle, const P: bool, const C: bool> crate::traits::RawObserver for Direct<R, P, C> {
     #[inline]
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
         unsafe { self.rb().unsafe_slices(start, end) }
@@ -144,18 +180,18 @@ unsafe impl<R: RbRef, const P: bool, const C: bool> crate::traits::RawObserver f
     }
 }
 
-impl<R: RbRef> Producer for Prod<R> {}
+impl<R: RbHandle> Producer for Prod<R> {}
 
-unsafe impl<R: RbRef> crate::traits::RawProducer for Prod<R> {
+unsafe impl<R: RbHandle> crate::traits::RawProducer for Prod<R> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         unsafe { self.rb().set_write_index(value) }
     }
 }
 
-impl<R: RbRef> Consumer for Cons<R> {}
+impl<R: RbHandle> Consumer for Cons<R> {}
 
-unsafe impl<R: RbRef> crate::traits::RawConsumer for Cons<R> {
+unsafe impl<R: RbHandle> crate::traits::RawConsumer for Cons<R> {
     unsafe fn prepare_read(&mut self) {
         unsafe { self.rb().set_read_released(self.rb().read_claimed_index()) };
     }
@@ -166,14 +202,17 @@ unsafe impl<R: RbRef> crate::traits::RawConsumer for Cons<R> {
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> Drop for Direct<R, P, C> {
+impl<R: RbHandle, const P: bool, const C: bool> Drop for Direct<R, P, C> {
     fn drop(&mut self) {
         unsafe { self.close() };
     }
 }
 
-impl_producer_traits!(Prod<R: RbRef>);
-impl_consumer_traits!(Cons<R: RbRef>);
+impl_producer_traits!(Prod<R: RbHandle>);
+impl_consumer_traits!(Cons<R: RbHandle>);
 
 #[allow(unused_imports)]
 use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};
+
+#[allow(unused_imports)]
+use crate::traits::Presence;

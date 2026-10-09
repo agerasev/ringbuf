@@ -4,8 +4,8 @@ mod prod;
 use crate::rb::AsyncRbRef;
 use ringbuf::{
     Obs,
-    traits::{Based, observer::DelegateObserver},
-    wrap::{Wrap, direct::Direct},
+    endpoint::{Endpoint, direct::Direct},
+    traits::{Delegate, observer::DelegateObserver},
 };
 
 pub struct AsyncWrap<R: AsyncRbRef, const P: bool, const C: bool> {
@@ -27,7 +27,7 @@ impl<R: AsyncRbRef, const P: bool, const C: bool> AsyncWrap<R, P, C> {
     }
 }
 
-impl<R: AsyncRbRef, const P: bool, const C: bool> Based for AsyncWrap<R, P, C> {
+impl<R: AsyncRbRef, const P: bool, const C: bool> Delegate for AsyncWrap<R, P, C> {
     type Base = Direct<R, P, C>;
     fn base(&self) -> &Self::Base {
         self.base.as_ref().unwrap()
@@ -37,13 +37,13 @@ impl<R: AsyncRbRef, const P: bool, const C: bool> Based for AsyncWrap<R, P, C> {
     }
 }
 
-impl<R: AsyncRbRef, const P: bool, const C: bool> Wrap for AsyncWrap<R, P, C> {
-    type RbRef = R;
-    fn rb_ref(&self) -> &R {
-        self.base().rb_ref()
+unsafe impl<R: AsyncRbRef, const P: bool, const C: bool> Endpoint for AsyncWrap<R, P, C> {
+    type Handle = R;
+    fn rb_handle(&self) -> &R {
+        self.base().rb_handle()
     }
-    fn into_rb_ref(self) -> R {
-        self.base.unwrap().into_rb_ref()
+    fn into_rb_handle(self) -> R {
+        self.base.unwrap().into_rb_handle()
     }
 }
 

@@ -2,10 +2,10 @@
 
 use super::Rb;
 use crate::{
-    CachingProd, Cons, Prod,
+    CachedProd, Cons, Prod,
+    endpoint::{Endpoint, FrozenCons, FrozenProd},
     storage::Array,
     traits::*,
-    wrap::{FrozenCons, FrozenProd, Wrap},
 };
 use core::{cell::Cell, mem};
 
@@ -79,12 +79,12 @@ fn forgotten_consumer_does_not_drop_items_twice() {
                 drop(rb.try_pop().unwrap());
             }
             drops[0].set(0);
-            let mut prod = CachingProd::new(&rb);
+            let mut prod = CachedProd::new(&rb);
             for counter in &drops {
                 prod.try_push(CountDrop(counter)).ok().unwrap();
             }
             let mut cons = match mode {
-                0 => crate::CachingCons::new(&rb).freeze(),
+                0 => crate::CachedCons::new(&rb).freeze(),
                 1 => Cons::new(&rb).freeze(),
                 _ => FrozenCons::new(&rb),
             };
@@ -121,9 +121,9 @@ fn conversion_and_extraction_preserve_endpoint_rights() {
     let cons = Cons::new(&rb).freeze();
     let obs = prod.observe();
     assert!(obs.write_is_held() && obs.read_is_held());
-    let rb_ref = prod.into_rb_ref();
+    let rb_handle = prod.into_rb_handle();
     assert!(!obs.write_is_held() && obs.read_is_held());
-    let mut prod = FrozenProd::new(rb_ref);
+    let mut prod = FrozenProd::new(rb_handle);
     prod.try_push(1).unwrap();
     drop(prod);
     drop(cons);
@@ -131,3 +131,6 @@ fn conversion_and_extraction_preserve_endpoint_rights() {
     let mut cons = FrozenCons::new(&rb);
     assert_eq!(cons.try_pop(), Some(1));
 }
+
+#[allow(unused_imports)]
+use crate::traits::Presence;

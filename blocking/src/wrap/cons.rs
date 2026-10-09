@@ -2,10 +2,10 @@ use super::{BlockingWrap, WaitError};
 use crate::{rb::BlockingRbRef, sync::Semaphore};
 use core::time::Duration;
 #[cfg(feature = "std")]
-use ringbuf::traits::Based;
+use ringbuf::traits::Delegate;
 use ringbuf::{
+    endpoint::Endpoint,
     traits::{Consumer, Observer, consumer::DelegateConsumer, observer::DelegateObserver},
-    wrap::Wrap,
 };
 #[cfg(feature = "std")]
 use std::io;
@@ -114,7 +114,7 @@ where
 #[cfg(feature = "std")]
 impl<R: BlockingRbRef> io::Read for BlockingCons<R>
 where
-    <Self as Based>::Base: Consumer<Item = u8>,
+    <Self as Delegate>::Base: Consumer<Item = u8>,
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if buf.is_empty() {
@@ -146,3 +146,6 @@ impl<R: BlockingRbRef> Iterator for PopAllIter<'_, R> {
         self.owner.pop().ok()
     }
 }
+
+#[allow(unused_imports)]
+use ringbuf::traits::Presence;

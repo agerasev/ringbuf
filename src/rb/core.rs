@@ -4,16 +4,16 @@ use super::{
 };
 #[cfg(feature = "alloc")]
 use crate::traits::Split;
-use crate::{indices::Indices, markers::Markers};
 use crate::{
+    endpoint::{CachedCons, CachedProd},
     storage::Storage,
     traits::{
         Observer, RingBuffer, SplitRef,
         consumer::{Consumer, impl_consumer_traits},
         producer::{Producer, impl_producer_traits},
     },
-    wrap::{CachingCons, CachingProd},
 };
+use crate::{indices::Indices, markers::Markers};
 use core::{
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
@@ -64,6 +64,12 @@ impl<S: Storage, I: Indices, M: Markers> Rb<S, I, M> {
     }
 }
 
+impl<S: Storage + ?Sized, I: Indices, M: Markers> Rb<S, I, M> {
+    pub fn markers(&self) -> &M {
+        &self.markers
+    }
+}
+
 impl<S: Storage + ?Sized, I: Indices, M: Markers> Observer for Rb<S, I, M> {
     type Item = S::Item;
 
@@ -87,7 +93,9 @@ impl<S: Storage + ?Sized, I: Indices, M: Markers> Observer for Rb<S, I, M> {
     fn write_index(&self) -> usize {
         self.indices.write_published()
     }
+}
 
+impl<S: Storage + ?Sized, I: Indices, M: crate::markers::TrackedMarkers> crate::traits::Presence for Rb<S, I, M> {
     #[inline]
     fn read_is_held(&self) -> bool {
         self.markers.read_is_held()
@@ -137,6 +145,16 @@ unsafe impl<S: Storage + ?Sized, I: Indices, M: Markers> crate::traits::RawConsu
 impl<S: Storage + ?Sized, I: Indices, M: Markers> RingBuffer for Rb<S, I, M> {}
 
 unsafe impl<S: Storage + ?Sized, I: Indices, M: Markers> crate::traits::RawRingBuffer for Rb<S, I, M> {
+    fn tracking_enabled(&self) -> bool {
+        M::TRACKED
+    }
+    fn notify_read(&self) {
+        self.markers.notify_read();
+    }
+    fn notify_write(&self) {
+        self.markers.notify_write();
+    }
+
     unsafe fn set_read_claimed(&self, value: usize) {
         unsafe { self.indices.set_read_claimed(value) };
     }
@@ -162,43 +180,43 @@ impl<S: Storage + ?Sized, I: Indices, M: Markers> Drop for Rb<S, I, M> {
 
 #[cfg(feature = "alloc")]
 impl<S: Storage, I: Indices, M: Markers> Split for Rb<S, I, M> {
-    type Prod = CachingProd<Arc<Self>>;
-    type Cons = CachingCons<Arc<Self>>;
+    type Prod = CachedProd<Arc<Self>>;
+    type Cons = CachedCons<Arc<Self>>;
 
     fn split(self) -> (Self::Prod, Self::Cons) {
-        Arc::new(self).split()
+        unsafe { crate::endpoint::split_unchecked(Arc::new(self)) }
     }
 }
 #[cfg(feature = "alloc")]
 impl<S: Storage + ?Sized, I: Indices, M: Markers> Split for Arc<Rb<S, I, M>> {
-    type Prod = CachingProd<Self>;
-    type Cons = CachingCons<Self>;
+    type Prod = CachedProd<Self>;
+    type Cons = CachedCons<Self>;
 
     fn split(self) -> (Self::Prod, Self::Cons) {
-        (CachingProd::new(self.clone()), CachingCons::new(self))
+        crate::endpoint::try_split(self).unwrap_or_else(|_| panic!("endpoint already held or tracking disabled"))
     }
 }
 #[cfg(feature = "alloc")]
 impl<S: Storage + ?Sized, I: Indices, M: Markers> Split for Box<Rb<S, I, M>> {
-    type Prod = CachingProd<Arc<Rb<S, I, M>>>;
-    type Cons = CachingCons<Arc<Rb<S, I, M>>>;
+    type Prod = CachedProd<Arc<Rb<S, I, M>>>;
+    type Cons = CachedCons<Arc<Rb<S, I, M>>>;
 
     fn split(self) -> (Self::Prod, Self::Cons) {
-        Arc::<Rb<S, I, M>>::from(self).split()
+        unsafe { crate::endpoint::split_unchecked(Arc::<Rb<S, I, M>>::from(self)) }
     }
 }
 impl<S: Storage + ?Sized, I: Indices, M: Markers> SplitRef for Rb<S, I, M> {
     type RefProd<'a>
-        = CachingProd<&'a Self>
+        = CachedProd<&'a Self>
     where
         Self: 'a;
     type RefCons<'a>
-        = CachingCons<&'a Self>
+        = CachedCons<&'a Self>
     where
         Self: 'a;
 
     fn split_ref(&mut self) -> (Self::RefProd<'_>, Self::RefCons<'_>) {
-        (CachingProd::new(self), CachingCons::new(self))
+        unsafe { crate::endpoint::split_unchecked(&*self) }
     }
 }
 
@@ -220,3 +238,6 @@ impl<S: Storage + ?Sized, I: Indices, M: Markers> AsMut<Self> for Rb<S, I, M> {
 
 #[allow(unused_imports)]
 use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};
+
+#[allow(unused_imports)]
+use crate::traits::Presence;

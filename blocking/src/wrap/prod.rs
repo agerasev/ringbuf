@@ -2,10 +2,10 @@ use super::{BlockingWrap, WaitError};
 use crate::{rb::BlockingRbRef, sync::Semaphore};
 use core::time::Duration;
 #[cfg(feature = "std")]
-use ringbuf::traits::Based;
+use ringbuf::traits::Delegate;
 use ringbuf::{
+    endpoint::Endpoint,
     traits::{Observer, Producer, observer::DelegateObserver, producer::DelegateProducer},
-    wrap::Wrap,
 };
 #[cfg(feature = "std")]
 use std::io;
@@ -109,7 +109,7 @@ where
 #[cfg(feature = "std")]
 impl<R: BlockingRbRef> io::Write for BlockingProd<R>
 where
-    <Self as Based>::Base: Producer<Item = u8>,
+    <Self as Delegate>::Base: Producer<Item = u8>,
 {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if buf.is_empty() {
@@ -130,3 +130,6 @@ where
         Ok(())
     }
 }
+
+#[allow(unused_imports)]
+use ringbuf::traits::Presence;

@@ -85,7 +85,7 @@ provide an alternative backing handle. Borrowed splitting does not allocate.
 
 - [x] 1. Contracts, executable ownership model, and baseline checks.
 - [x] 2. One generic core, index policies, and raw/safe interfaces.
-- [ ] 3. Configurable ownership markers and handle acquisition.
+- [x] 3. Configurable ownership markers and handle acquisition.
 - [ ] 4. Extensible deferred endpoints, undo, and forget/panic recovery.
 - [ ] 5. Exact/partial bulk operations and fallible construction.
 - [ ] 6. Async/blocking marker backends and consistent waiting APIs.
@@ -99,3 +99,7 @@ Milestone 2 validation: workspace tests, local-policy tests, and a no-default-fe
 build pass. Data views now require an exclusive borrow, preventing shared backing
 handles from aliasing an active endpoint's data. Public raw and delegation traits
 have explicit unsafe implementation contracts.
+
+Milestone 3 validation: workspace tests pass, including untracked exclusive
+recovery, partial-acquisition rollback, custom handles, and atomic indices with
+no markers across threads. Presence queries are a separate capability.

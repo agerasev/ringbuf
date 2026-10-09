@@ -8,7 +8,7 @@ use core::{mem::MaybeUninit, num::NonZeroUsize};
 use ringbuf::traits::Split;
 use ringbuf::{
     SharedRb,
-    rb::RbRef,
+    rb::RbHandle,
     storage::Storage,
     traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
 };
@@ -52,7 +52,9 @@ impl<S: Storage, X: Semaphore> Observer for BlockingRb<S, X> {
     fn write_index(&self) -> usize {
         self.base.write_index()
     }
+}
 
+impl<S: Storage, X: Semaphore> ringbuf::traits::Presence for BlockingRb<S, X> {
     #[inline]
     fn read_is_held(&self) -> bool {
         self.base.read_is_held()
@@ -134,11 +136,11 @@ impl<S: Storage, X: Semaphore> Split for BlockingRb<S, X> {
     }
 }
 
-pub trait BlockingRbRef: RbRef<Rb = BlockingRb<Self::Storage, Self::Semaphore>> {
+pub trait BlockingRbRef: RbHandle<Rb = BlockingRb<Self::Storage, Self::Semaphore>> {
     type Storage: Storage;
     type Semaphore: Semaphore;
 }
-impl<S: Storage, X: Semaphore, R: RbRef<Rb = BlockingRb<S, X>>> BlockingRbRef for R {
+impl<S: Storage, X: Semaphore, R: RbHandle<Rb = BlockingRb<S, X>>> BlockingRbRef for R {
     type Storage = S;
     type Semaphore = X;
 }
@@ -156,3 +158,6 @@ impl<S: Storage, X: Semaphore> AsMut<Self> for BlockingRb<S, X> {
 
 #[allow(unused_imports)]
 use ringbuf::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};
+
+#[allow(unused_imports)]
+use ringbuf::traits::Presence;

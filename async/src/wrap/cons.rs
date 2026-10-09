@@ -7,11 +7,11 @@ use futures_util::Stream;
 #[cfg(feature = "std")]
 use futures_util::io::AsyncRead;
 use ringbuf::{
+    endpoint::Endpoint,
     traits::{
         Observer,
         consumer::{Consumer, DelegateConsumer},
     },
-    wrap::Wrap,
 };
 #[cfg(feature = "std")]
 use std::io;

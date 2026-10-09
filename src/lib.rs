@@ -23,9 +23,9 @@
 //! [`SharedRb`] needs to synchronize CPU cache between CPU cores. This synchronization has some overhead.
 //! To avoid multiple unnecessary synchronizations you may use methods that operate many items at once
 //! ([`push_slice`](`traits::Producer::push_slice`)/[`push_iter`](`traits::Producer::push_iter`), [`pop_slice`](`traits::Consumer::pop_slice`), etc.).
-//! Caching endpoints also avoid repeatedly fetching the opposite endpoint's index when progress is possible.
+//! Cached endpoints also avoid repeatedly fetching the opposite endpoint's index when progress is possible.
 //! All completed operations publish their index updates immediately, including each step of [`pop_iter`](`traits::Consumer::pop_iter`).
-//! The former frozen endpoints are deprecated compatibility wrappers; see [`wrap::frozen`] for migration details.
+//! The former frozen endpoints are deprecated compatibility wrappers; see [`endpoint::frozen`] for migration details.
 //!
 //! [`skip`](`traits::Consumer::skip`) and [`clear`](`traits::Consumer::clear`) take constant time for items without destructors.
 //! Items that need destruction are dropped individually, with each slot kept occupied until its destructor finishes.
@@ -163,6 +163,8 @@ extern crate std;
 
 /// Shortcuts for frequently used types.
 mod alias;
+/// Producer and consumer implementations.
+pub mod endpoint;
 pub mod indices;
 pub mod markers;
 /// Ring buffer implementations.
@@ -175,19 +177,22 @@ pub mod traits;
 mod transfer;
 /// Internal utilities.
 mod utils;
-/// Producer and consumer implementations.
-pub mod wrap;
 
 #[cfg(test)]
 mod tests;
 
 pub use alias::*;
+pub use endpoint::{CachedCons, CachedProd, Cons, Obs, Prod};
 pub use rb::{LocalRb, Rb, SharedRb};
 pub use traits::{consumer, producer};
 pub use transfer::transfer;
-pub use wrap::{CachingCons, CachingProd, Cons, Obs, Prod};
 
 #[cfg(feature = "bench")]
 extern crate test;
 #[cfg(feature = "bench")]
 mod benchmarks;
+
+/// Compatibility module; new code should use `endpoint`.
+pub use endpoint as wrap;
+
+pub use endpoint::{CachingCons, CachingProd};

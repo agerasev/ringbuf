@@ -54,14 +54,14 @@ pub unsafe trait Storage {
     }
 }
 
-pub struct Ref<'a, T> {
+pub struct BorrowedSlice<'a, T> {
     _ghost: PhantomData<&'a mut [T]>,
     ptr: *mut MaybeUninit<T>,
     len: usize,
 }
-unsafe impl<T> Send for Ref<'_, T> where T: Send {}
-unsafe impl<T> Sync for Ref<'_, T> where T: Send {}
-unsafe impl<T> Storage for Ref<'_, T> {
+unsafe impl<T> Send for BorrowedSlice<'_, T> where T: Send {}
+unsafe impl<T> Sync for BorrowedSlice<'_, T> where T: Send {}
+unsafe impl<T> Storage for BorrowedSlice<'_, T> {
     type Item = T;
     #[inline]
     fn as_mut_ptr(&self) -> *mut MaybeUninit<T> {
@@ -72,7 +72,7 @@ unsafe impl<T> Storage for Ref<'_, T> {
         self.len
     }
 }
-impl<'a, T> From<&'a mut [MaybeUninit<T>]> for Ref<'a, T> {
+impl<'a, T> From<&'a mut [MaybeUninit<T>]> for BorrowedSlice<'a, T> {
     fn from(value: &'a mut [MaybeUninit<T>]) -> Self {
         Self {
             _ghost: PhantomData,
@@ -81,17 +81,17 @@ impl<'a, T> From<&'a mut [MaybeUninit<T>]> for Ref<'a, T> {
         }
     }
 }
-impl<'a, T> From<Ref<'a, T>> for &'a mut [MaybeUninit<T>] {
-    fn from(value: Ref<'a, T>) -> Self {
+impl<'a, T> From<BorrowedSlice<'a, T>> for &'a mut [MaybeUninit<T>] {
+    fn from(value: BorrowedSlice<'a, T>) -> Self {
         unsafe { slice::from_raw_parts_mut(value.ptr, value.len) }
     }
 }
 
-pub struct Owning<T: ?Sized> {
+pub struct Inline<T: ?Sized> {
     data: UnsafeCell<T>,
 }
-unsafe impl<T: ?Sized> Sync for Owning<T> where T: Send {}
-impl<T> From<T> for Owning<T> {
+unsafe impl<T: ?Sized> Sync for Inline<T> where T: Send {}
+impl<T> From<T> for Inline<T> {
     fn from(value: T) -> Self {
         Self {
             data: UnsafeCell::new(value),
@@ -99,7 +99,7 @@ impl<T> From<T> for Owning<T> {
     }
 }
 
-pub type Array<T, const N: usize> = Owning<[MaybeUninit<T>; N]>;
+pub type Array<T, const N: usize> = Inline<[MaybeUninit<T>; N]>;
 unsafe impl<T, const N: usize> Storage for Array<T, N> {
     type Item = T;
     #[inline]
@@ -117,7 +117,7 @@ impl<T, const N: usize> From<Array<T, N>> for [MaybeUninit<T>; N] {
     }
 }
 
-pub type Slice<T> = Owning<[MaybeUninit<T>]>;
+pub type Slice<T> = Inline<[MaybeUninit<T>]>;
 unsafe impl<T> Storage for Slice<T> {
     type Item = T;
     #[inline]
@@ -206,10 +206,15 @@ mod tests {
 
     #[allow(dead_code)]
     fn check_send_sync() {
-        let _: Check<Ref<Cell<i32>>>;
+        let _: Check<BorrowedSlice<Cell<i32>>>;
         let _: Check<Array<Cell<i32>, 4>>;
         let _: Check<Slice<Cell<i32>>>;
         #[cfg(feature = "alloc")]
         let _: Check<Heap<Cell<i32>>>;
     }
 }
+
+/// Compatibility spelling for borrowed storage.
+pub type Ref<'a, T> = BorrowedSlice<'a, T>;
+/// Compatibility spelling for inline storage.
+pub type Owning<T> = Inline<T>;

@@ -40,6 +40,31 @@ pub struct LocalMarkers {
     write: Cell<bool>,
 }
 
+/// Presence information is available for this policy.
+pub trait TrackedMarkers: Markers {}
+impl TrackedMarkers for AtomicMarkers {}
+impl TrackedMarkers for LocalMarkers {}
+
+/// No ownership flags or presence queries. Split through ownership or `&mut Rb`.
+#[derive(Default)]
+pub struct NoMarkers;
+
+unsafe impl Markers for NoMarkers {
+    const TRACKED: bool = false;
+    fn read_is_held(&self) -> bool {
+        false
+    }
+    fn write_is_held(&self) -> bool {
+        false
+    }
+    unsafe fn hold_read(&self, _: bool) -> bool {
+        false
+    }
+    unsafe fn hold_write(&self, _: bool) -> bool {
+        false
+    }
+}
+
 unsafe impl Markers for AtomicMarkers {
     #[inline]
     fn read_is_held(&self) -> bool {

@@ -1,5 +1,5 @@
 use super::{
-    Based,
+    Delegate,
     utils::{add_mod, modulus, sub_mod},
 };
 use core::{mem::MaybeUninit, num::NonZeroUsize};
@@ -33,11 +33,6 @@ pub trait Observer {
     fn read_claimed_index(&self) -> usize {
         self.read_index()
     }
-
-    /// Whether read end is held by consumer.
-    fn read_is_held(&self) -> bool;
-    /// Whether write end is held by producer.
-    fn write_is_held(&self) -> bool;
 
     /// Queued items plus consumer-owned slots not yet released.
     fn retained_len(&self) -> usize {
@@ -86,7 +81,7 @@ pub trait Observer {
 }
 
 /// Trait used for delegating observer methods.
-pub unsafe trait DelegateObserver: Based
+pub unsafe trait DelegateObserver: Delegate
 where
     Self::Base: Observer + crate::traits::RawObserver,
 {
@@ -110,15 +105,6 @@ where
     #[inline]
     fn write_index(&self) -> usize {
         self.base().write_index()
-    }
-
-    #[inline]
-    fn read_is_held(&self) -> bool {
-        self.base().read_is_held()
-    }
-    #[inline]
-    fn write_is_held(&self) -> bool {
-        self.base().write_is_held()
     }
 
     fn read_released_index(&self) -> usize {
@@ -149,6 +135,20 @@ where
     }
 }
 
+impl<D: DelegateObserver> crate::traits::Presence for D
+where
+    D::Base: crate::traits::Presence + crate::traits::RawObserver,
+{
+    #[inline]
+    fn read_is_held(&self) -> bool {
+        self.base().read_is_held()
+    }
+    #[inline]
+    fn write_is_held(&self) -> bool {
+        self.base().write_is_held()
+    }
+}
+
 unsafe impl<D: DelegateObserver> crate::traits::RawObserver for D
 where
     D::Base: Observer + crate::traits::RawObserver,
@@ -165,3 +165,6 @@ where
 
 #[allow(unused_imports)]
 use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};
+
+#[allow(unused_imports)]
+use crate::traits::Presence;

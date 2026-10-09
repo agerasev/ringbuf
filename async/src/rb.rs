@@ -7,15 +7,15 @@ use futures_util::task::AtomicWaker;
 use ringbuf::traits::Split;
 use ringbuf::{
     SharedRb,
-    rb::RbRef,
+    rb::RbHandle,
     storage::Storage,
     traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
 };
 
-pub trait AsyncRbRef: RbRef<Rb = AsyncRb<Self::Storage>> {
+pub trait AsyncRbRef: RbHandle<Rb = AsyncRb<Self::Storage>> {
     type Storage: Storage;
 }
-impl<S: Storage, R: RbRef<Rb = AsyncRb<S>>> AsyncRbRef for R {
+impl<S: Storage, R: RbHandle<Rb = AsyncRb<S>>> AsyncRbRef for R {
     type Storage = S;
 }
 
@@ -53,7 +53,9 @@ impl<S: Storage> Observer for AsyncRb<S> {
     fn write_index(&self) -> usize {
         self.base.write_index()
     }
+}
 
+impl<S: Storage> ringbuf::traits::Presence for AsyncRb<S> {
     #[inline]
     fn read_is_held(&self) -> bool {
         self.base.read_is_held()
@@ -151,3 +153,6 @@ impl<S: Storage> AsMut<Self> for AsyncRb<S> {
 
 #[allow(unused_imports)]
 use ringbuf::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};
+
+#[allow(unused_imports)]
+use ringbuf::traits::Presence;

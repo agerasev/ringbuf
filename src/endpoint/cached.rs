@@ -1,4 +1,4 @@
-//! Caching implementation.
+//! Cached implementation.
 //!
 //! Fetches changes from the ring buffer only when there is no more slots to perform requested operation.
 //! Changes to this endpoint's index are always published before an operation returns.
@@ -7,10 +7,10 @@
 use super::frozen::Frozen;
 use super::{
     direct::{Direct, Obs},
-    traits::Wrap,
+    traits::Endpoint,
 };
 use crate::{
-    rb::RbRef,
+    rb::RbHandle,
     traits::{
         Observer,
         consumer::{Consumer, impl_consumer_traits},
@@ -19,19 +19,19 @@ use crate::{
 };
 use core::{cell::Cell, mem::MaybeUninit, num::NonZeroUsize};
 
-/// Caching wrapper of a ring buffer.
-pub struct Caching<R: RbRef, const P: bool, const C: bool> {
+/// Cached wrapper of a ring buffer.
+pub struct Cached<R: RbHandle, const P: bool, const C: bool> {
     base: Direct<R, P, C>,
     read: Cell<usize>,
     write: Cell<usize>,
 }
 
-/// Caching producer implementation.
-pub type CachingProd<R> = Caching<R, true, false>;
-/// Caching consumer implementation.
-pub type CachingCons<R> = Caching<R, false, true>;
+/// Cached producer implementation.
+pub type CachedProd<R> = Cached<R, true, false>;
+/// Cached consumer implementation.
+pub type CachedCons<R> = Cached<R, false, true>;
 
-impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
+impl<R: RbHandle, const P: bool, const C: bool> Cached<R, P, C> {
     /// Create a new ring buffer cached wrapper.
     ///
     /// Panics if wrapper with matching rights already exists.
@@ -39,7 +39,12 @@ impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
         Self::from_direct(Direct::new(rb))
     }
 
-    pub(crate) fn from_direct(base: Direct<R, P, C>) -> Self {
+    /// Acquire a cached endpoint, returning the handle on failure.
+    pub fn try_new(rb: R) -> Result<Self, (super::AcquireError, R)> {
+        Direct::try_new(rb).map(Self::from_direct)
+    }
+
+    pub fn from_direct(base: Direct<R, P, C>) -> Self {
         Self {
             read: Cell::new(base.read_index()),
             write: Cell::new(base.write_index()),
@@ -56,7 +61,7 @@ impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
     #[deprecated(note = "use the caching endpoint directly; freezing no longer delays publication")]
     #[allow(deprecated)]
     pub fn freeze(self) -> Frozen<R, P, C> {
-        Frozen::from_caching(self)
+        Frozen::from_cached(self)
     }
 
     pub(crate) fn fetch(&self) {
@@ -69,29 +74,29 @@ impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> Wrap for Caching<R, P, C> {
-    type RbRef = R;
+unsafe impl<R: RbHandle, const P: bool, const C: bool> Endpoint for Cached<R, P, C> {
+    type Handle = R;
 
-    fn rb_ref(&self) -> &R {
-        self.base.rb_ref()
+    fn rb_handle(&self) -> &R {
+        self.base.rb_handle()
     }
-    fn into_rb_ref(self) -> R {
-        self.base.into_rb_ref()
+    fn into_rb_handle(self) -> R {
+        self.base.into_rb_handle()
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> AsRef<Self> for Caching<R, P, C> {
+impl<R: RbHandle, const P: bool, const C: bool> AsRef<Self> for Cached<R, P, C> {
     fn as_ref(&self) -> &Self {
         self
     }
 }
-impl<R: RbRef, const P: bool, const C: bool> AsMut<Self> for Caching<R, P, C> {
+impl<R: RbHandle, const P: bool, const C: bool> AsMut<Self> for Cached<R, P, C> {
     fn as_mut(&mut self) -> &mut Self {
         self
     }
 }
 
-impl<R: RbRef, const P: bool, const C: bool> Observer for Caching<R, P, C> {
+impl<R: RbHandle, const P: bool, const C: bool> Observer for Cached<R, P, C> {
     type Item = <R::Rb as Observer>::Item;
 
     #[inline]
@@ -113,7 +118,12 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Caching<R, P, C> {
         }
         self.write.get()
     }
+}
 
+impl<R: RbHandle, const P: bool, const C: bool> crate::traits::Presence for Cached<R, P, C>
+where
+    R::Rb: crate::traits::Presence,
+{
     #[inline]
     fn read_is_held(&self) -> bool {
         self.base.read_is_held()
@@ -124,7 +134,7 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Caching<R, P, C> {
     }
 }
 
-unsafe impl<R: RbRef, const P: bool, const C: bool> crate::traits::RawObserver for Caching<R, P, C> {
+unsafe impl<R: RbHandle, const P: bool, const C: bool> crate::traits::RawObserver for Cached<R, P, C> {
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
         unsafe { self.base.unsafe_slices(start, end) }
     }
@@ -133,7 +143,7 @@ unsafe impl<R: RbRef, const P: bool, const C: bool> crate::traits::RawObserver f
     }
 }
 
-impl<R: RbRef> Producer for CachingProd<R> {
+impl<R: RbHandle> Producer for CachedProd<R> {
     fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
         let capacity = self.capacity().get();
         if self.write.get().abs_diff(self.read.get()) == capacity {
@@ -152,7 +162,7 @@ impl<R: RbRef> Producer for CachingProd<R> {
     }
 }
 
-unsafe impl<R: RbRef> crate::traits::RawProducer for CachingProd<R> {
+unsafe impl<R: RbHandle> crate::traits::RawProducer for CachedProd<R> {
     #[inline]
     unsafe fn set_write_index(&self, value: usize) {
         self.write.set(value);
@@ -160,7 +170,7 @@ unsafe impl<R: RbRef> crate::traits::RawProducer for CachingProd<R> {
     }
 }
 
-impl<R: RbRef> Consumer for CachingCons<R> {
+impl<R: RbHandle> Consumer for CachedCons<R> {
     fn try_pop(&mut self) -> Option<<Self as Observer>::Item> {
         unsafe { self.prepare_read() };
         if self.read.get() == self.write.get() {
@@ -177,7 +187,7 @@ impl<R: RbRef> Consumer for CachingCons<R> {
     }
 }
 
-unsafe impl<R: RbRef> crate::traits::RawConsumer for CachingCons<R> {
+unsafe impl<R: RbHandle> crate::traits::RawConsumer for CachedCons<R> {
     unsafe fn prepare_read(&mut self) {
         unsafe { self.base.prepare_read() };
         self.read.set(self.base.read_index());
@@ -190,8 +200,11 @@ unsafe impl<R: RbRef> crate::traits::RawConsumer for CachingCons<R> {
     }
 }
 
-impl_producer_traits!(CachingProd<R: RbRef>);
-impl_consumer_traits!(CachingCons<R: RbRef>);
+impl_producer_traits!(CachedProd<R: RbHandle>);
+impl_consumer_traits!(CachedCons<R: RbHandle>);
 
 #[allow(unused_imports)]
 use crate::traits::{RawConsumer, RawObserver, RawProducer, RawRingBuffer};
+
+#[allow(unused_imports)]
+use crate::traits::Presence;

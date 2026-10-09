@@ -9,11 +9,11 @@ use futures_util::{Sink, ready};
 #[cfg(feature = "std")]
 use ringbuf::traits::RingBuffer;
 use ringbuf::{
+    endpoint::Endpoint,
     traits::{
         Observer,
         producer::{DelegateProducer, Producer},
     },
-    wrap::Wrap,
 };
 #[cfg(feature = "std")]
 use std::io;

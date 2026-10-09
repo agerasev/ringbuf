@@ -5,13 +5,13 @@ use crate::rb::BlockingRbRef;
 use core::time::Duration;
 use ringbuf::{
     Obs,
-    traits::Based,
-    wrap::{Wrap, caching::Caching},
+    endpoint::{Endpoint, cached::Cached},
+    traits::Delegate,
 };
 
 pub struct BlockingWrap<R: BlockingRbRef, const P: bool, const C: bool> {
     pub(crate) rb: R,
-    pub(crate) base: Caching<R, P, C>,
+    pub(crate) base: Cached<R, P, C>,
     pub(crate) timeout: Option<Duration>,
 }
 
@@ -19,7 +19,7 @@ impl<R: BlockingRbRef, const P: bool, const C: bool> BlockingWrap<R, P, C> {
     pub fn new(rb: R) -> Self {
         Self {
             rb: rb.clone(),
-            base: Caching::new(rb),
+            base: Cached::new(rb),
             timeout: None,
         }
     }
@@ -28,8 +28,8 @@ impl<R: BlockingRbRef, const P: bool, const C: bool> BlockingWrap<R, P, C> {
         self.base().observe()
     }
 }
-impl<R: BlockingRbRef, const P: bool, const C: bool> Based for BlockingWrap<R, P, C> {
-    type Base = Caching<R, P, C>;
+impl<R: BlockingRbRef, const P: bool, const C: bool> Delegate for BlockingWrap<R, P, C> {
+    type Base = Cached<R, P, C>;
     fn base(&self) -> &Self::Base {
         &self.base
     }
@@ -37,13 +37,13 @@ impl<R: BlockingRbRef, const P: bool, const C: bool> Based for BlockingWrap<R, P
         &mut self.base
     }
 }
-impl<R: BlockingRbRef, const P: bool, const C: bool> Wrap for BlockingWrap<R, P, C> {
-    type RbRef = R;
-    fn rb_ref(&self) -> &Self::RbRef {
+unsafe impl<R: BlockingRbRef, const P: bool, const C: bool> Endpoint for BlockingWrap<R, P, C> {
+    type Handle = R;
+    fn rb_handle(&self) -> &Self::Handle {
         &self.rb
     }
-    fn into_rb_ref(self) -> Self::RbRef {
-        self.base.into_rb_ref()
+    fn into_rb_handle(self) -> Self::Handle {
+        self.base.into_rb_handle()
     }
 }
 

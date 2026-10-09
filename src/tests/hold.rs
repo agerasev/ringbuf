@@ -1,5 +1,5 @@
 use super::Rb;
-use crate::{CachingCons, CachingProd, Obs, storage::Array, traits::*};
+use crate::{CachedCons, CachedProd, Obs, storage::Array, traits::*};
 
 #[test]
 fn split_and_drop() {
@@ -22,10 +22,10 @@ fn manually_hold_and_drop() {
     let obs = Obs::new(&rb);
     assert!(!obs.write_is_held() && !obs.read_is_held());
 
-    let cons = CachingCons::new(&rb);
+    let cons = CachedCons::new(&rb);
     assert!(!obs.write_is_held() && obs.read_is_held());
 
-    let prod = CachingProd::new(&rb);
+    let prod = CachedProd::new(&rb);
     assert!(obs.write_is_held() && obs.read_is_held());
 
     drop(cons);
@@ -39,6 +39,9 @@ fn manually_hold_and_drop() {
 #[should_panic]
 fn hold_conflict() {
     let rb = Rb::<Array<i32, 2>>::default();
-    let _prod = CachingProd::new(&rb);
-    CachingProd::new(&rb);
+    let _prod = CachedProd::new(&rb);
+    CachedProd::new(&rb);
 }
+
+#[allow(unused_imports)]
+use crate::traits::Presence;

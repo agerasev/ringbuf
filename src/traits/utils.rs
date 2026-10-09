@@ -4,7 +4,7 @@ use core::num::NonZeroUsize;
 /// Trait that should be implemented by ring buffer wrappers.
 ///
 /// Used for automatically delegating methods.
-pub trait Based {
+pub trait Delegate {
     /// Type the wrapper based on.
     type Base: ?Sized;
     /// Reference to base.

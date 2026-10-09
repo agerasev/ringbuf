@@ -9,7 +9,7 @@ use ringbuf::traits::Producer;
 #[cfg(feature = "std")]
 use std::io;
 
-pub trait AsyncProducer: Producer {
+pub trait AsyncProducer: ringbuf::traits::Presence + Producer {
     fn register_waker(&self, waker: &Waker);
 
     fn close(&mut self);
@@ -316,3 +316,6 @@ impl<A: AsyncProducer> Future for WaitVacantFuture<'_, A> {
         }
     }
 }
+
+#[allow(unused_imports)]
+use ringbuf::traits::Presence;
