@@ -46,6 +46,7 @@ fn fetch_extends_claim_without_committing_and_lengths_distinguish_ownership() {
     p.push_slice(&[1, 2]);
     let mut d = c.defer();
     assert_eq!((obs.retained_len(), obs.queued_len()), (2, 0));
+    assert_eq!((p.retained_len(), p.queued_len()), (2, 0));
     assert_eq!(d.try_pop(), Some(1));
     p.try_push(3).unwrap();
     assert_eq!((obs.retained_len(), obs.queued_len()), (3, 1));

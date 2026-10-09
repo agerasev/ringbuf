@@ -162,7 +162,7 @@ fn transfer() {
     execute!(
         async move {
             let mut prod = src_prod;
-            assert_eq!(prod.push_iter_all(0..COUNT).await.unwrap(), COUNT as usize);
+            assert_eq!(prod.push_iter_all(0..COUNT).await.unwrap(), COUNT);
         },
         async move {
             let mut src = src_cons;

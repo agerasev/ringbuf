@@ -89,7 +89,7 @@ provide an alternative backing handle. Borrowed splitting does not allocate.
 - [x] 4. Extensible deferred endpoints, undo, and forget/panic recovery.
 - [x] 5. Exact/partial bulk operations and fallible construction.
 - [x] 6. Async/blocking marker backends and consistent waiting APIs.
-- [ ] 7. Feature/target checks, Miri, benchmarks, examples, and migration notes.
+- [x] 7. Feature/target checks, Miri, benchmarks, examples, and migration notes.
 
 Milestone 1 validation: `cargo test --workspace --offline` passes (100 unit
 tests and 5 doctests); `cargo test --offline --test ownership_model` passes
@@ -117,3 +117,9 @@ partial-progress errors, and bounded collection. The initial workspace Miri run
 passed all enabled library tests (five timing/thread-dependent blocking tests are
 explicitly ignored under Miri by the existing suite). Async/blocking RBs are now
 aliases selecting notification markers; EndpointPolicy selects their adapters.
+
+Milestone 7 validation: the complete feature/target matrix, strict Clippy/rustdoc,
+formatting, examples, and Miri suites pass. See [validation](validation-0.6.md)
+for test scope and benchmark regressions, and [migration](migration-0.6.md) for
+API changes and examples. This completes the experimental implementation roadmap;
+it does not designate the branch as release-ready.

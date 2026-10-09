@@ -60,7 +60,7 @@ pub trait AsyncConsumer: ringbuf::traits::Presence + Consumer {
     /// Fill slice with items from the ring buffer waiting asynchronously until slice filled or corresponding producer closed.
     ///
     /// Future returns:
-    /// + `Ok` - the whole slice is filled with the items from the buffer.
+    /// + `Ok(count)` - the whole slice is filled with the items from the buffer.
     /// + `Err(TransferError)` - the buffer is empty and the corresponding producer was dropped, number of items copied to slice is returned.
     ///
     /// # Cancel safety
@@ -282,13 +282,13 @@ impl<A: AsyncConsumer> Future for PopVecFuture<'_, '_, A> {
                 if self.count == self.limit {
                     return Poll::Ready(Ok(self.count));
                 }
-                if vec.len() == vec.capacity() {
-                    if let Err(error) = vec.try_reserve((self.limit - self.count).min(vec.capacity().max(16))) {
-                        return Poll::Ready(Err(ringbuf::error::CollectError::Allocation {
-                            completed: self.count,
-                            error,
-                        }));
-                    }
+                if vec.len() == vec.capacity()
+                    && let Err(error) = vec.try_reserve((self.limit - self.count).min(vec.capacity().max(16)))
+                {
+                    return Poll::Ready(Err(ringbuf::error::CollectError::Allocation {
+                        completed: self.count,
+                        error,
+                    }));
                 }
                 let take = (self.limit - self.count).min(vec.spare_capacity_mut().len());
                 let n = self.owner.pop_slice_uninit(&mut vec.spare_capacity_mut()[..take]);

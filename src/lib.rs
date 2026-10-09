@@ -24,13 +24,15 @@
 //! To avoid multiple unnecessary synchronizations you may use methods that operate many items at once
 //! ([`push_slice`](`traits::Producer::push_slice`)/[`push_iter`](`traits::Producer::push_iter`), [`pop_slice`](`traits::Consumer::pop_slice`), etc.).
 //! Cached endpoints also avoid repeatedly fetching the opposite endpoint's index when progress is possible.
-//! All completed operations publish their index updates immediately, including each step of [`pop_iter`](`traits::Consumer::pop_iter`).
-//! The former frozen endpoints are deprecated compatibility wrappers; see [`endpoint::frozen`] for migration details.
+//! Direct and cached endpoints publish updates immediately, including each step of [`pop_iter`](`traits::Consumer::pop_iter`).
+//! [`endpoint::Deferred`] endpoints batch publication with explicit commit/fetch/sync.
+//! Their destructor commits; forgetting one may leak reserved values safely.
 //!
 //! [`skip`](`traits::Consumer::skip`) and [`clear`](`traits::Consumer::clear`) take constant time for items without destructors.
 //! Items that need destruction are dropped individually, with each slot kept occupied until its destructor finishes.
 //!
-//! For single-threaded usage [`LocalRb`] is recommended because it is slightly faster than [`SharedRb`] due to absence of CPU cache synchronization.
+//! [`LocalRb`] selects compact `Cell` indices; [`SharedRb`] selects atomic indices.
+//! Both alias [`Rb`]; measure the relevant workload before selecting a policy.
 //!
 //! # Examples
 //!
@@ -114,7 +116,7 @@ so to perform it concurrently you need to guard the ring buffer with mutex or so
 //!
 //! + Storage
 //! + Indices
-//! + Hold flags
+//! + Markers
 //!
 //! ## Storage
 //!
@@ -126,31 +128,29 @@ so to perform it concurrently you need to guard the ring buffer with mutex or so
 //!
 //! ## Indices
 //!
-//! Ring buffer also contains two indices: `read` and `write`.
+//! The backing RB stores three indices, modulo twice its capacity:
 //!
-//! `read % capacity` points to the oldest item in the storage.
-//! `write % capacity` points to empty slot next to the most recently inserted item.
+//! - `read_released`: oldest slot still retained by the consumer.
+//! - `read_claimed`: first initialized item still owned by the RB.
+//! - `write_published`: end of the published items.
 //!
-//! When an item is extracted from the ring buffer it is taken from the `read % capacity` slot and then `read` index is incremented.
-//! New item is put into the `write % capacity` slot and `write` index is incremented after that.
+//! In logical unwrapped coordinates the invariant is
+//! `read_released <= read_claimed <= write_published <= read_released + capacity`.
+//! Deferred readers claim initialized items before moving any out. Forgetting a
+//! reader leaves that claim excluded from the RB destructor; the next ordinary
+//! consumer access abandons it without inspecting potentially moved values.
+//! Deferred writers own their unpublished values; forgetting them can leak those values.
+//! [`traits::Observer::retained_len`] includes claims, while
+//! [`traits::Observer::queued_len`] counts only items still owned by the RB.
+//! Concurrent observer statistics are advisory rather than a coherent snapshot.
 //!
-//! Slots with indices between (in modular arithmetic) `(read % capacity)` (including) and
-//! `(write % capacity)` (excluding) contain items (are initialized).
-//! All other slots do not contain items (are uninitialized).
-//!
-//! The actual values of `read` and `write` indices are modulo `2 * capacity` instead of just `capacity`.
-//! It allows us to distinguish situations when the buffer is empty (`read == write`)
-//! and when the buffer is full (`(write - read) % (2 * capacity) == capacity`)
-//! without using an extra slot in container that cannot be occupied.
-//!
-//! But this causes the existense of invalid combinations of indices.
-//! For example, we cannot store more than `capacity` items in the buffer,
-//! so `(write - read) % (2 * capacity)` is not allowed to be greater than `capacity`.
-//!
-//! ## Hold flags
+//! ## Markers
 //!
 //! Ring buffer can have at most one producer and at most one consumer at the same time.
-//! These flags indicates whether it's safe to obtain a new producer or a consumer.
+//! Tracked marker policies permit checked acquisition and optional presence queries.
+//! [`markers::NoMarkers`] omits flags and requires owned or exclusive-borrow splitting.
+//! Async and blocking marker policies also notify on publication, release, and drop.
+//! Basic push/pop operations ignore whether the opposite endpoint is present.
 //!
 #![no_std]
 #![allow(clippy::type_complexity)]
@@ -189,7 +189,7 @@ pub use transfer::transfer;
 
 #[cfg(feature = "bench")]
 extern crate test;
-#[cfg(feature = "bench")]
+#[cfg(all(feature = "bench", test))]
 mod benchmarks;
 
 /// Compatibility module; new code should use `endpoint`.

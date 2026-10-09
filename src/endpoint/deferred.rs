@@ -12,6 +12,17 @@ type Buffer<E> = <<E as Endpoint>::Handle as RbHandle>::Rb;
 /// An endpoint that publishes on `commit` and acquires peer progress on `fetch`.
 /// Drop commits. Forgetting may leak values, but cannot cause double destruction.
 /// `E` may be an owned endpoint or an exclusive borrow of one.
+///
+/// A view cannot be kept after releasing or forgetting its endpoint:
+/// ```compile_fail
+/// use ringbuf::{ArrayRb, traits::*};
+/// let mut rb = ArrayRb::<i32, 2>::from([1, 2]);
+/// let (_, mut c) = rb.split_ref();
+/// let mut deferred = c.defer();
+/// let view = deferred.as_slices();
+/// core::mem::forget(deferred);
+/// assert_eq!(view.0[0], 1);
+/// ```
 pub struct Deferred<E: Endpoint, const P: bool, const C: bool> {
     inner: Option<E>,
     read: Cell<usize>,
@@ -32,18 +43,23 @@ impl<E: Endpoint, const P: bool, const C: bool> Deferred<E, P, C> {
         let rb = inner.rb();
         let read = if C { rb.read_claimed_index() } else { rb.read_released_index() };
         let write = rb.write_index();
+        let recovered = C && read != rb.read_released_index();
         if C {
             unsafe {
                 rb.set_read_released(read);
                 rb.set_read_claimed(write);
             }
         }
-        Self {
+        let result = Self {
             inner: Some(inner),
             read: Cell::new(read),
             write: Cell::new(write),
             floor: Cell::new(if P { write } else { read }),
+        };
+        if recovered {
+            result.buffer().notify_read();
         }
+        result
     }
 
     fn buffer(&self) -> &Buffer<E> {
@@ -68,8 +84,7 @@ impl<E: Endpoint, const P: bool, const C: bool> Deferred<E, P, C> {
     pub fn fetch(&mut self) -> usize {
         if P {
             let next = self.buffer().read_released_index();
-            let count = sub_mod(next, self.read.replace(next), modulus(self));
-            count
+            sub_mod(next, self.read.replace(next), modulus(self))
         } else {
             let next = self.buffer().write_index();
             let count = sub_mod(next, self.write.replace(next), modulus(self));

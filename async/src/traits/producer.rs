@@ -46,8 +46,8 @@ pub trait AsyncProducer: ringbuf::traits::Presence + Producer {
     /// Push items from iterator waiting asynchronously if the buffer is full.
     ///
     /// Future returns:
-    /// + `true` - iterator ended.
-    /// + `false` - the corresponding consumer was dropped.
+    /// + `Ok(count)` - iterator ended after sending `count` items.
+    /// + `Err(TransferError)` - the corresponding consumer was dropped; the error reports progress.
     ///
     /// # Cancel safety
     ///
@@ -84,7 +84,7 @@ pub trait AsyncProducer: ringbuf::traits::Presence + Producer {
     /// Copy slice contents to the buffer waiting asynchronously if the buffer is full.
     ///
     /// Future returns:
-    /// + `Ok` - all slice contents are copied.
+    /// + `Ok(count)` - all slice contents are copied.
     /// + `Err(TransferError)` - the corresponding consumer was dropped, number of copied items returned.
     ///
     /// # Cancel safety

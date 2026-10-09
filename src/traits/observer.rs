@@ -81,6 +81,9 @@ pub trait Observer {
 }
 
 /// Trait used for delegating observer methods.
+///
+/// # Safety
+/// Both base accessors must always return the same live object. Observer overrides must preserve its capacity and bounds.
 pub unsafe trait DelegateObserver: Delegate
 where
     Self::Base: Observer + crate::traits::RawObserver,

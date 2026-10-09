@@ -44,6 +44,9 @@ pub trait RingBuffer: Observer + Consumer + Producer + crate::traits::RawRingBuf
 }
 
 /// Trait used for delegating owning ring buffer methods.
+///
+/// # Safety
+/// Delegation must preserve the base buffer's storage, cursor state, and endpoint ownership throughout every operation.
 pub unsafe trait DelegateRingBuffer: DelegateProducer + DelegateConsumer
 where
     Self::Base: RingBuffer,

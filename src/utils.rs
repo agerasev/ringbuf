@@ -46,14 +46,12 @@ pub fn array_to_uninit<T, const N: usize>(value: [T; N]) -> [MaybeUninit<T>; N] 
 
 #[cfg(feature = "alloc")]
 pub fn vec_to_uninit<T>(value: Vec<T>) -> Vec<MaybeUninit<T>> {
-    let value = mem::ManuallyDrop::new(value);
-    let ptr = &value as *const _ as *const Vec<MaybeUninit<T>>;
-    unsafe { ptr.read() }
+    let mut value = mem::ManuallyDrop::new(value);
+    unsafe { Vec::from_raw_parts(value.as_mut_ptr().cast(), value.len(), value.capacity()) }
 }
 
 #[cfg(feature = "alloc")]
 pub fn boxed_slice_to_uninit<T>(value: Box<[T]>) -> Box<[MaybeUninit<T>]> {
-    let value = mem::ManuallyDrop::new(value);
-    let ptr = &value as *const _ as *const Box<[MaybeUninit<T>]>;
-    unsafe { ptr.read() }
+    let raw = Box::into_raw(value);
+    unsafe { Box::from_raw(raw as *mut [MaybeUninit<T>]) }
 }

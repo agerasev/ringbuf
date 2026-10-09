@@ -15,7 +15,9 @@ use core::{cell::UnsafeCell, marker::PhantomData, mem::MaybeUninit, ops::Range, 
 ///
 /// [`Self::as_mut_ptr`] must point to underlying data.
 ///
-/// [`Self::len`] must always return the same value.
+/// [`Self::len`] must always return the same value. Length/pointer accessors and
+/// slice operations on valid in-bounds ranges must not panic. The allocation must
+/// remain live, aligned, and large enough for `len()` slots throughout its use.
 pub unsafe trait Storage {
     /// Stored item.
     type Item: Sized;
@@ -37,7 +39,7 @@ pub unsafe trait Storage {
     ///
     /// # Safety
     ///
-    /// Slice must not overlab with existing mutable slices.
+    /// The range must be in bounds and must not overlap existing mutable slices.
     ///
     /// Non-`Sync` items must not be accessed concurrently.
     unsafe fn slice(&self, range: Range<usize>) -> &[MaybeUninit<Self::Item>] {
@@ -47,7 +49,7 @@ pub unsafe trait Storage {
     ///
     /// # Safety
     ///
-    /// Slices must not overlap.
+    /// The range must be in bounds. Slices must not overlap.
     #[allow(clippy::mut_from_ref)]
     unsafe fn slice_mut(&self, range: Range<usize>) -> &mut [MaybeUninit<Self::Item>] {
         unsafe { slice::from_raw_parts_mut(self.as_mut_ptr().add(range.start), range.len()) }
@@ -206,6 +208,11 @@ impl<T> Drop for Heap<T> {
     }
 }
 
+/// Compatibility spelling for borrowed storage.
+pub type Ref<'a, T> = BorrowedSlice<'a, T>;
+/// Compatibility spelling for inline storage.
+pub type Owning<T> = Inline<T>;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,8 +229,3 @@ mod tests {
         let _: Check<Heap<Cell<i32>>>;
     }
 }
-
-/// Compatibility spelling for borrowed storage.
-pub type Ref<'a, T> = BorrowedSlice<'a, T>;
-/// Compatibility spelling for inline storage.
-pub type Owning<T> = Inline<T>;

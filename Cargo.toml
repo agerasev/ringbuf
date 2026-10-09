@@ -55,3 +55,7 @@ required-features = ["std"]
 [[example]]
 name = "test_ordering"
 required-features = ["std"]
+
+[[bench]]
+name = "policies"
+required-features = ["bench", "std"]

@@ -114,6 +114,13 @@ impl<R: RbHandle, const P: bool, const C: bool> AsMut<Self> for Cached<R, P, C> 
 impl<R: RbHandle, const P: bool, const C: bool> Observer for Cached<R, P, C> {
     type Item = <R::Rb as Observer>::Item;
 
+    fn retained_len(&self) -> usize {
+        self.base.rb().retained_len()
+    }
+    fn queued_len(&self) -> usize {
+        self.base.rb().queued_len()
+    }
+
     #[inline]
     fn capacity(&self) -> NonZeroUsize {
         self.base.capacity()

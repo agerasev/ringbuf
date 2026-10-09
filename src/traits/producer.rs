@@ -31,7 +31,7 @@ pub trait Producer: Observer + crate::traits::RawProducer {
     /// Vacant memory is uninitialized. Initialized items must be put starting from the beginning of first slice.
     /// When first slice is fully filled then items must be put to the beginning of the second slice.
     ///
-    /// *This method must be followed by [`Self::advance_write_index`] call with the number of items being put previously as argument.*
+    /// *This method must be followed by [`crate::traits::RawProducer::advance_write_index`] call with the number of items being put previously as argument.*
     /// *No other mutating calls allowed before that.*
     ///
     /// *Vacant slices must not be used to store any data because their contents aren't synchronized properly.*
@@ -182,6 +182,9 @@ pub trait Producer: Observer + crate::traits::RawProducer {
 }
 
 /// Trait used for delegating consumer methods.
+///
+/// # Safety
+/// Delegation must preserve the base producer's exclusive rights and vacant bounds, including any overridden methods.
 pub unsafe trait DelegateProducer: DelegateObserver
 where
     Self::Base: Producer,

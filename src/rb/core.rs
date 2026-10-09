@@ -62,14 +62,24 @@ impl<S: Storage, I: Indices, M: Markers> Rb<S, I, M> {
     /// The items in storage inside `read..write` range must be initialized, items outside this range must be uninitialized.
     /// `read` and `write` positions must be valid (see implementation details).
     pub unsafe fn from_raw_parts(storage: S, read: usize, write: usize) -> Self {
+        unsafe { Self::from_raw_state(storage, read, read, write) }
+    }
+
+    /// Reconstruct all three cursors, including an abandoned consumer claim.
+    /// # Safety
+    /// The cursors must satisfy the modular ownership invariant. Only
+    /// `[claimed, published)` is owned by this RB and must contain live items.
+    /// `[released, claimed)` is abandoned and will never be inspected or dropped.
+    /// No endpoint or data view may still access the storage.
+    pub unsafe fn from_raw_state(storage: S, released: usize, claimed: usize, published: usize) -> Self {
         assert_capacity(storage.len());
         Self {
             storage,
-            indices: I::new(read, read, write),
+            indices: I::new(released, claimed, published),
             markers: M::default(),
         }
     }
-    /// Destructures ring buffer into underlying storage and `read` and `write` indices.
+    /// Destructure into storage, released, claimed, and published cursor values.
     ///
     /// # Safety
     ///

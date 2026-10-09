@@ -12,6 +12,8 @@ use core::mem::MaybeUninit;
 /// actual storage and endpoint bounds. Slices must refer to that stable storage,
 /// respect wrapping, and have exactly the requested length. Shared data views
 /// require exclusive endpoint ownership or an exclusive borrow of the RB.
+/// Capacity/cursor accessors and raw slice operations must not unwind for valid
+/// ranges. They can be called between moving a value and publishing its removal.
 pub unsafe trait RawObserver: Observer {
     /// Get slice between `start` and `end` indices.
     ///
@@ -36,7 +38,8 @@ pub unsafe trait RawObserver: Observer {
 /// # Safety
 /// An exclusive borrow grants unique producer rights. Its bounds designate only
 /// vacant slots. Publication must finish before returning or unwinding, including
-/// when a notification panics. Safe Producer overrides must preserve these rules.
+/// when a notification panics. Safe Producer overrides must honor their
+/// documented range, initialization, and transfer postconditions as well.
 pub unsafe trait RawProducer: RawObserver {
     /// Recover cached state after a deferred borrow has ended or been forgotten.
     /// # Safety
@@ -69,7 +72,8 @@ pub unsafe trait RawProducer: RawObserver {
 /// # Safety
 /// An exclusive borrow grants unique consumer rights. After prepare_read, its
 /// bounds designate initialized, exclusively readable items. Release must finish
-/// before returning or unwinding. Safe Consumer overrides must preserve these rules.
+/// before returning or unwinding. Safe Consumer overrides must honor their
+/// documented range, initialization, and transfer postconditions as well.
 pub unsafe trait RawConsumer: RawObserver {
     /// Set read index.
     ///
@@ -93,7 +97,7 @@ pub unsafe trait RawConsumer: RawObserver {
 
     /// Provides a direct mutable access to the ring buffer occupied memory.
     ///
-    /// Same as [`Self::occupied_slices`].
+    /// Same as [`crate::traits::Consumer::occupied_slices`].
     ///
     /// # Safety
     ///

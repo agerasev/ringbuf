@@ -24,7 +24,7 @@ pub trait Consumer: Observer + crate::traits::RawConsumer {
     /// All items are initialized. Elements must be removed starting from the beginning of first slice.
     /// When all items are removed from the first slice then items must be removed from the beginning of the second slice.
     ///
-    /// *This method must be followed by [`Self::advance_read_index`] call with the number of items being removed previously as argument.*
+    /// *This method must be followed by [`crate::traits::RawConsumer::advance_read_index`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
     fn occupied_slices(&mut self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
         unsafe {
@@ -320,7 +320,8 @@ impl<C: Consumer> Iterator for IntoIter<C> {
 
 /// An iterator that removes items from the ring buffer.
 ///
-/// Each yielded item is removed immediately, making its slot available to the producer.
+/// Each yielded item advances this endpoint. Immediate endpoints release its slot
+/// at once; deferred endpoints release it on commit.
 /// Only items present when the iterator is created are yielded.
 pub struct PopIter<'a, C: Consumer + ?Sized> {
     inner: &'a C,
@@ -386,6 +387,9 @@ pub type Iter<'a, C: Consumer> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a,
 pub type IterMut<'a, C: Consumer> = Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
 
 /// Trait used for delegating producer methods.
+///
+/// # Safety
+/// Delegation must preserve the base consumer's exclusive rights and initialized bounds, including any overridden methods.
 pub unsafe trait DelegateConsumer: DelegateObserver
 where
     Self::Base: Consumer,

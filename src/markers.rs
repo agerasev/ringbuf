@@ -46,6 +46,11 @@ impl TrackedMarkers for AtomicMarkers {}
 impl TrackedMarkers for LocalMarkers {}
 
 /// No ownership flags or presence queries. Split through ownership or `&mut Rb`.
+/// ```compile_fail
+/// use ringbuf::{Rb, storage::Array, indices::LocalIndices, markers::NoMarkers, traits::*};
+/// let rb = Rb::<Array<i32, 2>, LocalIndices, NoMarkers>::default();
+/// let _ = rb.read_is_held();
+/// ```
 #[derive(Default)]
 pub struct NoMarkers;
 

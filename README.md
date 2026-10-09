@@ -1,3 +1,7 @@
+> The `v6` branch contains the experimental 0.6 API. See
+> [migration notes](docs/migration-0.6.md), [design and milestones](docs/design-0.6.md),
+> and the [deferred endpoint example](examples/deferred.rs).
+
 # ringbuf
 
 [![Crates.io][crates_badge]][crates]
