@@ -57,7 +57,6 @@ fn single() {
     assert_eq!(set.borrow().len(), 0);
 }
 
-// TODO: Use transactions.
 #[test]
 fn transaction() {
     let set = RefCell::new(BTreeSet::new());

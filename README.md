@@ -33,37 +33,26 @@ Lock-free SPSC FIFO ring buffer with direct access to inner data.
 + Async and blocking versions (see [this section](#derived-crates)).
 + Can optionally use the [`portable-atomic`](https://crates.io/crates/portable-atomic) crate to allow usage on smaller systems without CAS operations.
 
-# Implementing custom endpoints
-
-Custom `Producer` and `Consumer` implementations now require `unsafe impl Raw`.
-The `Raw` trait contains storage access, cursor updates, and ownership bookkeeping;
-its safety contract also covers the consistency of safe method overrides.
-`Observer` remains a safe, metadata-only interface. Delegating wrappers must opt
-in with `unsafe impl DelegateRaw` in addition to their `Delegate*` traits.
-Callers of raw operations may need to import `ringbuf::traits::Raw`.
-
 # Standalone buffer access
 
-Backing buffers no longer implement `Producer` or `Consumer`. Their usual
-methods (`try_push`, `try_pop`, `push_slice`, `pop_iter`, and others) remain
-available as inherent methods. All data access on the backing buffer requires
-`&mut self`, including read-only views. Metadata still supports shared access.
-Consumer endpoints retain their `&self` views.
+Backing buffers provide inherent methods such as `try_push`, `try_pop`,
+`push_slice`, and `pop_iter`. All data access on the backing buffer requires
+`&mut self`, including read-only views. Metadata supports shared access.
+Consumer endpoints provide read-only views through `&self`.
 
-Pass `&mut rb.as_exclusive()` to generic producer/consumer algorithms. Existing
-shared handles can observe metadata and acquire checked endpoints, but cannot
-borrow items directly. Direct endpoints expose `Sync` only for `Sync` items;
-they remain `Send` for `Send` items. See [ownership and migration examples](docs/ownership.md).
+The `Producer` and `Consumer` traits are implemented by endpoints and the
+exclusive adapter. Pass `&mut rb.as_exclusive()` to generic producer/consumer
+algorithms. Shared backing handles support metadata observation and checked
+endpoint acquisition. Direct endpoints are `Send` when their backing handle and
+items are `Send`, and `Sync` when both are `Sync`.
+See [buffer ownership and data views](docs/ownership.md).
 
 # Usage
 
 At first you need to create the ring buffer itself. `HeapRb` is recommended but you may [choose another one](#types).
 
-After the ring buffer is created it may be splitted into pair of `Producer` and `Consumer`.
+The ring buffer can be split into a pair of `Producer` and `Consumer` endpoints.
 Producer is used to insert items to the ring buffer, consumer - to remove items from it.
-
-Capacity must be in `1..=usize::MAX / 2`, including for zero-sized items.
-Constructors panic if the capacity is zero or exceeds this limit.
 
 # Types
 
@@ -82,6 +71,7 @@ You may also provide your own generic parameters.
 To avoid multiple unnecessary synchronizations you may use methods that operate many items at once(`push_slice`/`push_iter`, `pop_slice`, etc.).
 Caching endpoints also avoid repeatedly fetching the opposite endpoint's index when progress is possible.
 All completed operations publish their index updates immediately, including each step of `pop_iter`.
+If an iterator panics during `push_iter`, the initialized prefix is published and can be consumed.
 
 `skip` and `clear` take constant time for items without destructors, such as `u8`.
 Items that need destruction are dropped individually, with each slot kept occupied until its destructor finishes.
@@ -151,12 +141,30 @@ assert_eq!(rb.try_pop(), None);
 Note that `push_overwrite` requires exclusive access to the ring buffer
 so to perform it concurrently you need to guard the ring buffer with mutex or some other lock.
 
-## Derived crates
+# Implementation details
+
+## Capacity
+
+Capacity must be in `1..=usize::MAX / 2`, including for zero-sized items.
+`new` panics if the capacity is zero or exceeds this limit. Heap buffers also
+provide `try_new`, which returns `CreateError::Capacity` for invalid capacity
+or `CreateError::Allocation` when storage allocation fails.
+
+## Implementing custom endpoints
+
+Custom `Producer` and `Consumer` implementations require `unsafe impl Raw`.
+The `Raw` trait contains storage access, cursor updates, and ownership bookkeeping;
+its safety contract also covers the consistency of safe method overrides.
+`Observer` is a safe, metadata-only interface. Delegating wrappers implement
+`unsafe impl DelegateRaw` in addition to their `Delegate*` traits.
+Import `ringbuf::traits::Raw` to use raw trait operations.
+
+# Derived crates
 
 + [`ringbuf-blocking`](https://crates.io/crates/ringbuf-blocking)
 + [`async-ringbuf`](https://crates.io/crates/async-ringbuf)
 
-## License
+# License
 
 Licensed under either of
 
@@ -165,7 +173,7 @@ Licensed under either of
 
 at your option.
 
-### Contribution
+## Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any

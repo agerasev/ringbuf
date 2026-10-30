@@ -1,13 +1,14 @@
 # Buffer ownership and data views
 
 `LocalRb`, `SharedRb`, and the async/blocking backing buffers implement `Observer`,
-`Raw`, and `RingBuffer`. They no longer implement `Producer` or `Consumer`.
+`Raw`, and `RingBuffer`. `Producer` and `Consumer` are implemented by endpoints
+and the exclusive adapter.
 Their inherent data-access methods borrow the buffer mutably, including read-only
-views. Metadata remains available through shared handles.
+views. Metadata is available through shared handles.
 
-Consumer endpoints still support `first`, `as_slices`, and `iter` through `&self`.
+Consumer endpoints support `first`, `as_slices`, and `iter` through `&self`.
 Their borrow prevents removal while the view is live; the producer may continue
-to append to other slots. Producer endpoints similarly retain shared vacant views.
+to append to other slots. Producer endpoints provide shared vacant views.
 
 For a generic algorithm accepting an endpoint, use `rb.as_exclusive()`:
 
@@ -22,10 +23,11 @@ assert_eq!(pop(&mut rb.as_exclusive()), Some(7));
 ```
 
 The adapter borrows both roles exclusively and does not expose a backing handle.
-It needs no allocation or runtime ownership checks. The ordinary buffer methods
-and its `Read`, `Write`, `fmt::Write`, and owning-iterator support remain available.
-Explicit calls such as `Consumer::try_pop(&mut rb)` must use an adapter instead.
-The owning buffer iterator is now `rb::IntoIter`; endpoint iterators remain
+It needs no allocation or runtime ownership checks. Backing buffers provide
+inherent data-access methods and implement `Read`, `Write`, `fmt::Write`, and
+`IntoIterator`. To use trait-qualified calls, pass the adapter:
+`Consumer::try_pop(&mut rb.as_exclusive())`.
+The owning buffer iterator is `rb::IntoIter`; the endpoint iterator is
 `traits::consumer::IntoIter`.
 
 ## Shared handles cannot borrow data
@@ -66,7 +68,7 @@ println!("{item}");
 ```
 
 ```compile_fail,E0596
-use ringbuf::{StaticRb, alias::Arc, traits::*};
+use ringbuf::{Arc, StaticRb, traits::*};
 let rb = Arc::new(StaticRb::<u8, 2>::default());
 let (_producer, _consumer) = rb.clone().split();
 let _items = rb.as_slices();
@@ -103,8 +105,8 @@ println!("{:p}", slots.0.as_ptr());
 
 ## Views prevent later endpoint acquisition
 
-A held-flag check at method entry would not protect a view from later acquisition.
-An exclusive borrow does:
+The exclusive borrow keeps the view valid by preventing endpoint acquisition
+for the duration of that view:
 
 ```compile_fail,E0502
 use ringbuf::{StaticRb, traits::*, wrap::Cons};
@@ -134,8 +136,9 @@ needs_producer::<StaticRb<u8, 2>>();
 
 ## Sharing endpoint views between threads
 
-Moving a direct endpoint between threads still permits `Send` items. Sharing that
-endpoint requires `Sync` items because shared methods can return `&Item`:
+Moving a direct endpoint between threads requires a `Send` backing handle and
+`Send` items. Sharing that endpoint requires a `Sync` backing handle and `Sync`
+items because shared methods can return `&Item`:
 
 ```compile_fail,E0277
 use core::cell::Cell;

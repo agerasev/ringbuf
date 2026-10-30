@@ -4,8 +4,13 @@
 //!
 //! At first you need to create the ring buffer itself. [`HeapRb`] is recommended but you may [choose another one](#types).
 //!
-//! After the ring buffer is created it may be splitted into pair of [`Producer`](`traits::Producer`) and [`Consumer`](`traits::Consumer`).
+//! The ring buffer can be split into a pair of [`Producer`](`traits::Producer`) and [`Consumer`](`traits::Consumer`) endpoints.
 //! Producer is used to insert items to the ring buffer, consumer - to remove items from it.
+//!
+//! Backing buffers provide inherent data-access methods that require `&mut self`, including read-only views.
+//! Metadata is available through the shared [`Observer`](`traits::Observer`) interface.
+//! Use [`as_exclusive`](`traits::RingBuffer::as_exclusive`) to pass a backing buffer to a generic producer/consumer algorithm.
+//! Consumer endpoints support read-only views through `&self`.
 //!
 //! # Types
 //!
@@ -122,6 +127,8 @@ so to perform it concurrently you need to guard the ring buffer with mutex or so
 //! Ring buffer can own its storage or it can hold only a mutable reference to it.
 //! Storage length is refered as `capacity`.
 //! Capacity must be in `1..=usize::MAX / 2`, including for zero-sized items.
+//! Heap buffers provide `new`, which panics on invalid capacity, and `try_new`, which returns
+//! `CreateError::Capacity` or `CreateError::Allocation` when construction fails.
 //!
 //! ## Indices
 //!
@@ -150,6 +157,12 @@ so to perform it concurrently you need to guard the ring buffer with mutex or so
 //!
 //! Ring buffer can have at most one producer and at most one consumer at the same time.
 //! These flags indicates whether it's safe to obtain a new producer or a consumer.
+//!
+//! ## Implementing custom endpoints
+//!
+//! Custom endpoint implementations require [`Raw`](`traits::Raw`), whose unsafe contract covers storage,
+//! indices, ownership, and the consistency of safe methods. Delegating wrappers implement
+//! [`DelegateRaw`](`traits::DelegateRaw`) alongside their delegation traits.
 //!
 #![no_std]
 #![allow(clippy::type_complexity)]

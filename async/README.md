@@ -31,9 +31,21 @@
 
 # Overview
 
-This technically is the original [ringbuf](https://crates.io/crates/ringbuf) with an async synchronization.
+This crate provides [ringbuf](https://crates.io/crates/ringbuf) with asynchronous synchronization.
 
 `AsyncProducer` and `AsyncConsumer` traits provide `async/await` analogs of lock-free methods of `Producer` and `Consumer` with the ability to wait for certain event (such as appearance item or free slot, completing transfer of all items, or closing the opposite endpoint).
+
+`AsyncHeapRb::try_new` returns `ringbuf::CreateError` for invalid capacity or
+allocation failure. Valid capacity is `1..=usize::MAX / 2`, including zero-sized items.
+
+`wait_vacant` and `wait_occupied` return `Result<(), WaitError>`. A threshold
+above capacity returns `TooLarge`, and a zero threshold succeeds immediately.
+For nonzero thresholds, `wait_vacant` reports `Closed` when the consumer is
+closed; `wait_occupied` reports `Closed` when the producer is closed and too few
+items remain. Both waits can be cancelled without changing the queued data.
+
+`async_transfer` returns the number of items delivered. Cancelling it preserves
+completed transfers and leaves undelivered items in the source buffer.
 
 ## Examples
 
