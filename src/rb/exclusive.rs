@@ -1,12 +1,16 @@
+use super::RbMut;
 use crate::traits::{Consumer, Observer, Producer, Raw, RingBuffer};
 use core::{marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize};
 
 /// Exclusive access to a standalone buffer through the endpoint traits.
 ///
-/// Created by [`RingBuffer::as_exclusive`]. The mutable borrow owns both roles
-/// without changing the endpoint-held flags. This adapter does not expose its
-/// backing handle or implement `RingBuffer`, so it cannot be used to create
-/// another endpoint while one of its data views is borrowed.
+/// Holds an owned buffer or a mutable borrow, without changing endpoint-held
+/// flags. [`RingBuffer::as_exclusive`] creates the borrowed form.
+///
+/// Backing-buffer access requires a mutable borrow of the adapter through
+/// [`Self::rb_mut`], or consuming it with [`Self::into_inner`]. Shared access does
+/// not expose a backing handle, so it cannot create another endpoint while one
+/// of the adapter's data views is borrowed.
 ///
 /// ```
 /// use ringbuf::{StaticRb, traits::*};
@@ -17,63 +21,80 @@ use core::{marker::PhantomData, mem::MaybeUninit, num::NonZeroUsize};
 /// rb.try_push(7).unwrap();
 /// assert_eq!(consume(&mut rb.as_exclusive()), Some(7));
 /// ```
-pub struct Exclusive<'a, B: RingBuffer + ?Sized> {
-    inner: &'a mut B,
-    // Shared views expose &Item, so Sync must require Item: Sync even when B's
+pub struct Exclusive<R: RbMut> {
+    inner: R,
+    // Shared views expose &Item, so Sync must require Item: Sync even when the buffer's
     // raw storage is Sync for Item: Send.
-    _item: PhantomData<B::Item>,
+    _item: PhantomData<<R::Rb as Observer>::Item>,
 }
 
-impl<'a, B: RingBuffer + ?Sized> Exclusive<'a, B> {
-    pub(crate) fn new(inner: &'a mut B) -> Self {
+impl<R: RbMut> Exclusive<R> {
+    /// Wrap an owned buffer or a mutable borrow with both endpoint roles.
+    pub fn new(inner: R) -> Self {
         Self { inner, _item: PhantomData }
     }
+
+    /// Recover the owned buffer or mutable borrow.
+    pub fn into_inner(self) -> R {
+        self.inner
+    }
+
+    /// Borrow the backing buffer exclusively, for example to use
+    /// [`RingBuffer::push_overwrite`].
+    ///
+    /// This borrow prevents simultaneous access through the adapter and its
+    /// data views. The buffer may be replaced through the returned reference.
+    pub fn rb_mut(&mut self) -> &mut R::Rb {
+        self.inner.rb_mut()
+    }
 }
 
-impl<B: RingBuffer + ?Sized> Observer for Exclusive<'_, B> {
-    type Item = B::Item;
+impl<R: RbMut> Observer for Exclusive<R> {
+    type Item = <R::Rb as Observer>::Item;
     fn capacity(&self) -> NonZeroUsize {
-        self.inner.capacity()
+        self.inner.rb().capacity()
     }
     fn read_index(&self) -> usize {
-        self.inner.read_index()
+        self.inner.rb().read_index()
     }
     fn write_index(&self) -> usize {
-        self.inner.write_index()
+        self.inner.rb().write_index()
     }
     fn read_is_held(&self) -> bool {
-        self.inner.read_is_held()
+        self.inner.rb().read_is_held()
     }
     fn write_is_held(&self) -> bool {
-        self.inner.write_is_held()
+        self.inner.rb().write_is_held()
     }
 }
 
-// SAFETY: the exclusive buffer borrow owns both roles. All operations use the
-// same backing buffer, and no safe accessor exposes a competing backing handle.
-unsafe impl<B: RingBuffer + ?Sized> Raw for Exclusive<'_, B> {
+// SAFETY: RbMut grants both roles for the lifetime of the stored handle. All
+// operations use the same backing buffer; obtaining a backing handle requires
+// a mutable borrow of the adapter or consuming it. No indices or pointers are
+// cached across mutable backing-buffer access.
+unsafe impl<R: RbMut> Raw for Exclusive<R> {
     unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        unsafe { self.inner.unsafe_slices(start, end) }
+        unsafe { self.inner.rb().unsafe_slices(start, end) }
     }
     unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        unsafe { self.inner.unsafe_slices_mut(start, end) }
+        unsafe { self.inner.rb().unsafe_slices_mut(start, end) }
     }
     unsafe fn set_read_index(&self, value: usize) {
-        unsafe { self.inner.set_read_index(value) };
+        unsafe { self.inner.rb().set_read_index(value) };
     }
     unsafe fn set_write_index(&self, value: usize) {
-        unsafe { self.inner.set_write_index(value) };
+        unsafe { self.inner.rb().set_write_index(value) };
     }
     unsafe fn hold_read(&self, flag: bool) -> bool {
-        unsafe { self.inner.hold_read(flag) }
+        unsafe { self.inner.rb().hold_read(flag) }
     }
     unsafe fn hold_write(&self, flag: bool) -> bool {
-        unsafe { self.inner.hold_write(flag) }
+        unsafe { self.inner.rb().hold_write(flag) }
     }
 }
 
-impl<B: RingBuffer + ?Sized> Consumer for Exclusive<'_, B> {}
-impl<B: RingBuffer + ?Sized> Producer for Exclusive<'_, B> {}
+impl<R: RbMut> Consumer for Exclusive<R> {}
+impl<R: RbMut> Producer for Exclusive<R> {}
 
 /// Owning iterator for a standalone ring buffer.
 pub struct IntoIter<B: RingBuffer> {

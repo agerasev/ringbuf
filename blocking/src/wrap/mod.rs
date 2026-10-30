@@ -16,7 +16,10 @@ pub struct BlockingWrap<R: BlockingRbRef, const P: bool, const C: bool> {
 }
 
 impl<R: BlockingRbRef, const P: bool, const C: bool> BlockingWrap<R, P, C> {
-    pub fn new(rb: R) -> Self {
+    pub fn new(rb: R) -> Self
+    where
+        R: Clone,
+    {
         Self {
             rb: rb.clone(),
             base: Caching::new(rb),
@@ -24,7 +27,10 @@ impl<R: BlockingRbRef, const P: bool, const C: bool> BlockingWrap<R, P, C> {
         }
     }
 
-    pub fn observe(&self) -> Obs<R> {
+    pub fn observe(&self) -> Obs<R>
+    where
+        R: Clone,
+    {
         self.base().observe()
     }
 }

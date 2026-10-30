@@ -22,7 +22,10 @@ impl<R: AsyncRbRef, const P: bool, const C: bool> AsyncWrap<R, P, C> {
         }
     }
 
-    pub fn observe(&self) -> Obs<R> {
+    pub fn observe(&self) -> Obs<R>
+    where
+        R: Clone,
+    {
         self.base().observe()
     }
 }

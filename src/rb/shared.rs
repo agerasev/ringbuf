@@ -115,6 +115,21 @@ impl<S: Storage + ?Sized> Observer for SharedRb<S> {
 
 impl<S: Storage + ?Sized> RingBuffer for SharedRb<S> {}
 
+// SAFETY: the handle is the buffer itself and always returns that same object.
+unsafe impl<S: Storage + ?Sized> super::RbRef for SharedRb<S> {
+    type Rb = Self;
+    fn rb(&self) -> &Self {
+        self
+    }
+}
+// SAFETY: owning this buffer owns both roles; derived borrows prevent moving it
+// or borrowing it mutably until those borrows end.
+unsafe impl<S: Storage + ?Sized> super::RbMut for SharedRb<S> {
+    fn rb_mut(&mut self) -> &mut Self {
+        self
+    }
+}
+
 impl<S: Storage + ?Sized> Drop for SharedRb<S> {
     fn drop(&mut self) {
         self.clear();

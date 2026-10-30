@@ -48,7 +48,10 @@ impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
     }
 
     /// Get ring buffer observer.
-    pub fn observe(&self) -> Obs<R> {
+    pub fn observe(&self) -> Obs<R>
+    where
+        R: Clone,
+    {
         self.base.observe()
     }
 

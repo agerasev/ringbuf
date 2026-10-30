@@ -48,3 +48,23 @@ fn borrowed_handle_uses_referenced_buffer() {
     assert_eq!(rb.occupied_len(), 1);
     assert_eq!(consumer.try_pop(), Some(7));
 }
+
+impl<B> AsMut<Self> for Wrapper<B> {
+    fn as_mut(&mut self) -> &mut Self {
+        panic!("a mutable handle must not rely on a user-defined AsMut")
+    }
+}
+
+#[test]
+fn mutable_handle_uses_referenced_buffer() {
+    use crate::rb::Exclusive;
+    fn exercise<B: RingBuffer<Item = u8>>(rb: &mut B) {
+        let mut exclusive = Exclusive::new(rb);
+        exclusive.try_push(7).unwrap();
+        assert_eq!(exclusive.rb_mut().try_pop(), Some(7));
+        exclusive.into_inner().try_push(8).unwrap();
+    }
+    let mut rb = Wrapper(StaticRb::<u8, 2>::default());
+    exercise(&mut rb);
+    assert_eq!(rb.try_pop(), Some(8));
+}

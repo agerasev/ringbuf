@@ -22,13 +22,110 @@ rb.try_push(7).unwrap();
 assert_eq!(pop(&mut rb.as_exclusive()), Some(7));
 ```
 
-The adapter borrows both roles exclusively and does not expose a backing handle.
-It needs no allocation or runtime ownership checks. Backing buffers provide
+The adapter holds both roles exclusively and exposes backing-buffer access only
+through a mutable borrow or by consuming the adapter. It needs no allocation or
+runtime ownership checks. Backing buffers provide
 inherent data-access methods and implement `Read`, `Write`, `fmt::Write`, and
 `IntoIterator`. To use trait-qualified calls, pass the adapter:
 `Consumer::try_pop(&mut rb.as_exclusive())`.
 The owning buffer iterator is `rb::IntoIter`; the endpoint iterator is
 `traits::consumer::IntoIter`.
+
+## Owned and borrowed exclusive adapters
+
+`Exclusive<R>` accepts an owned buffer or a mutable borrow through the unsafe
+`RbMut` handle contract. `rb.as_exclusive()` constructs `Exclusive<&mut B>`;
+`Exclusive::new(rb)` moves the buffer into `Exclusive<B>`.
+
+Use `rb_mut()` for backing-buffer operations such as `push_overwrite`, and
+`into_inner()` to recover the owned buffer or mutable borrow:
+
+```
+use ringbuf::{StaticRb, rb::Exclusive, traits::*};
+let rb = StaticRb::<u8, 2>::from([1, 2]);
+let mut exclusive = Exclusive::new(rb);
+assert_eq!(exclusive.rb_mut().push_overwrite(3), Some(1));
+assert_eq!(exclusive.first(), Some(&2));
+let mut rb = exclusive.into_inner();
+assert!(rb.pop_iter().eq([2, 3]));
+```
+
+Backing-buffer access cannot overlap an adapter's data view:
+
+```compile_fail,E0502
+use ringbuf::{StaticRb, rb::Exclusive, traits::*};
+let mut exclusive = Exclusive::new(StaticRb::from([String::from("hello")]));
+let item = exclusive.first().unwrap();
+exclusive.rb_mut().try_pop();
+println!("{item}");
+```
+
+Recovering the buffer also requires ending all adapter views:
+
+```compile_fail,E0505
+use ringbuf::{StaticRb, rb::Exclusive, traits::*};
+let mut rb = StaticRb::from([String::from("hello")]);
+let exclusive = Exclusive::new(&mut rb);
+let item = exclusive.first().unwrap();
+let rb = exclusive.into_inner();
+rb.try_pop();
+println!("{item}");
+```
+
+Endpoints created through `rb_mut()` keep the adapter borrowed:
+
+```compile_fail,E0499
+use ringbuf::{StaticRb, rb::Exclusive, traits::*};
+let mut exclusive = Exclusive::new(StaticRb::<u8, 2>::default());
+let (mut producer, _consumer) = exclusive.rb_mut().split_ref();
+exclusive.try_push(1).unwrap();
+producer.try_push(2).unwrap();
+```
+
+The adapter does not implement `RbRef`, `RbMut`, or `RingBuffer`, and it does not
+dereference to the backing buffer. In particular, shared access to the adapter
+cannot be converted into a backing handle:
+
+```compile_fail,E0277
+use ringbuf::{StaticRb, rb::{Exclusive, RbRef}};
+fn needs_handle<R: RbRef>() {}
+needs_handle::<Exclusive<StaticRb<u8, 2>>>();
+```
+
+```compile_fail,E0277
+use ringbuf::{StaticRb, rb::Exclusive, traits::RingBuffer};
+fn needs_buffer<B: RingBuffer>() {}
+needs_buffer::<Exclusive<StaticRb<u8, 2>>>();
+```
+
+Shared references and shared ownership do not grant both endpoint roles:
+
+```compile_fail,E0277
+use ringbuf::{StaticRb, rb::Exclusive};
+let rb = StaticRb::<u8, 2>::default();
+let _exclusive = Exclusive::new(&rb);
+```
+
+```compile_fail,E0277
+use ringbuf::{Arc, StaticRb, rb::{Exclusive, RbRef}};
+fn needs_handle<R: RbRef>(_: &R) {}
+let rb = Arc::new(StaticRb::<u8, 2>::default());
+needs_handle(&rb);
+let _exclusive = Exclusive::new(rb);
+```
+
+### Implementing buffer handles
+
+`RbRef` provides shared access to one backing buffer. Its unsafe contract requires
+stable buffer identity, including across clones when `Clone` is implemented.
+`RbMut` extends this contract with exclusive ownership of both roles; merely
+providing a method that can sometimes return `&mut B` is insufficient.
+The owned buffer types and `&mut B` implement `RbMut`. Shared references, `Arc`,
+and `Rc` implement only `RbRef`.
+
+Endpoints accept non-cloneable handles. Cloning an observer and calling
+`observe()` require `Clone`, as does constructing a blocking endpoint, which
+keeps a separate handle for waiting on its semaphore.
 
 ## Shared handles cannot borrow data
 
@@ -160,5 +257,13 @@ The exclusive adapter follows the same rule:
 use core::cell::Cell;
 use ringbuf::{StaticRb, rb::Exclusive};
 fn needs_sync<T: Sync>() {}
-needs_sync::<Exclusive<'static, StaticRb<Cell<u8>, 2>>>();
+needs_sync::<Exclusive<&'static mut StaticRb<Cell<u8>, 2>>>();
+```
+
+
+```compile_fail,E0277
+use core::cell::Cell;
+use ringbuf::{StaticRb, rb::Exclusive};
+fn needs_sync<T: Sync>() {}
+needs_sync::<Exclusive<StaticRb<Cell<u8>, 2>>>();
 ```

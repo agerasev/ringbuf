@@ -8,7 +8,7 @@ macro_rules! impl_ring_buffer_methods {
         impl<$($generics)*> $ty {
             #[doc = "See [`RingBuffer::as_exclusive`]."]
             #[inline]
-            pub fn as_exclusive(&mut self) -> $crate::rb::Exclusive<'_, Self> {
+            pub fn as_exclusive(&mut self) -> $crate::rb::Exclusive<&mut Self> {
                 $crate::traits::RingBuffer::as_exclusive(self)
             }
             #[doc = "See [`RingBuffer::occupied_slices`]."]

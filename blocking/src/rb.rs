@@ -65,6 +65,21 @@ impl<S: Storage, X: Semaphore> Observer for BlockingRb<S, X> {
 }
 impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {}
 
+// SAFETY: the handle is the buffer itself and always returns that same object.
+unsafe impl<S: Storage, X: Semaphore> ringbuf::rb::RbRef for BlockingRb<S, X> {
+    type Rb = Self;
+    fn rb(&self) -> &Self {
+        self
+    }
+}
+// SAFETY: owning this buffer owns both roles; derived borrows prevent moving it
+// or borrowing it mutably until those borrows end.
+unsafe impl<S: Storage, X: Semaphore> ringbuf::rb::RbMut for BlockingRb<S, X> {
+    fn rb_mut(&mut self) -> &mut Self {
+        self
+    }
+}
+
 impl<S: Storage, X: Semaphore> SplitRef for BlockingRb<S, X> {
     type RefProd<'a>
         = BlockingProd<&'a Self>

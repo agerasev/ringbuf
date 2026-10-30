@@ -45,6 +45,9 @@ exclusive adapter. Pass `&mut rb.as_exclusive()` to generic producer/consumer
 algorithms. Shared backing handles support metadata observation and checked
 endpoint acquisition. Direct endpoints are `Send` when their backing handle and
 items are `Send`, and `Sync` when both are `Sync`.
+`Exclusive::new(rb)` holds an owned buffer, while `rb.as_exclusive()` borrows it.
+Use the adapter's `rb_mut()` for operations such as `push_overwrite`, and
+`into_inner()` to recover its buffer or mutable borrow.
 See [buffer ownership and data views](docs/ownership.md).
 
 # Usage

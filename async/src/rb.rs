@@ -67,6 +67,21 @@ impl<S: Storage> Observer for AsyncRb<S> {
 
 impl<S: Storage> RingBuffer for AsyncRb<S> {}
 
+// SAFETY: the handle is the buffer itself and always returns that same object.
+unsafe impl<S: Storage> ringbuf::rb::RbRef for AsyncRb<S> {
+    type Rb = Self;
+    fn rb(&self) -> &Self {
+        self
+    }
+}
+// SAFETY: owning this buffer owns both roles; derived borrows prevent moving it
+// or borrowing it mutably until those borrows end.
+unsafe impl<S: Storage> ringbuf::rb::RbMut for AsyncRb<S> {
+    fn rb_mut(&mut self) -> &mut Self {
+        self
+    }
+}
+
 impl<S: Storage> SplitRef for AsyncRb<S> {
     type RefProd<'a>
         = AsyncProd<&'a Self>

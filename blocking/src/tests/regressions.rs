@@ -141,3 +141,16 @@ fn fallible_heap_construction_reports_capacity_errors() {
     assert!(matches!(BlockingHeapRb::<u8>::try_new(0), Err(ringbuf::CreateError::Capacity(_))));
     assert_eq!(BlockingHeapRb::<u8>::try_new(3).unwrap().capacity().get(), 3);
 }
+
+#[test]
+fn exclusive_accepts_owned_and_borrowed_buffers() {
+    use ringbuf::rb::Exclusive;
+    let mut exclusive = Exclusive::new(BlockingHeapRb::<u8>::new(1));
+    exclusive.try_push(7).unwrap();
+    assert_eq!(exclusive.rb_mut().push_overwrite(8), Some(7));
+    let mut rb = exclusive.into_inner();
+    let mut exclusive = Exclusive::new(&mut rb);
+    assert_eq!(exclusive.try_pop(), Some(8));
+    exclusive.into_inner().try_push(9).unwrap();
+    assert_eq!(rb.try_pop(), Some(9));
+}

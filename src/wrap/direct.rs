@@ -33,7 +33,7 @@ pub type Prod<R> = Direct<R, true, false>;
 /// Consumer of a ring buffer.
 pub type Cons<R> = Direct<R, false, true>;
 
-impl<R: RbRef> Clone for Obs<R> {
+impl<R: RbRef + Clone> Clone for Obs<R> {
     fn clone(&self) -> Self {
         Self {
             rb: self.rb.clone(),
@@ -57,7 +57,10 @@ impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
     }
 
     /// Get ring buffer observer.
-    pub fn observe(&self) -> Obs<R> {
+    pub fn observe(&self) -> Obs<R>
+    where
+        R: Clone,
+    {
         Obs {
             rb: self.rb.clone(),
             _item: PhantomData,

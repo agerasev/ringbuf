@@ -16,7 +16,7 @@ use core::mem::MaybeUninit;
 pub trait RingBuffer: Raw {
     /// Exclusive access to both roles for use with generic endpoint algorithms.
     #[inline]
-    fn as_exclusive(&mut self) -> crate::rb::Exclusive<'_, Self> {
+    fn as_exclusive(&mut self) -> crate::rb::Exclusive<&mut Self> {
         crate::rb::Exclusive::new(self)
     }
 
