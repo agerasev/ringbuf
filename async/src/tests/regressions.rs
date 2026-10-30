@@ -134,3 +134,62 @@ fn transfer_counts_only_delivered_items() {
     drop(dst_cons);
     assert_eq!(futures::executor::block_on(async_transfer(&mut src, &mut dst, None)), 0);
 }
+
+#[test]
+fn cancelling_transfer_preserves_undelivered_items() {
+    use alloc::boxed::Box;
+    for initially_full in [false, true] {
+        let (mut writer, mut src) = AsyncHeapRb::new(3).split();
+        writer.push_iter([Box::new(1), Box::new(2)].into_iter());
+        let (mut dst, mut reader) = AsyncHeapRb::new(1).split();
+        if initially_full {
+            dst.try_push(Box::new(0)).unwrap();
+        }
+        let mut transfer = Box::pin(async_transfer(&mut src, &mut dst, Some(2)));
+        assert_eq!(poll(&mut transfer), Poll::Pending);
+        drop(transfer);
+        if initially_full {
+            assert_eq!(src.try_pop().as_deref(), Some(&1));
+        }
+        assert_eq!(src.try_pop().as_deref(), Some(&2));
+        assert!(src.is_empty());
+        assert_eq!(reader.try_pop().as_deref(), Some(if initially_full { &0 } else { &1 }));
+    }
+}
+
+#[test]
+fn transfer_wakes_for_both_queues_and_preserves_items_on_close() {
+    use alloc::{boxed::Box, sync::Arc};
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    use futures::task::{ArcWake, waker};
+    struct Count(AtomicUsize);
+    impl ArcWake for Count {
+        fn wake_by_ref(this: &Arc<Self>) {
+            this.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    for close in [false, true] {
+        let (mut writer, mut src) = AsyncHeapRb::new(1).split();
+        let (mut dst, mut reader) = AsyncHeapRb::new(1).split();
+        dst.try_push(0).unwrap();
+        let count = Arc::new(Count(AtomicUsize::new(0)));
+        let waker = waker(count.clone());
+        let mut cx = Context::from_waker(&waker);
+        let mut transfer = Box::pin(async_transfer(&mut src, &mut dst, Some(1)));
+        assert_eq!(transfer.as_mut().poll(&mut cx), Poll::Pending);
+        count.0.store(0, Ordering::SeqCst);
+        writer.try_push(7).unwrap();
+        assert!(count.0.load(Ordering::SeqCst) > 0);
+        assert_eq!(transfer.as_mut().poll(&mut cx), Poll::Pending);
+        count.0.store(0, Ordering::SeqCst);
+        if close {
+            drop(reader);
+        } else {
+            assert_eq!(reader.try_pop(), Some(0));
+        }
+        assert!(count.0.load(Ordering::SeqCst) > 0);
+        assert_eq!(transfer.as_mut().poll(&mut cx), Poll::Ready(usize::from(!close)));
+        drop(transfer);
+        assert_eq!(src.try_pop(), if close { Some(7) } else { None });
+    }
+}
