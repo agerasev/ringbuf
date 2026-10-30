@@ -42,6 +42,19 @@ its safety contract also covers the consistency of safe method overrides.
 in with `unsafe impl DelegateRaw` in addition to their `Delegate*` traits.
 Callers of raw operations may need to import `ringbuf::traits::Raw`.
 
+# Standalone buffer access
+
+Backing buffers no longer implement `Producer` or `Consumer`. Their usual
+methods (`try_push`, `try_pop`, `push_slice`, `pop_iter`, and others) remain
+available as inherent methods. All data access on the backing buffer requires
+`&mut self`, including read-only views. Metadata still supports shared access.
+Consumer endpoints retain their `&self` views.
+
+Pass `&mut rb.as_exclusive()` to generic producer/consumer algorithms. Existing
+shared handles can observe metadata and acquire checked endpoints, but cannot
+borrow items directly. Direct endpoints expose `Sync` only for `Sync` items;
+they remain `Send` for `Send` items. See [ownership and migration examples](docs/ownership.md).
+
 # Usage
 
 At first you need to create the ring buffer itself. `HeapRb` is recommended but you may [choose another one](#types).

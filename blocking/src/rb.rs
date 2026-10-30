@@ -11,7 +11,7 @@ use ringbuf::{
     SharedRb,
     rb::RbRef,
     storage::Storage,
-    traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
+    traits::{Observer, RingBuffer, SplitRef},
 };
 
 #[cfg(not(feature = "std"))]
@@ -63,8 +63,6 @@ impl<S: Storage, X: Semaphore> Observer for BlockingRb<S, X> {
         self.base.write_is_held()
     }
 }
-impl<S: Storage, X: Semaphore> Producer for BlockingRb<S, X> {}
-impl<S: Storage, X: Semaphore> Consumer for BlockingRb<S, X> {}
 impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {}
 
 impl<S: Storage, X: Semaphore> SplitRef for BlockingRb<S, X> {
@@ -140,3 +138,5 @@ unsafe impl<S: Storage, X: Semaphore> Raw for BlockingRb<S, X> {
         old
     }
 }
+
+ringbuf::impl_ring_buffer_methods!(BlockingRb<S, X>, [S: Storage, X: Semaphore]);

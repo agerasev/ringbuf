@@ -136,7 +136,7 @@ fn skip_panicking_drop() {
                         rb.try_push(Boom(id)).ok().unwrap();
                     }
                     match mode {
-                        0 => check(&mut rb, clear, panic_at),
+                        0 => check(&mut rb.as_exclusive(), clear, panic_at),
                         1 => {
                             let (_prod, mut cons) = rb.split_ref();
                             check(&mut cons, clear, panic_at);

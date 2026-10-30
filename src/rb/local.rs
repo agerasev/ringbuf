@@ -1,5 +1,5 @@
 use super::{
-    macros::rb_impl_init,
+    macros::{rb_impl_consumer_traits, rb_impl_init, rb_impl_producer_traits},
     utils::{assert_capacity, ranges},
 };
 use crate::traits::Raw;
@@ -7,11 +7,7 @@ use crate::traits::Raw;
 use crate::traits::Split;
 use crate::{
     storage::Storage,
-    traits::{
-        Observer, RingBuffer, SplitRef,
-        consumer::{Consumer, impl_consumer_traits},
-        producer::{Producer, impl_producer_traits},
-    },
+    traits::{Observer, RingBuffer, SplitRef},
     wrap::{Cons, Prod},
 };
 #[cfg(feature = "alloc")]
@@ -101,10 +97,6 @@ impl<S: Storage + ?Sized> Observer for LocalRb<S> {
     }
 }
 
-impl<S: Storage + ?Sized> Producer for LocalRb<S> {}
-
-impl<S: Storage + ?Sized> Consumer for LocalRb<S> {}
-
 impl<S: Storage + ?Sized> RingBuffer for LocalRb<S> {}
 
 impl<S: Storage + ?Sized> Drop for LocalRb<S> {
@@ -157,8 +149,8 @@ impl<S: Storage + ?Sized> SplitRef for LocalRb<S> {
 
 rb_impl_init!(LocalRb);
 
-impl_producer_traits!(LocalRb<S: Storage>);
-impl_consumer_traits!(LocalRb<S: Storage>);
+rb_impl_producer_traits!(LocalRb<S: Storage>);
+rb_impl_consumer_traits!(LocalRb<S: Storage>);
 
 impl<S: Storage + ?Sized> AsRef<Self> for LocalRb<S> {
     fn as_ref(&self) -> &Self {
@@ -199,3 +191,5 @@ unsafe impl<S: Storage + ?Sized> Raw for LocalRb<S> {
         self.write.held.replace(flag)
     }
 }
+
+crate::impl_ring_buffer_methods!(LocalRb<S>, [S: Storage + ?Sized]);

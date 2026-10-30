@@ -1,5 +1,5 @@
 use super::Rb;
-use crate::{storage::Array, traits::*};
+use crate::storage::Array;
 
 #[test]
 fn push() {

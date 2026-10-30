@@ -53,3 +53,69 @@ macro_rules! rb_impl_init {
 }
 
 pub(crate) use rb_impl_init;
+
+macro_rules! rb_impl_producer_traits {
+    ($type:ident $(< $( $param:tt $( : $first_bound:tt $(+ $next_bound:tt )* )? ),+ >)?) => {
+
+        #[cfg(feature = "std")]
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? std::io::Write for $type $(< $( $param ),+ >)?
+        where
+            Self: $crate::traits::RingBuffer<Item = u8>,
+        {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                let n = self.push_slice(buf);
+                if n == 0 {
+                    Err(std::io::ErrorKind::WouldBlock.into())
+                } else {
+                    Ok(n)
+                }
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+         }
+
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? core::fmt::Write for $type $(< $( $param ),+ >)?
+        where
+            Self: $crate::traits::RingBuffer<Item = u8>,
+        {
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                let n = self.push_slice(s.as_bytes());
+                if n != s.len() {
+                    Err(core::fmt::Error::default())
+                } else {
+                    Ok(())
+                }
+            }
+         }
+    };
+ }
+pub(crate) use rb_impl_producer_traits;
+
+macro_rules! rb_impl_consumer_traits {
+    ($type:ident $(< $( $param:tt $( : $first_bound:tt $(+ $next_bound:tt )* )? ),+ >)?) => {
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? core::iter::IntoIterator for $type $(< $( $param ),+ >)? where Self: Sized {
+            type Item = <Self as $crate::traits::Observer>::Item;
+            type IntoIter = $crate::rb::IntoIter<Self>;
+            fn into_iter(self) -> Self::IntoIter {
+                $crate::rb::IntoIter::new(self)
+            }
+        }
+
+        #[cfg(feature = "std")]
+        impl $(< $( $param $( : $first_bound $(+ $next_bound )* )? ),+ >)? std::io::Read for $type $(< $( $param ),+ >)?
+        where
+            Self: $crate::traits::RingBuffer<Item = u8>,
+        {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                let n = self.pop_slice(buf);
+                if n == 0 {
+                    Err(std::io::ErrorKind::WouldBlock.into())
+                } else {
+                    Ok(n)
+                }
+            }
+        }
+    };
+}
+pub(crate) use rb_impl_consumer_traits;

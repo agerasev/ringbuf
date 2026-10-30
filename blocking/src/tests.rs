@@ -196,3 +196,18 @@ fn write_read() {
 
     assert_eq!(*smsg, rmsg);
 }
+
+#[test]
+fn standalone_and_endpoint_views_preserve_ownership() {
+    let mut rb = BlockingHeapRb::<u8>::new(3);
+    rb.push_slice(&[1, 2]);
+    assert_eq!(rb.first(), Some(&1));
+    {
+        let (mut producer, consumer) = rb.split_ref();
+        let first = consumer.first().unwrap();
+        producer.try_push(3).unwrap();
+        assert_eq!(*first, 1);
+        assert_eq!(consumer.iter().copied().sum::<u8>(), 6);
+    }
+    assert_eq!(rb.clear(), 3);
+}

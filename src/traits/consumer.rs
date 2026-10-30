@@ -292,7 +292,7 @@ impl<C: Consumer> Iterator for IntoIter<C> {
 ///
 /// Each yielded item is removed immediately, making its slot available to the producer.
 /// Only items present when the iterator is created are yielded.
-pub struct PopIter<'a, C: Consumer + ?Sized> {
+pub struct PopIter<'a, C: super::Raw + ?Sized> {
     inner: &'a C,
     iter: Chain<slice::Iter<'a, MaybeUninit<C::Item>>, slice::Iter<'a, MaybeUninit<C::Item>>>,
     read: usize,
@@ -301,9 +301,18 @@ pub struct PopIter<'a, C: Consumer + ?Sized> {
 }
 
 impl<'a, C: Consumer + ?Sized> PopIter<'a, C> {
-    /// Create an iterator.
+    /// Create an iterator while borrowing the consumer exclusively.
     pub fn new(inner: &'a mut C) -> Self {
-        let (left, right) = inner.occupied_slices();
+        unsafe { Self::from_raw(inner) }
+    }
+}
+
+impl<'a, C: super::Raw + ?Sized> PopIter<'a, C> {
+    /// Create an iterator over a buffer or endpoint owned by the caller.
+    /// # Safety
+    /// The exclusive borrow must retain consumer rights for the iterator lifetime.
+    pub(crate) unsafe fn from_raw(inner: &'a mut C) -> Self {
+        let (left, right) = unsafe { inner.unsafe_slices(inner.read_index(), inner.write_index()) };
         Self {
             inner,
             iter: left.iter().chain(right),
@@ -318,7 +327,7 @@ impl<'a, C: Consumer + ?Sized> PopIter<'a, C> {
     pub fn commit(&mut self) {}
 }
 
-impl<C: Consumer + ?Sized> Iterator for PopIter<'_, C> {
+impl<C: super::Raw + ?Sized> Iterator for PopIter<'_, C> {
     type Item = C::Item;
 
     #[inline]
@@ -340,19 +349,19 @@ impl<C: Consumer + ?Sized> Iterator for PopIter<'_, C> {
     }
 }
 
-impl<C: Consumer + ?Sized> ExactSizeIterator for PopIter<'_, C> {}
+impl<C: super::Raw + ?Sized> ExactSizeIterator for PopIter<'_, C> {}
 
 /// Iterator over ring buffer contents.
 ///
 /// *Please do not rely on actual type, it may change in future.*
 #[allow(type_alias_bounds)]
-pub type Iter<'a, C: Consumer> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a, C::Item>>;
+pub type Iter<'a, C: Observer> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a, C::Item>>;
 
 /// Mutable iterator over ring buffer contents.
 ///
 /// *Please do not rely on actual type, it may change in future.*
 #[allow(type_alias_bounds)]
-pub type IterMut<'a, C: Consumer> = Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
+pub type IterMut<'a, C: Observer> = Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
 
 /// Trait used for delegating producer methods.
 pub trait DelegateConsumer: DelegateObserver + super::DelegateRaw

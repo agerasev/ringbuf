@@ -10,7 +10,7 @@ use ringbuf::{
     SharedRb,
     rb::RbRef,
     storage::Storage,
-    traits::{Consumer, Observer, Producer, RingBuffer, SplitRef},
+    traits::{Observer, RingBuffer, SplitRef},
 };
 
 pub trait AsyncRbRef: RbRef<Rb = AsyncRb<Self::Storage>> {
@@ -65,8 +65,6 @@ impl<S: Storage> Observer for AsyncRb<S> {
     }
 }
 
-impl<S: Storage> Producer for AsyncRb<S> {}
-impl<S: Storage> Consumer for AsyncRb<S> {}
 impl<S: Storage> RingBuffer for AsyncRb<S> {}
 
 impl<S: Storage> SplitRef for AsyncRb<S> {
@@ -135,3 +133,5 @@ unsafe impl<S: Storage> Raw for AsyncRb<S> {
         old
     }
 }
+
+ringbuf::impl_ring_buffer_methods!(AsyncRb<S>, [S: Storage]);

@@ -19,12 +19,20 @@ use core::mem::MaybeUninit;
 /// Endpoint caches may conservatively underestimate available space or items,
 /// but must never expose slots owned by the opposite endpoint.
 ///
-/// All overrides of safe producer/consumer methods must preserve their documented
-/// bounds, initialization, and transfer guarantees. In particular, predicates,
-/// lengths, and slices used together by a default method must be consistent.
+/// All overrides of safe producer, consumer, and ring-buffer methods must preserve
+/// their documented bounds, initialization, and transfer guarantees. In particular,
+/// predicates, lengths, and slices used together by a default method must be consistent.
 /// Valid raw slice access and capacity/index accessors must not unwind. Cursor
 /// setters must publish the change before returning or unwinding, including when
 /// a subsequent notification panics.
+///
+/// A type implementing `Consumer` must retain consumer rights for every data
+/// view borrowed from it; a type implementing `Producer` must similarly retain
+/// producer rights. A type implementing `RingBuffer` must grant exclusive access
+/// to all storage through `&mut self`, even if earlier borrowed endpoints were
+/// forgotten. Safe interfaces must not allow a competing role to be acquired
+/// while a view is live. Sharing an endpoint that exposes `&Item` also requires
+/// `Item: Sync`.
 ///
 /// Ownership flags must atomically check and replace their previous state when
 /// shared across threads. Raw access does not itself acquire endpoint rights:
@@ -87,15 +95,17 @@ pub unsafe trait Raw: Observer {
     /// Publish the consumer's new read index.
     ///
     /// # Safety
-    /// The caller must own consumer rights. Advance only over items already moved
-    /// out or destroyed, with no outstanding access to the released slots.
+    /// `value` must be below twice the capacity. The caller must own consumer
+    /// rights. Advance only over items already moved out or destroyed, with no
+    /// outstanding access to the released slots.
     unsafe fn set_read_index(&self, value: usize);
 
     /// Publish the producer's new write index.
     ///
     /// # Safety
-    /// The caller must own producer rights. Advance only over initialized vacant
-    /// slots, with no outstanding mutable access to the published items.
+    /// `value` must be below twice the capacity. The caller must own producer
+    /// rights. Advance only over initialized vacant slots, with no outstanding
+    /// mutable access to the published items.
     unsafe fn set_write_index(&self, value: usize);
 
     /// Advance the read index by `count` slots.
@@ -141,6 +151,9 @@ pub unsafe trait Raw: Observer {
 /// # Safety
 /// Both [`Based`] accessors must always refer to the same live base. Observer and
 /// producer/consumer overrides must preserve its bounds and ownership guarantees.
+/// The wrapper must satisfy the entire [`Raw`] contract for every safe interface
+/// it implements. Forwarding raw operations grants no additional endpoint rights
+/// and does not turn an endpoint into an exclusively owned `RingBuffer`.
 /// Delegation must not duplicate endpoint rights or introduce additional storage
 /// aliases beyond those available through the base interface.
 ///

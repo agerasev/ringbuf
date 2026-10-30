@@ -16,6 +16,7 @@ use crate::{
     },
 };
 use core::{
+    marker::PhantomData,
     mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
     ptr,
@@ -24,6 +25,7 @@ use core::{
 /// Direct wrapper of a ring buffer.
 pub struct Direct<R: RbRef, const P: bool, const C: bool> {
     rb: R,
+    _item: PhantomData<<R::Rb as Observer>::Item>,
 }
 
 /// Observer of a ring buffer.
@@ -35,7 +37,10 @@ pub type Cons<R> = Direct<R, false, true>;
 
 impl<R: RbRef> Clone for Obs<R> {
     fn clone(&self) -> Self {
-        Self { rb: self.rb.clone() }
+        Self {
+            rb: self.rb.clone(),
+            _item: PhantomData,
+        }
     }
 }
 
@@ -50,12 +55,15 @@ impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
         if C {
             assert!(!unsafe { rb.rb().hold_read(true) });
         }
-        Self { rb }
+        Self { rb, _item: PhantomData }
     }
 
     /// Get ring buffer observer.
     pub fn observe(&self) -> Obs<R> {
-        Obs { rb: self.rb.clone() }
+        Obs {
+            rb: self.rb.clone(),
+            _item: PhantomData,
+        }
     }
 
     /// Convert to the deprecated compatibility wrapper. Changes remain immediately visible.
@@ -167,3 +175,14 @@ unsafe impl<R: RbRef, const P: bool, const C: bool> Raw for Direct<R, P, C> {
         unsafe { self.rb().hold_write(flag) }
     }
 }
+
+// SAFETY: observers expose only metadata through safe shared access.
+// Producer/consumer endpoints retain the stricter Item: Sync auto-trait bound.
+unsafe impl<R: RbRef + Sync> Sync for Obs<R> {}
+
+// SAFETY: the handle is Sync, and all shared data views contain Sync items.
+unsafe impl<R: RbRef + Sync> Sync for Prod<R> where <R::Rb as Observer>::Item: Sync {}
+// SAFETY: the handle is Sync, and all shared data views contain Sync items.
+unsafe impl<R: RbRef + Sync> Sync for Cons<R> where <R::Rb as Observer>::Item: Sync {}
+// SAFETY: both roles use the same Sync handle and Sync items.
+unsafe impl<R: RbRef + Sync> Sync for Direct<R, true, true> where <R::Rb as Observer>::Item: Sync {}
