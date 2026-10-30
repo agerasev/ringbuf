@@ -33,8 +33,23 @@ impl<R: BlockingRbRef> BlockingCons<R> {
         self.timeout
     }
 
+    /// Wait for at least `count` occupied slots.
+    ///
+    /// A zero count succeeds immediately. Requests above capacity return
+    /// [`WaitError::TooLarge`]. A closed producer returns [`WaitError::Closed`]
+    /// unless enough items remain. Expiration of the configured timeout
+    /// returns [`WaitError::TimedOut`].
     pub fn wait_occupied(&mut self, count: usize) -> Result<(), WaitError> {
-        debug_assert!(count <= self.rb().capacity().get());
+        let capacity = self.rb().capacity().get();
+        if count > capacity {
+            return Err(WaitError::TooLarge {
+                requested: count,
+                capacity,
+            });
+        }
+        if count == 0 {
+            return Ok(());
+        }
         for _ in wait_iter!(self) {
             // Observe closure before checking the data so a final write
             // followed by close cannot be mistaken for an empty buffer.

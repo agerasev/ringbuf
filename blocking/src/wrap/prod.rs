@@ -33,14 +33,29 @@ impl<R: BlockingRbRef> BlockingProd<R> {
         self.timeout
     }
 
+    /// Wait for at least `count` vacant slots.
+    ///
+    /// A zero count succeeds immediately. Requests above capacity return
+    /// [`WaitError::TooLarge`]. For nonzero counts, a closed consumer returns
+    /// [`WaitError::Closed`] even if space is available. Expiration of the
+    /// configured timeout returns [`WaitError::TimedOut`].
     pub fn wait_vacant(&mut self, count: usize) -> Result<(), WaitError> {
-        debug_assert!(count <= self.rb().capacity().get());
+        let capacity = self.rb().capacity().get();
+        if count > capacity {
+            return Err(WaitError::TooLarge {
+                requested: count,
+                capacity,
+            });
+        }
+        if count == 0 {
+            return Ok(());
+        }
         for _ in wait_iter!(self) {
-            if self.base.vacant_len() >= count {
-                return Ok(());
-            }
             if self.is_closed() {
                 return Err(WaitError::Closed);
+            }
+            if self.base.vacant_len() >= count {
+                return Ok(());
             }
         }
         Err(WaitError::TimedOut)

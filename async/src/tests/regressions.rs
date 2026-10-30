@@ -1,4 +1,4 @@
-use crate::{AsyncHeapRb, async_transfer, traits::*};
+use crate::{AsyncHeapRb, WaitError, async_transfer, traits::*};
 use core::{
     future::Future,
     pin::Pin,
@@ -41,8 +41,65 @@ fn wait_vacant_terminates_on_space_or_close() {
         } else {
             assert_eq!(cons.try_pop(), Some(7));
         }
-        assert_eq!(poll(&mut wait), Poll::Ready(()));
+        assert_eq!(poll(&mut wait), Poll::Ready(if close { Err(WaitError::Closed) } else { Ok(()) }));
         assert!(wait.is_terminated());
+    }
+}
+
+#[test]
+fn wait_results_distinguish_thresholds_and_closure() {
+    for closed in [false, true] {
+        let (mut prod, mut cons) = AsyncHeapRb::<u8>::new(2).split();
+        prod.try_push(7).unwrap();
+        if closed {
+            cons.close();
+        }
+        for count in [0, 1, 2, 3] {
+            let too_large = Err(WaitError::TooLarge {
+                requested: count,
+                capacity: 2,
+            });
+            let mut vacant = prod.wait_vacant(count);
+            let expected = if count > 2 {
+                Poll::Ready(too_large)
+            } else if count == 0 {
+                Poll::Ready(Ok(()))
+            } else if closed {
+                Poll::Ready(Err(WaitError::Closed))
+            } else if count == 1 {
+                Poll::Ready(Ok(()))
+            } else {
+                Poll::Pending
+            };
+            assert_eq!(poll(&mut vacant), expected);
+            assert_eq!(vacant.is_terminated(), expected.is_ready());
+        }
+
+        let (mut prod, mut cons) = AsyncHeapRb::<u8>::new(2).split();
+        prod.try_push(7).unwrap();
+        if closed {
+            prod.close();
+        }
+        for count in [0, 1, 2, 3] {
+            let too_large = Err(WaitError::TooLarge {
+                requested: count,
+                capacity: 2,
+            });
+            let mut occupied = cons.wait_occupied(count);
+            let expected = if count > 2 {
+                Poll::Ready(too_large)
+            } else if count <= 1 {
+                Poll::Ready(Ok(()))
+            } else if closed {
+                Poll::Ready(Err(WaitError::Closed))
+            } else {
+                Poll::Pending
+            };
+            assert_eq!(poll(&mut occupied), expected);
+            assert_eq!(occupied.is_terminated(), expected.is_ready());
+        }
+        assert_eq!(cons.try_pop(), Some(7));
+        assert_eq!(cons.try_pop(), None);
     }
 }
 

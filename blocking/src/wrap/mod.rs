@@ -58,10 +58,15 @@ impl<R: BlockingRbRef, const P: bool, const C: bool> AsMut<Self> for BlockingWra
     }
 }
 
+/// A blocking operation could not complete.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum WaitError {
+    /// The configured timeout expired.
     TimedOut,
+    /// The opposite endpoint is closed.
     Closed,
+    /// The requested threshold exceeds the buffer's capacity.
+    TooLarge { requested: usize, capacity: usize },
 }
 
 pub use cons::*;
@@ -72,3 +77,14 @@ unsafe impl<R: BlockingRbRef, const P: bool, const C: bool> ringbuf::traits::Del
     Self: ringbuf::traits::Observer
 {
 }
+
+impl core::fmt::Display for WaitError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::TimedOut => f.write_str("wait timed out"),
+            Self::Closed => f.write_str("opposite endpoint is closed"),
+            Self::TooLarge { requested, capacity } => write!(f, "requested {requested} slots exceeds capacity {capacity}"),
+        }
+    }
+}
+impl core::error::Error for WaitError {}

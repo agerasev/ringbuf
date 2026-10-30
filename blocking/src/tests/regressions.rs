@@ -91,6 +91,37 @@ fn closed_producer_is_drained_before_reporting_closed() {
 }
 
 #[test]
+fn wait_results_distinguish_thresholds_timeout_and_closure() {
+    let (mut prod, mut cons) = BlockingHeapRb::<u8>::new(2).split();
+    prod.set_timeout(NO_WAIT);
+    cons.set_timeout(NO_WAIT);
+    prod.try_push(7).unwrap();
+    let too_large = Err(WaitError::TooLarge { requested: 3, capacity: 2 });
+    assert_eq!(prod.wait_vacant(3), too_large);
+    assert_eq!(cons.wait_occupied(3), too_large);
+    assert_eq!(prod.wait_vacant(0), Ok(()));
+    assert_eq!(cons.wait_occupied(0), Ok(()));
+    assert_eq!(prod.wait_vacant(1), Ok(()));
+    assert_eq!(cons.wait_occupied(1), Ok(()));
+    assert_eq!(prod.wait_vacant(2), Err(WaitError::TimedOut));
+    assert_eq!(cons.wait_occupied(2), Err(WaitError::TimedOut));
+
+    drop(prod);
+    assert_eq!(cons.wait_occupied(3), too_large);
+    assert_eq!(cons.wait_occupied(0), Ok(()));
+    assert_eq!(cons.wait_occupied(1), Ok(()));
+    assert_eq!(cons.wait_occupied(2), Err(WaitError::Closed));
+    assert_eq!(cons.try_pop(), Some(7));
+
+    let (mut prod, cons) = BlockingHeapRb::<u8>::new(2).split();
+    prod.set_timeout(NO_WAIT);
+    drop(cons);
+    assert_eq!(prod.wait_vacant(3), too_large);
+    assert_eq!(prod.wait_vacant(0), Ok(()));
+    assert_eq!(prod.wait_vacant(1), Err(WaitError::Closed));
+}
+
+#[test]
 fn empty_io_completes_without_waiting() {
     for full in [false, true] {
         let (mut prod, mut cons) = BlockingHeapRb::<u8>::new(1).split();

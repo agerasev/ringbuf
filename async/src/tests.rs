@@ -193,11 +193,11 @@ fn wait() {
             assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 0);
             prod.push(1).await.unwrap();
 
-            prod.wait_vacant(2).await;
+            prod.wait_vacant(2).await.unwrap();
             assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 2);
         },
         async {
-            cons.wait_occupied(2).await;
+            cons.wait_occupied(2).await.unwrap();
             assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 1);
 
             cons.pop().await.unwrap();
@@ -219,7 +219,7 @@ fn drop_close_prod() {
     });
     let t1 = std::thread::spawn(move || {
         execute!(async {
-            cons.wait_occupied(1).await;
+            assert_eq!(cons.wait_occupied(1).await, Err(crate::WaitError::Closed));
             assert_eq!(stage_clone.fetch_add(1, Ordering::SeqCst), 1);
             assert!(cons.is_closed());
         });
@@ -239,14 +239,14 @@ fn drop_close_cons() {
             assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 0);
             prod.push(0).await.unwrap();
 
-            prod.wait_vacant(1).await;
+            assert_eq!(prod.wait_vacant(1).await, Err(crate::WaitError::Closed));
             assert_eq!(stage.fetch_add(1, Ordering::SeqCst), 2);
             assert!(prod.is_closed());
         });
     });
     let t1 = std::thread::spawn(move || {
         execute!(async {
-            cons.wait_occupied(1).await;
+            cons.wait_occupied(1).await.unwrap();
             assert_eq!(stage_clone.fetch_add(1, Ordering::SeqCst), 1);
             drop(cons);
         });

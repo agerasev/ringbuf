@@ -8,12 +8,14 @@ extern crate alloc;
 extern crate std;
 
 mod alias;
+mod error;
 pub mod rb;
 pub mod traits;
 mod transfer;
 pub mod wrap;
 
 pub use alias::*;
+pub use error::WaitError;
 pub use rb::AsyncRb;
 pub use traits::{consumer, producer};
 pub use transfer::async_transfer;

@@ -1,3 +1,4 @@
+use crate::WaitError;
 use core::{
     future::Future,
     iter::Peekable,
@@ -54,7 +55,9 @@ pub trait AsyncProducer: Producer {
 
     /// Wait for the buffer to have at least `count` free places for items or to close.
     ///
-    /// In debug mode panics if `count` is greater than buffer capacity.
+    /// Returns `Err(WaitError::TooLarge)` if `count` exceeds capacity.
+    /// A zero count succeeds immediately, including when the peer is closed.
+    /// Otherwise closure returns `Err(WaitError::Closed)`.
     ///
     /// The method takes `&mut self` because only single [`WaitVacantFuture`] is allowed at a time.
     ///
@@ -62,7 +65,6 @@ pub trait AsyncProducer: Producer {
     ///
     /// You can safely cancel this future.
     fn wait_vacant(&mut self, count: usize) -> WaitVacantFuture<'_, Self> {
-        debug_assert!(count <= self.capacity().get());
         WaitVacantFuture {
             owner: self,
             count,
@@ -297,17 +299,34 @@ impl<A: AsyncProducer> FusedFuture for WaitVacantFuture<'_, A> {
     }
 }
 impl<A: AsyncProducer> Future for WaitVacantFuture<'_, A> {
-    type Output = ();
+    type Output = Result<(), WaitError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut waker_registered = false;
         loop {
             assert!(!self.done);
-            let closed = self.owner.is_closed();
-            if self.count <= self.owner.vacant_len() || closed {
+            let capacity = self.owner.capacity().get();
+            if self.count > capacity {
                 self.done = true;
-                break Poll::Ready(());
+                break Poll::Ready(Err(WaitError::TooLarge {
+                    requested: self.count,
+                    capacity,
+                }));
             }
+            if self.count == 0 {
+                self.done = true;
+                break Poll::Ready(Ok(()));
+            }
+            let closed = self.owner.is_closed();
+            if closed {
+                self.done = true;
+                break Poll::Ready(Err(WaitError::Closed));
+            }
+            if self.count <= self.owner.vacant_len() {
+                self.done = true;
+                break Poll::Ready(Ok(()));
+            }
+
             if waker_registered {
                 break Poll::Pending;
             }
