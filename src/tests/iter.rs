@@ -79,7 +79,6 @@ fn push_pop_iter_partial() {
 }
 
 #[test]
-#[allow(deprecated)]
 fn pop_iter_publishes_each_item_and_keeps_its_snapshot() {
     let mut rb = Rb::<Array<i32, 3>>::default();
     let (mut prod, mut cons) = rb.split_ref();
@@ -90,8 +89,6 @@ fn pop_iter_publishes_each_item_and_keeps_its_snapshot() {
         assert_eq!(iter.next(), Some(0));
         // Reuse the freed slot while the iterator is still alive.
         prod.try_push(3).unwrap();
-        iter.commit();
-        iter.commit();
         assert_eq!(iter.len(), 2);
         assert_eq!(iter.size_hint(), (2, Some(2)));
         assert_eq!(iter.next(), Some(1));
@@ -106,7 +103,6 @@ fn pop_iter_publishes_each_item_and_keeps_its_snapshot() {
 }
 
 #[test]
-#[allow(deprecated)]
 fn forgotten_pop_iter_drops_each_item_once() {
     use core::{cell::Cell, mem};
 
@@ -130,7 +126,7 @@ fn forgotten_pop_iter_drops_each_item_once() {
                 for counter in &drops {
                     rb.try_push(Item(counter)).ok().unwrap();
                 }
-                // Check the owner, a cached endpoint, and the deprecated wrapper.
+                // Check the owner, a cached endpoint, and a direct endpoint.
                 macro_rules! consume {
                     ($cons:expr) => {{
                         let mut iter = $cons.pop_iter();
@@ -151,8 +147,7 @@ fn forgotten_pop_iter_drops_each_item_once() {
                         consume!(cons);
                     }
                     _ => {
-                        let (_prod, cons) = rb.split_ref();
-                        let mut cons = cons.freeze();
+                        let mut cons = crate::Cons::new(&rb);
                         consume!(cons);
                         mem::forget(cons);
                     }

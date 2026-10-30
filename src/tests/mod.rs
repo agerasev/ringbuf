@@ -5,11 +5,11 @@ use crate::SharedRb as Rb;
 
 mod access;
 mod basic;
+mod caching;
 mod capacity;
 #[cfg(feature = "alloc")]
 mod drop;
 mod fmt_write;
-mod frozen;
 mod hold;
 mod init;
 mod iter;

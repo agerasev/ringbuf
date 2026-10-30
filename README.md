@@ -88,19 +88,8 @@ Items that need destruction are dropped individually, with each slot kept occupi
 
 For single-threaded usage `LocalRb` is recommended because it is slightly faster than `SharedRb` due to absence of CPU cache synchronization.
 
-## Migrating from deferred publication
-
-Deferred publication in frozen endpoints and `PopIter` could lead to double drops if they were forgotten with `core::mem::forget`.
-Publication no longer depends on running their destructors.
-
-`Frozen`, `FrozenProd`, `FrozenCons`, and `freeze()` are deprecated compatibility APIs. Their removal is reserved for a future breaking release.
-Existing calls remain available, but code relying on delayed visibility or rollback must be updated:
-
-+ Use `CachingProd` and `CachingCons` directly and remove calls to `freeze`, `commit`, `fetch`, and `sync`.
-  Operations publish their changes immediately and fetch the opposite endpoint's progress as needed.
-+ `FrozenProd::discard` is now a no-op. Stage items outside the ring buffer if they may need to be discarded, and insert them only when ready to publish.
-+ `PopIter` releases each slot as soon as it yields the item. Its `commit` method is deprecated and does nothing.
-  It still yields only the items present when it was created. Use `pop_slice` to batch removals.
+`PopIter` yields only the items present when it is created and releases each slot as it yields the item.
+Use `pop_slice` to batch removals.
 
 ## Examples
 

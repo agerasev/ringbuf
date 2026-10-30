@@ -4,9 +4,7 @@
 
 use crate::traits::Raw;
 
-#[allow(deprecated)]
-use super::frozen::Frozen;
-use super::{caching::Caching, traits::Wrap};
+use super::traits::Wrap;
 use crate::{
     rb::RbRef,
     traits::{
@@ -64,13 +62,6 @@ impl<R: RbRef, const P: bool, const C: bool> Direct<R, P, C> {
             rb: self.rb.clone(),
             _item: PhantomData,
         }
-    }
-
-    /// Convert to the deprecated compatibility wrapper. Changes remain immediately visible.
-    #[deprecated(note = "use the endpoint directly; freezing no longer delays publication")]
-    #[allow(deprecated)]
-    pub fn freeze(self) -> Frozen<R, P, C> {
-        Frozen::from_caching(Caching::from_direct(self))
     }
 
     /// # Safety

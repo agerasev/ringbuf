@@ -75,7 +75,6 @@ fn skip_drop() {
 /// remain initialized and the buffer can still be used after unwinding.
 #[cfg(feature = "std")]
 #[test]
-#[allow(deprecated)]
 fn skip_panicking_drop() {
     use core::cell::Cell;
     use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -124,7 +123,7 @@ fn skip_panicking_drop() {
     for clear in [false, true] {
         for offset in [0, CAP - 1] {
             for panic_at in 0..if clear { CAP } else { CAP - 1 } {
-                // Exercise the owner, a split consumer, and a frozen consumer.
+                // Exercise the owner, a split consumer, and a direct consumer.
                 for mode in 0..3 {
                     let mut rb = Rb::<Array<Boom, CAP>>::default();
                     for _ in 0..offset {
@@ -142,8 +141,7 @@ fn skip_panicking_drop() {
                             check(&mut cons, clear, panic_at);
                         }
                         _ => {
-                            let (_prod, cons) = rb.split_ref();
-                            check(&mut cons.freeze(), clear, panic_at);
+                            check(&mut crate::Cons::new(&rb), clear, panic_at);
                         }
                     }
                     rb.try_push(Boom(CAP)).ok().unwrap();

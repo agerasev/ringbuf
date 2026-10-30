@@ -321,10 +321,6 @@ impl<'a, C: super::Raw + ?Sized> PopIter<'a, C> {
             remaining: left.len() + right.len(),
         }
     }
-
-    /// Does nothing: each yielded item has already been removed from the ring buffer.
-    #[deprecated(note = "each yielded item is removed immediately; remove this call")]
-    pub fn commit(&mut self) {}
 }
 
 impl<C: super::Raw + ?Sized> Iterator for PopIter<'_, C> {

@@ -5,8 +5,6 @@
 
 use crate::traits::Raw;
 
-#[allow(deprecated)]
-use super::frozen::Frozen;
 use super::{
     direct::{Direct, Obs},
     traits::Wrap,
@@ -52,13 +50,6 @@ impl<R: RbRef, const P: bool, const C: bool> Caching<R, P, C> {
     /// Get ring buffer observer.
     pub fn observe(&self) -> Obs<R> {
         self.base.observe()
-    }
-
-    /// Convert to the deprecated compatibility wrapper. Changes remain immediately visible.
-    #[deprecated(note = "use the caching endpoint directly; freezing no longer delays publication")]
-    #[allow(deprecated)]
-    pub fn freeze(self) -> Frozen<R, P, C> {
-        Frozen::from_caching(self)
     }
 
     pub(crate) fn fetch(&self) {
