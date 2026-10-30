@@ -1,9 +1,9 @@
 #[cfg(feature = "std")]
 use crate::sync::StdSemaphore;
 use crate::{rb::BlockingRb, sync::Semaphore};
-use ringbuf::{storage::Array, SharedRb};
 #[cfg(feature = "alloc")]
-use ringbuf::{storage::Heap, HeapRb};
+use ringbuf::{HeapRb, storage::Heap};
+use ringbuf::{SharedRb, storage::Array};
 
 #[cfg(all(feature = "alloc", not(feature = "portable-atomic")))]
 pub use alloc::sync::Arc;
@@ -19,6 +19,10 @@ pub type BlockingHeapRb<T, X> = BlockingRb<Heap<T>, X>;
 impl<T, X: Semaphore> BlockingHeapRb<T, X> {
     pub fn new(cap: usize) -> Self {
         Self::from(HeapRb::new(cap))
+    }
+    /// Create a buffer, returning invalid-capacity or allocation errors.
+    pub fn try_new(capacity: usize) -> Result<Self, ringbuf::CreateError> {
+        HeapRb::try_new(capacity).map(Self::from)
     }
 }
 

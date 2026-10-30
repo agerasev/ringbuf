@@ -104,3 +104,9 @@ fn empty_io_completes_without_waiting() {
         assert_eq!(cons.try_pop(), if full { Some(7) } else { None });
     }
 }
+
+#[test]
+fn fallible_heap_construction_reports_capacity_errors() {
+    assert!(matches!(BlockingHeapRb::<u8>::try_new(0), Err(ringbuf::CreateError::Capacity(_))));
+    assert_eq!(BlockingHeapRb::<u8>::try_new(3).unwrap().capacity().get(), 3);
+}

@@ -193,3 +193,9 @@ fn transfer_wakes_for_both_queues_and_preserves_items_on_close() {
         assert_eq!(src.try_pop(), if close { Some(7) } else { None });
     }
 }
+
+#[test]
+fn fallible_heap_construction_reports_capacity_errors() {
+    assert!(matches!(AsyncHeapRb::<u8>::try_new(0), Err(ringbuf::CreateError::Capacity(_))));
+    assert_eq!(AsyncHeapRb::<u8>::try_new(3).unwrap().capacity().get(), 3);
+}

@@ -22,15 +22,11 @@ macro_rules! rb_impl_init {
                 $crate::rb::utils::assert_capacity(capacity);
                 unsafe { Self::from_raw_parts(crate::storage::Heap::<T>::new(capacity), usize::default(), usize::default()) }
             }
-            /// Creates a new instance of a ring buffer returning an error if allocation failed.
-            ///
-            /// *Panics if `capacity` is zero or exceeds `usize::MAX / 2`.*
-            pub fn try_new(capacity: usize) -> Result<Self, alloc::collections::TryReserveError> {
-                $crate::rb::utils::assert_capacity(capacity);
-                let mut vec = alloc::vec::Vec::<core::mem::MaybeUninit<T>>::new();
-                vec.try_reserve_exact(capacity)?;
-                unsafe { vec.set_len(capacity) };
-                Ok(unsafe { Self::from_raw_parts(vec.into_boxed_slice().into(), usize::default(), usize::default()) })
+            /// Create a buffer, returning invalid-capacity or allocation errors.
+            pub fn try_new(capacity: usize) -> Result<Self, $crate::CreateError> {
+                $crate::CapacityError::check(capacity).map_err($crate::CreateError::Capacity)?;
+                let storage = $crate::storage::Heap::<T>::try_new(capacity).map_err($crate::CreateError::Allocation)?;
+                Ok(unsafe { Self::from_raw_parts(storage, 0, 0) })
             }
         }
 

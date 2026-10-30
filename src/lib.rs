@@ -162,6 +162,7 @@ extern crate std;
 
 /// Shortcuts for frequently used types.
 mod alias;
+pub mod error;
 /// Ring buffer implementations.
 pub mod rb;
 /// Storage types.
@@ -179,6 +180,9 @@ pub mod wrap;
 mod tests;
 
 pub use alias::*;
+pub use error::CapacityError;
+#[cfg(feature = "alloc")]
+pub use error::CreateError;
 pub use rb::{LocalRb, SharedRb};
 pub use traits::{consumer, producer};
 pub use transfer::transfer;

@@ -132,9 +132,20 @@ fn excessive_heap_capacity() {
 
 #[cfg(feature = "alloc")]
 #[test]
-#[should_panic(expected = "capacity exceeds usize::MAX / 2")]
-fn excessive_heap_capacity_try_new() {
-    let _rb = ManuallyDrop::new(Rb::<Heap<()>>::try_new(usize::MAX).unwrap());
+fn fallible_heap_construction_reports_capacity_and_allocation_errors() {
+    for capacity in [0, MAX_CAPACITY + 1, usize::MAX] {
+        assert!(matches!(Rb::<Heap<()>>::try_new(capacity),
+            Err(crate::CreateError::Capacity(error)) if error.capacity == capacity));
+    }
+    // A valid slot count whose byte size cannot fit in an allocation.
+    assert!(matches!(
+        Rb::<Heap<u16>>::try_new(MAX_CAPACITY),
+        Err(crate::CreateError::Allocation(_))
+    ));
+    let mut rb = Rb::<Heap<u8>>::try_new(3).unwrap();
+    assert_eq!(rb.capacity().get(), 3);
+    assert_eq!(rb.push_slice(&[1, 2, 3, 4]), 3);
+    assert!(rb.pop_iter().eq([1, 2, 3]));
 }
 
 #[cfg(feature = "alloc")]
