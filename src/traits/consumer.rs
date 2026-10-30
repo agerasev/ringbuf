@@ -1,6 +1,6 @@
 use super::{
     observer::{DelegateObserver, Observer},
-    utils::{add_mod, modulus},
+    utils::modulus,
 };
 use crate::utils::{move_uninit_slice, slice_as_uninit_mut, slice_assume_init_mut, slice_assume_init_ref};
 use core::{
@@ -12,27 +12,7 @@ use core::{
 use std::io::{self, Write};
 
 /// Consumer part of ring buffer.
-pub trait Consumer: Observer {
-    /// Set read index.
-    ///
-    /// # Safety
-    ///
-    /// Index must go only forward, never backward. It is recommended to use [`Self::advance_read_index`] instead.
-    ///
-    /// All slots with index less than `value` must be uninitialized until write index, all slots with index equal or greater - must be initialized.
-    unsafe fn set_read_index(&self, value: usize);
-
-    /// Moves `read` pointer by `count` places forward.
-    ///
-    /// # Safety
-    ///
-    /// First `count` items in occupied memory must be moved out or dropped.
-    ///
-    /// Must not be called concurrently.
-    unsafe fn advance_read_index(&self, count: usize) {
-        unsafe { self.set_read_index(add_mod(self.read_index(), count, modulus(self))) };
-    }
-
+pub trait Consumer: Observer + super::Raw {
     /// Provides a direct access to the ring buffer occupied memory.
     /// The difference from [`Self::as_slices`] is that this method provides slices of [`MaybeUninit`], so items may be moved out of slices.
     ///
@@ -44,21 +24,10 @@ pub trait Consumer: Observer {
     /// All items are initialized. Elements must be removed starting from the beginning of first slice.
     /// When all items are removed from the first slice then items must be removed from the beginning of the second slice.
     ///
-    /// *This method must be followed by [`Self::advance_read_index`] call with the number of items being removed previously as argument.*
+    /// *This method must be followed by [`super::Raw::advance_read_index`] call with the number of items being removed previously as argument.*
     /// *No other mutating calls allowed before that.*
     fn occupied_slices(&self) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
         unsafe { self.unsafe_slices(self.read_index(), self.write_index()) }
-    }
-
-    /// Provides a direct mutable access to the ring buffer occupied memory.
-    ///
-    /// Same as [`Self::occupied_slices`].
-    ///
-    /// # Safety
-    ///
-    /// When some item is replaced with uninitialized value then it must not be read anymore.
-    unsafe fn occupied_slices_mut(&mut self) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        unsafe { self.unsafe_slices_mut(self.read_index(), self.write_index()) }
     }
 
     /// Returns a pair of slices which contain, in order, the contents of the ring buffer.
@@ -386,7 +355,7 @@ pub type Iter<'a, C: Consumer> = Chain<slice::Iter<'a, C::Item>, slice::Iter<'a,
 pub type IterMut<'a, C: Consumer> = Chain<slice::IterMut<'a, C::Item>, slice::IterMut<'a, C::Item>>;
 
 /// Trait used for delegating producer methods.
-pub trait DelegateConsumer: DelegateObserver
+pub trait DelegateConsumer: DelegateObserver + super::DelegateRaw
 where
     Self::Base: Consumer,
 {
@@ -396,22 +365,8 @@ where
     D::Base: Consumer,
 {
     #[inline]
-    unsafe fn set_read_index(&self, value: usize) {
-        unsafe { self.base().set_read_index(value) }
-    }
-    #[inline]
-    unsafe fn advance_read_index(&self, count: usize) {
-        unsafe { self.base().advance_read_index(count) }
-    }
-
-    #[inline]
     fn occupied_slices(&self) -> (&[core::mem::MaybeUninit<Self::Item>], &[core::mem::MaybeUninit<Self::Item>]) {
         self.base().occupied_slices()
-    }
-
-    #[inline]
-    unsafe fn occupied_slices_mut(&mut self) -> (&mut [core::mem::MaybeUninit<Self::Item>], &mut [core::mem::MaybeUninit<Self::Item>]) {
-        unsafe { self.base_mut().occupied_slices_mut() }
     }
 
     #[inline]

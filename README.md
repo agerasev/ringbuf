@@ -33,6 +33,15 @@ Lock-free SPSC FIFO ring buffer with direct access to inner data.
 + Async and blocking versions (see [this section](#derived-crates)).
 + Can optionally use the [`portable-atomic`](https://crates.io/crates/portable-atomic) crate to allow usage on smaller systems without CAS operations.
 
+# Implementing custom endpoints
+
+Custom `Producer` and `Consumer` implementations now require `unsafe impl Raw`.
+The `Raw` trait contains storage access, cursor updates, and ownership bookkeeping;
+its safety contract also covers the consistency of safe method overrides.
+`Observer` remains a safe, metadata-only interface. Delegating wrappers must opt
+in with `unsafe impl DelegateRaw` in addition to their `Delegate*` traits.
+Callers of raw operations may need to import `ringbuf::traits::Raw`.
+
 # Usage
 
 At first you need to create the ring buffer itself. `HeapRb` is recommended but you may [choose another one](#types).

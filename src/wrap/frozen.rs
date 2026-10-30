@@ -129,3 +129,6 @@ impl<R: RbRef> DelegateConsumer for FrozenCons<R> {}
 
 impl_producer_traits!(FrozenProd<R: RbRef>);
 impl_consumer_traits!(FrozenCons<R: RbRef>);
+
+// SAFETY: both base accessors return the same uniquely owned endpoint.
+unsafe impl<R: RbRef, const P: bool, const C: bool> crate::traits::DelegateRaw for Frozen<R, P, C> {}

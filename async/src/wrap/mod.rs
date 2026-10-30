@@ -3,9 +3,9 @@ mod prod;
 
 use crate::rb::AsyncRbRef;
 use ringbuf::{
-    traits::{observer::DelegateObserver, Based},
-    wrap::{direct::Direct, Wrap},
     Obs,
+    traits::{Based, observer::DelegateObserver},
+    wrap::{Wrap, direct::Direct},
 };
 
 pub struct AsyncWrap<R: AsyncRbRef, const P: bool, const C: bool> {
@@ -61,3 +61,6 @@ impl<R: AsyncRbRef, const P: bool, const C: bool> AsMut<Self> for AsyncWrap<R, P
         self
     }
 }
+
+// SAFETY: both base accessors return the same uniquely owned endpoint.
+unsafe impl<R: AsyncRbRef, const P: bool, const C: bool> ringbuf::traits::DelegateRaw for AsyncWrap<R, P, C> {}

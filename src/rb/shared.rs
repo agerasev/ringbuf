@@ -2,6 +2,7 @@ use super::{
     macros::rb_impl_init,
     utils::{assert_capacity, ranges},
 };
+use crate::traits::Raw;
 #[cfg(feature = "alloc")]
 use crate::traits::Split;
 use crate::{
@@ -106,15 +107,6 @@ impl<S: Storage + ?Sized> Observer for SharedRb<S> {
         self.write_index.load(Ordering::Acquire)
     }
 
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
-        let (first, second) = ranges(self.capacity(), start, end);
-        unsafe { (self.storage.slice(first), self.storage.slice(second)) }
-    }
-    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        let (first, second) = ranges(self.capacity(), start, end);
-        unsafe { (self.storage.slice_mut(first), self.storage.slice_mut(second)) }
-    }
-
     #[inline]
     fn read_is_held(&self) -> bool {
         self.read_held.load(Ordering::Acquire)
@@ -125,30 +117,11 @@ impl<S: Storage + ?Sized> Observer for SharedRb<S> {
     }
 }
 
-impl<S: Storage + ?Sized> Producer for SharedRb<S> {
-    #[inline]
-    unsafe fn set_write_index(&self, value: usize) {
-        self.write_index.store(value, Ordering::Release);
-    }
-}
+impl<S: Storage + ?Sized> Producer for SharedRb<S> {}
 
-impl<S: Storage + ?Sized> Consumer for SharedRb<S> {
-    #[inline]
-    unsafe fn set_read_index(&self, value: usize) {
-        self.read_index.store(value, Ordering::Release);
-    }
-}
+impl<S: Storage + ?Sized> Consumer for SharedRb<S> {}
 
-impl<S: Storage + ?Sized> RingBuffer for SharedRb<S> {
-    #[inline]
-    unsafe fn hold_read(&self, flag: bool) -> bool {
-        self.read_held.swap(flag, Ordering::AcqRel)
-    }
-    #[inline]
-    unsafe fn hold_write(&self, flag: bool) -> bool {
-        self.write_held.swap(flag, Ordering::AcqRel)
-    }
-}
+impl<S: Storage + ?Sized> RingBuffer for SharedRb<S> {}
 
 impl<S: Storage + ?Sized> Drop for SharedRb<S> {
     fn drop(&mut self) {
@@ -211,5 +184,34 @@ impl<S: Storage + ?Sized> AsRef<Self> for SharedRb<S> {
 impl<S: Storage + ?Sized> AsMut<Self> for SharedRb<S> {
     fn as_mut(&mut self) -> &mut Self {
         self
+    }
+}
+
+// SAFETY: storage and cursor operations preserve the backing buffer
+// invariants; callers remain responsible for owning the accessed endpoint.
+unsafe impl<S: Storage + ?Sized> Raw for SharedRb<S> {
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
+        let (first, second) = ranges(self.capacity(), start, end);
+        unsafe { (self.storage.slice(first), self.storage.slice(second)) }
+    }
+    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
+        let (first, second) = ranges(self.capacity(), start, end);
+        unsafe { (self.storage.slice_mut(first), self.storage.slice_mut(second)) }
+    }
+    #[inline]
+    unsafe fn set_read_index(&self, value: usize) {
+        self.read_index.store(value, Ordering::Release);
+    }
+    #[inline]
+    unsafe fn set_write_index(&self, value: usize) {
+        self.write_index.store(value, Ordering::Release);
+    }
+    #[inline]
+    unsafe fn hold_read(&self, flag: bool) -> bool {
+        self.read_held.swap(flag, Ordering::AcqRel)
+    }
+    #[inline]
+    unsafe fn hold_write(&self, flag: bool) -> bool {
+        self.write_held.swap(flag, Ordering::AcqRel)
     }
 }

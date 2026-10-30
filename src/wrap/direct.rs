@@ -2,13 +2,15 @@
 //!
 //! All changes are synchronized with the ring buffer immediately.
 
+use crate::traits::Raw;
+
 #[allow(deprecated)]
 use super::frozen::Frozen;
 use super::{caching::Caching, traits::Wrap};
 use crate::{
     rb::RbRef,
     traits::{
-        Observer, RingBuffer,
+        Observer,
         consumer::{Consumer, impl_consumer_traits},
         producer::{Producer, impl_producer_traits},
     },
@@ -117,14 +119,6 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Direct<R, P, C> {
         self.rb().write_index()
     }
     #[inline]
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        unsafe { self.rb().unsafe_slices(start, end) }
-    }
-    #[inline]
-    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        unsafe { self.rb().unsafe_slices_mut(start, end) }
-    }
-    #[inline]
     fn read_is_held(&self) -> bool {
         self.rb().read_is_held()
     }
@@ -134,19 +128,9 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Direct<R, P, C> {
     }
 }
 
-impl<R: RbRef> Producer for Prod<R> {
-    #[inline]
-    unsafe fn set_write_index(&self, value: usize) {
-        unsafe { self.rb().set_write_index(value) }
-    }
-}
+impl<R: RbRef> Producer for Prod<R> {}
 
-impl<R: RbRef> Consumer for Cons<R> {
-    #[inline]
-    unsafe fn set_read_index(&self, value: usize) {
-        unsafe { self.rb().set_read_index(value) }
-    }
-}
+impl<R: RbRef> Consumer for Cons<R> {}
 
 impl<R: RbRef, const P: bool, const C: bool> Drop for Direct<R, P, C> {
     fn drop(&mut self) {
@@ -156,3 +140,30 @@ impl<R: RbRef, const P: bool, const C: bool> Drop for Direct<R, P, C> {
 
 impl_producer_traits!(Prod<R: RbRef>);
 impl_consumer_traits!(Cons<R: RbRef>);
+
+// SAFETY: storage and cursor operations preserve the backing buffer
+// invariants; callers remain responsible for owning the accessed endpoint.
+unsafe impl<R: RbRef, const P: bool, const C: bool> Raw for Direct<R, P, C> {
+    #[inline]
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        unsafe { self.rb().unsafe_slices(start, end) }
+    }
+    #[inline]
+    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        unsafe { self.rb().unsafe_slices_mut(start, end) }
+    }
+    #[inline]
+    unsafe fn set_read_index(&self, value: usize) {
+        unsafe { self.rb().set_read_index(value) }
+    }
+    #[inline]
+    unsafe fn set_write_index(&self, value: usize) {
+        unsafe { self.rb().set_write_index(value) }
+    }
+    unsafe fn hold_read(&self, flag: bool) -> bool {
+        unsafe { self.rb().hold_read(flag) }
+    }
+    unsafe fn hold_write(&self, flag: bool) -> bool {
+        unsafe { self.rb().hold_write(flag) }
+    }
+}

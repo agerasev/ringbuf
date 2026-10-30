@@ -3,6 +3,8 @@
 //! Fetches changes from the ring buffer only when there is no more slots to perform requested operation.
 //! Changes to this endpoint's index are always published before an operation returns.
 
+use crate::traits::Raw;
+
 #[allow(deprecated)]
 use super::frozen::Frozen;
 use super::{
@@ -114,13 +116,6 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Caching<R, P, C> {
         self.write.get()
     }
 
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        unsafe { self.base.unsafe_slices(start, end) }
-    }
-    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        unsafe { self.base.unsafe_slices_mut(start, end) }
-    }
-
     #[inline]
     fn read_is_held(&self) -> bool {
         self.base.read_is_held()
@@ -132,12 +127,6 @@ impl<R: RbRef, const P: bool, const C: bool> Observer for Caching<R, P, C> {
 }
 
 impl<R: RbRef> Producer for CachingProd<R> {
-    #[inline]
-    unsafe fn set_write_index(&self, value: usize) {
-        self.write.set(value);
-        unsafe { self.base.set_write_index(value) };
-    }
-
     fn try_push(&mut self, elem: Self::Item) -> Result<(), Self::Item> {
         let capacity = self.capacity().get();
         if self.write.get().abs_diff(self.read.get()) == capacity {
@@ -157,12 +146,6 @@ impl<R: RbRef> Producer for CachingProd<R> {
 }
 
 impl<R: RbRef> Consumer for CachingCons<R> {
-    #[inline]
-    unsafe fn set_read_index(&self, value: usize) {
-        self.read.set(value);
-        unsafe { self.base.set_read_index(value) };
-    }
-
     fn try_pop(&mut self) -> Option<<Self as Observer>::Item> {
         if self.read.get() == self.write.get() {
             self.fetch();
@@ -180,3 +163,30 @@ impl<R: RbRef> Consumer for CachingCons<R> {
 
 impl_producer_traits!(CachingProd<R: RbRef>);
 impl_consumer_traits!(CachingCons<R: RbRef>);
+
+// SAFETY: storage and cursor operations preserve the backing buffer
+// invariants; callers remain responsible for owning the accessed endpoint.
+unsafe impl<R: RbRef, const P: bool, const C: bool> Raw for Caching<R, P, C> {
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
+        unsafe { self.base.unsafe_slices(start, end) }
+    }
+    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
+        unsafe { self.base.unsafe_slices_mut(start, end) }
+    }
+    #[inline]
+    unsafe fn set_read_index(&self, value: usize) {
+        self.read.set(value);
+        unsafe { self.base.set_read_index(value) };
+    }
+    #[inline]
+    unsafe fn set_write_index(&self, value: usize) {
+        self.write.set(value);
+        unsafe { self.base.set_write_index(value) };
+    }
+    unsafe fn hold_read(&self, flag: bool) -> bool {
+        unsafe { self.rb().hold_read(flag) }
+    }
+    unsafe fn hold_write(&self, flag: bool) -> bool {
+        unsafe { self.rb().hold_write(flag) }
+    }
+}

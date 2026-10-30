@@ -4,9 +4,9 @@ mod prod;
 use crate::rb::BlockingRbRef;
 use core::time::Duration;
 use ringbuf::{
-    traits::Based,
-    wrap::{caching::Caching, Wrap},
     Obs,
+    traits::Based,
+    wrap::{Wrap, caching::Caching},
 };
 
 pub struct BlockingWrap<R: BlockingRbRef, const P: bool, const C: bool> {
@@ -66,3 +66,9 @@ pub enum WaitError {
 
 pub use cons::*;
 pub use prod::*;
+
+// SAFETY: both base accessors return the same uniquely owned endpoint.
+unsafe impl<R: BlockingRbRef, const P: bool, const C: bool> ringbuf::traits::DelegateRaw for BlockingWrap<R, P, C> where
+    Self: ringbuf::traits::Observer
+{
+}

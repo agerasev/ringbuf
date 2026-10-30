@@ -2,7 +2,7 @@ use super::{
     Based,
     utils::{add_mod, modulus, sub_mod},
 };
-use core::{mem::MaybeUninit, num::NonZeroUsize};
+use core::num::NonZeroUsize;
 
 /// Ring buffer observer.
 ///
@@ -24,23 +24,6 @@ pub trait Observer {
     ///
     /// Index value is in range `0..(2 * capacity)`.
     fn write_index(&self) -> usize;
-
-    /// Get slice between `start` and `end` indices.
-    ///
-    /// # Safety
-    ///
-    /// Slice must not overlap with any mutable slice existing at the same time.
-    ///
-    /// Non-`Sync` items must not be accessed from multiple threads at the same time.
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]);
-
-    /// Get mutable slice between `start` and `end` indices.
-    ///
-    /// # Safety
-    ///
-    /// There must not exist overlapping slices at the same time.
-    #[allow(clippy::mut_from_ref)]
-    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]);
 
     /// Whether read end is held by consumer.
     fn read_is_held(&self) -> bool;
@@ -109,15 +92,6 @@ where
     #[inline]
     fn write_index(&self) -> usize {
         self.base().write_index()
-    }
-
-    #[inline]
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<Self::Item>], &[MaybeUninit<Self::Item>]) {
-        unsafe { self.base().unsafe_slices(start, end) }
-    }
-    #[inline]
-    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<Self::Item>], &mut [MaybeUninit<Self::Item>]) {
-        unsafe { self.base().unsafe_slices_mut(start, end) }
     }
 
     #[inline]

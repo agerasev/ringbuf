@@ -4,6 +4,7 @@ use crate::alias::Arc;
 use crate::sync::StdSemaphore;
 use crate::{BlockingCons, BlockingProd, sync::Semaphore};
 use core::{mem::MaybeUninit, num::NonZeroUsize};
+use ringbuf::traits::Raw;
 #[cfg(feature = "alloc")]
 use ringbuf::traits::Split;
 use ringbuf::{
@@ -53,13 +54,6 @@ impl<S: Storage, X: Semaphore> Observer for BlockingRb<S, X> {
         self.base.write_index()
     }
 
-    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
-        unsafe { self.base.unsafe_slices(start, end) }
-    }
-    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
-        unsafe { self.base.unsafe_slices_mut(start, end) }
-    }
-
     #[inline]
     fn read_is_held(&self) -> bool {
         self.base.read_is_held()
@@ -69,30 +63,9 @@ impl<S: Storage, X: Semaphore> Observer for BlockingRb<S, X> {
         self.base.write_is_held()
     }
 }
-impl<S: Storage, X: Semaphore> Producer for BlockingRb<S, X> {
-    unsafe fn set_write_index(&self, value: usize) {
-        unsafe { self.base.set_write_index(value) };
-        self.write.give();
-    }
-}
-impl<S: Storage, X: Semaphore> Consumer for BlockingRb<S, X> {
-    unsafe fn set_read_index(&self, value: usize) {
-        unsafe { self.base.set_read_index(value) };
-        self.read.give();
-    }
-}
-impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {
-    unsafe fn hold_read(&self, flag: bool) -> bool {
-        let old = unsafe { self.base.hold_read(flag) };
-        self.read.give();
-        old
-    }
-    unsafe fn hold_write(&self, flag: bool) -> bool {
-        let old = unsafe { self.base.hold_write(flag) };
-        self.write.give();
-        old
-    }
-}
+impl<S: Storage, X: Semaphore> Producer for BlockingRb<S, X> {}
+impl<S: Storage, X: Semaphore> Consumer for BlockingRb<S, X> {}
+impl<S: Storage, X: Semaphore> RingBuffer for BlockingRb<S, X> {}
 
 impl<S: Storage, X: Semaphore> SplitRef for BlockingRb<S, X> {
     type RefProd<'a>
@@ -136,5 +109,34 @@ impl<S: Storage, X: Semaphore> AsRef<Self> for BlockingRb<S, X> {
 impl<S: Storage, X: Semaphore> AsMut<Self> for BlockingRb<S, X> {
     fn as_mut(&mut self) -> &mut Self {
         self
+    }
+}
+
+// SAFETY: storage and cursor operations preserve the backing buffer
+// invariants; callers remain responsible for owning the accessed endpoint.
+unsafe impl<S: Storage, X: Semaphore> Raw for BlockingRb<S, X> {
+    unsafe fn unsafe_slices(&self, start: usize, end: usize) -> (&[MaybeUninit<S::Item>], &[MaybeUninit<S::Item>]) {
+        unsafe { self.base.unsafe_slices(start, end) }
+    }
+    unsafe fn unsafe_slices_mut(&self, start: usize, end: usize) -> (&mut [MaybeUninit<S::Item>], &mut [MaybeUninit<S::Item>]) {
+        unsafe { self.base.unsafe_slices_mut(start, end) }
+    }
+    unsafe fn set_read_index(&self, value: usize) {
+        unsafe { self.base.set_read_index(value) };
+        self.read.give();
+    }
+    unsafe fn set_write_index(&self, value: usize) {
+        unsafe { self.base.set_write_index(value) };
+        self.write.give();
+    }
+    unsafe fn hold_read(&self, flag: bool) -> bool {
+        let old = unsafe { self.base.hold_read(flag) };
+        self.read.give();
+        old
+    }
+    unsafe fn hold_write(&self, flag: bool) -> bool {
+        let old = unsafe { self.base.hold_write(flag) };
+        self.write.give();
+        old
     }
 }
