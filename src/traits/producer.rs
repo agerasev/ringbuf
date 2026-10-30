@@ -54,20 +54,31 @@ pub trait Producer: Observer + super::Raw {
     ///
     /// Returns count of items been appended to the ring buffer.
     ///
-    /// *Inserted items are committed to the ring buffer all at once in the end,*
-    /// *e.g. when buffer is full or iterator has ended.*
+    /// Inserted items are published together when the buffer is full or the iterator ends.
+    /// If the iterator panics, the initialized prefix is published during unwinding.
     fn push_iter<I: Iterator<Item = Self::Item>>(&mut self, mut iter: I) -> usize {
-        let (left, right) = self.vacant_slices_mut();
-        let mut count = 0;
+        struct Publish<'a, P: Producer + ?Sized> {
+            producer: &'a mut P,
+            count: usize,
+        }
+        impl<P: Producer + ?Sized> Drop for Publish<'_, P> {
+            fn drop(&mut self) {
+                unsafe { self.producer.advance_write_index(self.count) };
+            }
+        }
+
+        let mut guard = Publish { producer: self, count: 0 };
+        let (left, right) = guard.producer.vacant_slices_mut();
         for place in left.iter_mut().chain(right.iter_mut()) {
             match iter.next() {
-                Some(elem) => unsafe { place.as_mut_ptr().write(elem) },
+                Some(elem) => {
+                    place.write(elem);
+                    guard.count += 1;
+                }
                 None => break,
             }
-            count += 1;
         }
-        unsafe { self.advance_write_index(count) };
-        count
+        guard.count
     }
 
     /// Appends items from slice to the ring buffer.

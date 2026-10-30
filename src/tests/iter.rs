@@ -194,3 +194,47 @@ fn pop_iter_allows_concurrent_slot_reuse() {
         assert!(cons.pop_iter().map(|value| *value).eq(3..6));
     });
 }
+
+#[cfg(feature = "std")]
+#[test]
+fn push_iter_publishes_initialized_prefix_on_panic() {
+    use core::cell::Cell;
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    struct Item<'a>(&'a Cell<usize>);
+    impl Drop for Item<'_> {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() + 1);
+        }
+    }
+    for offset in [0, 3] {
+        for initialized in 0..4 {
+            let drops = Cell::new(0);
+            let mut rb = Rb::<Array<Item<'_>, 4>>::default();
+            for _ in 0..offset {
+                rb.try_push(Item(&drops)).ok().unwrap();
+                drop(rb.try_pop());
+            }
+            drops.set(0);
+            let (mut prod, mut cons) = rb.split_ref();
+            let mut produced = 0;
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                prod.push_iter(core::iter::from_fn(|| {
+                    assert!(produced < initialized, "iterator panic");
+                    produced += 1;
+                    Some(Item(&drops))
+                }));
+            }));
+            assert!(result.is_err());
+            assert_eq!(cons.occupied_len(), initialized);
+            assert_eq!(drops.get(), 0);
+            // Published slots are initialized and reusable after being consumed.
+            assert_eq!(cons.clear(), initialized);
+            assert_eq!(drops.get(), initialized);
+            prod.try_push(Item(&drops)).ok().unwrap();
+            drop(prod);
+            drop(cons);
+            drop(rb);
+            assert_eq!(drops.get(), initialized + 1);
+        }
+    }
+}
